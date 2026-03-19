@@ -13,6 +13,7 @@ const PAY_TO = "0x4bDE6B11Df6C0F0f5351e6fB0E7Bdc40eAa0cb4D";
 const EXA_API_KEY = "9275664f-b823-4699-ab44-137bae9d0de4";
 
 // Payment middleware — protects /research and /fetch endpoints
+// Using Coinbase CDP facilitator on Base mainnet (eip155:8453)
 app.use(
   paymentMiddlewareFromConfig(
     {
@@ -21,7 +22,7 @@ app.use(
           {
             scheme: "exact",
             price: "$0.01",
-            network: "eip155:84532", // Base Sepolia (testnet)
+            network: "eip155:8453", // Base mainnet
             payTo: PAY_TO,
           },
         ],
@@ -33,7 +34,7 @@ app.use(
           {
             scheme: "exact",
             price: "$0.005",
-            network: "eip155:84532",
+            network: "eip155:8453", // Base mainnet
             payTo: PAY_TO,
           },
         ],
@@ -41,22 +42,54 @@ app.use(
         mimeType: "application/json",
       },
     },
-    [new HTTPFacilitatorClient({ url: "https://x402.org/facilitator" })],
-    [{ network: "eip155:84532", server: new ExactEvmScheme() }],
+    [new HTTPFacilitatorClient({ url: "https://api.cdp.coinbase.com/platform/v2/x402" })],
+    [{ network: "eip155:8453", server: new ExactEvmScheme() }],
   )
 );
+
+// x402 V2 discovery endpoint
+app.get("/.well-known/x402.json", (req, res) => {
+  res.json({
+    x402Version: 2,
+    name: "x402-research",
+    description: "AI-powered web research and URL content extraction via Exa neural search. Pay per request in USDC on Base.",
+    homepage: "https://x402-research.onrender.com",
+    repository: "https://github.com/JimmyClanker/x402-research",
+    network: "eip155:8453",
+    payTo: PAY_TO,
+    facilitator: "https://api.cdp.coinbase.com/platform/v2/x402",
+    resources: [
+      {
+        resource: "https://x402-research.onrender.com/research",
+        method: "GET",
+        price: "$0.01",
+        category: "search",
+        description: "AI-powered web research via Exa neural search",
+      },
+      {
+        resource: "https://x402-research.onrender.com/fetch",
+        method: "GET",
+        price: "$0.005",
+        category: "search",
+        description: "Fetch and extract readable content from any URL",
+      },
+    ],
+  });
+});
 
 // Health check (free)
 app.get("/", (req, res) => {
   res.json({
     service: "x402-research",
-    version: "1.0.0",
+    version: "2.0.0",
     endpoints: {
       "/research?q=your+query": "$0.01 — AI web research (Exa neural search)",
       "/fetch?url=https://...": "$0.005 — URL content extraction",
+      "/.well-known/x402.json": "free — x402 V2 discovery",
     },
     payTo: PAY_TO,
-    network: "Base (EVM)",
+    network: "Base mainnet (eip155:8453)",
+    facilitator: "https://api.cdp.coinbase.com/platform/v2/x402",
   });
 });
 
