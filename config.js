@@ -22,6 +22,7 @@ export function loadConfig(env = process.env) {
     version: APP_VERSION,
     port: Number(env.PORT) || DEFAULT_PORT,
     exaApiKey: env.EXA_API_KEY,
+    xaiApiKey: env.XAI_API_KEY,
     signalIngestKey: env.SIGNAL_INGEST_KEY,
     nvmApiKey: env.NVM_API_KEY,
     nvmPlanId: env.NVM_PLAN_ID,

@@ -4,6 +4,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { secureCompare } from '../utils/security.js';
+import { collectAll } from '../collectors/index.js';
+import { calculateScores } from '../synthesis/scoring.js';
+import { generateReport } from '../synthesis/llm.js';
+import { formatReport } from '../synthesis/templates.js';
 
 const MCP_SESSION_TTL_MS = 30 * 60 * 1000; // 30 min idle timeout
 
@@ -143,6 +147,29 @@ export function createMcpRouter({ config, exaService, signalsService }) {
         } catch (error) {
           return {
             content: [{ type: 'text', text: `Signal query error: ${error.message}` }],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    server.tool(
+      'alpha_research',
+      'Deep alpha analysis for a crypto project using local collectors, algorithmic scoring, and Grok-backed synthesis when available.',
+      { project: z.string().describe("Project name or ticker (e.g. 'solana', 'sei', 'jup')") },
+      async ({ project }) => {
+        try {
+          const rawData = await collectAll(project, exaService);
+          const scores = calculateScores(rawData);
+          const analysis = await generateReport(project, rawData, scores);
+          const formatted = formatReport(project, rawData, scores, analysis);
+          return {
+            content: [{ type: 'text', text: formatted.text }],
+            structuredContent: { ...formatted.json, report_html: formatted.html },
+          };
+        } catch (error) {
+          return {
+            content: [{ type: 'text', text: `Alpha research error: ${error.message}` }],
             isError: true,
           };
         }

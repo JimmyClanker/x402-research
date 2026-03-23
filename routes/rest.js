@@ -63,6 +63,8 @@ export function createRestRouter({ config, exaService, signalsService }) {
       endpoints: {
         '/research?q=your+query': '$0.01 — AI web research (Exa neural search)',
         '/fetch?url=https://...': '$0.01 — URL content extraction',
+        '/alpha?project=solana': 'Deep alpha scan — collectors + scoring + Grok synthesis',
+        '/alpha/quick?project=sol': 'Fast free scan — collectors + algorithmic scoring only',
         '/mcp': 'MCP server (Streamable HTTP) — tool discovery for AI agents',
       },
       signals: {
@@ -73,8 +75,14 @@ export function createRestRouter({ config, exaService, signalsService }) {
       mcp: {
         endpoint: '/mcp',
         transport: 'Streamable HTTP (POST + GET with SSE)',
-        tools: ['crypto_research', 'url_extract', 'trading_signals'],
+        tools: ['crypto_research', 'url_extract', 'trading_signals', 'alpha_research'],
         auth: config.mcpAuthKey ? 'key required (x-mcp-key header)' : 'open',
+      },
+      alpha: {
+        xai_configured: Boolean(config.xaiApiKey),
+        rate_limit: '10 requests / minute',
+        cache_ttl_full: '1 hour',
+        cache_ttl_quick: '15 minutes',
       },
       cache: exaService.getCacheStats(),
       payTo: config.payTo,

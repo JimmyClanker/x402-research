@@ -8,6 +8,7 @@ import { createSignalsService } from './services/signals.js';
 import { createPaymentsService } from './services/payments.js';
 import { createRestRouter } from './routes/rest.js';
 import { createMcpRouter } from './routes/mcp.js';
+import { createAlphaRouter } from './routes/alpha.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +45,14 @@ export function createApp({
     message: { error: 'Too many MCP requests' },
   });
 
+  const alphaLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many alpha scans', retryAfterMs: 60000 },
+  });
+
   const exa =
     exaService ||
     createExaService({
@@ -63,6 +72,7 @@ export function createApp({
 
   app.use('/research', apiLimiter);
   app.use('/fetch', apiLimiter);
+  app.use('/alpha', alphaLimiter);
   app.use('/api/signals/ingest', ingestLimiter);
   app.use('/mcp', mcpLimiter);
 
@@ -87,6 +97,7 @@ export function createApp({
   }
 
   app.use(createRestRouter({ config, exaService: exa, signalsService: signals }));
+  app.use(createAlphaRouter({ config, exaService: exa, signalsService: signals }));
   app.use(createMcpRouter({ config, exaService: exa, signalsService: signals }));
 
   return { app, config, services: { exa, signals, payments } };
