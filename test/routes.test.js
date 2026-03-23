@@ -44,6 +44,7 @@ test('research route returns structured output and health includes cache stats',
     env: {
       EXA_API_KEY: 'exa',
       SIGNAL_INGEST_KEY: 'x'.repeat(32),
+      MCP_AUTH_KEY: 'test-mcp-key',
     },
     exaService: createMockExaService(),
   });
@@ -76,6 +77,7 @@ test('signals ingest and query routes work with auth and sqlite storage', async 
     env: {
       EXA_API_KEY: 'exa',
       SIGNAL_INGEST_KEY: 'x'.repeat(32),
+      MCP_AUTH_KEY: 'test-mcp-key',
       DB_PATH: ':memory:',
     },
     exaService: createMockExaService(),

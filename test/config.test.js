@@ -10,13 +10,32 @@ test('loadConfig validates required env vars', () => {
   );
 });
 
+test('loadConfig requires MCP_AUTH_KEY in production', () => {
+  assert.throws(
+    () => loadConfig({ EXA_API_KEY: 'exa', SIGNAL_INGEST_KEY: 'x'.repeat(32) }),
+    /MCP_AUTH_KEY/
+  );
+});
+
 test('loadConfig keeps defaults and compatibility', () => {
   const config = loadConfig({
     EXA_API_KEY: 'exa',
     SIGNAL_INGEST_KEY: 'x'.repeat(32),
+    MCP_AUTH_KEY: 'test-mcp-key',
   });
 
   assert.equal(config.port, 4021);
   assert.equal(config.nvmEnv, 'production');
   assert.equal(config.version, '5.2.0');
+});
+
+test('loadConfig allows missing MCP_AUTH_KEY in dev', () => {
+  const config = loadConfig({
+    EXA_API_KEY: 'exa',
+    SIGNAL_INGEST_KEY: 'x'.repeat(32),
+    NVM_ENV: 'development',
+  });
+
+  assert.equal(config.mcpAuthKey, undefined);
+  assert.equal(config.nvmEnv, 'development');
 });

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
-import crypto from 'crypto';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { secureCompare } from '../utils/security.js';
 
 function createSchema(db) {
   db.exec(`
@@ -23,13 +23,7 @@ function createSchema(db) {
   `);
 }
 
-export function secureCompare(a, b) {
-  if (!a || !b) return false;
-  const bufA = Buffer.from(String(a));
-  const bufB = Buffer.from(String(b));
-  if (bufA.length !== bufB.length) return false;
-  return crypto.timingSafeEqual(bufA, bufB);
-}
+export { secureCompare } from '../utils/security.js';
 
 export function createSignalsService({ dbPath, maxBatchSignals = 100, ingestKey } = {}) {
   if (!dbPath) {
@@ -72,6 +66,7 @@ export function createSignalsService({ dbPath, maxBatchSignals = 100, ingestKey 
   const lastSignal = db.prepare('SELECT timestamp FROM signals ORDER BY timestamp DESC LIMIT 1');
 
   const insertMany = db.transaction((signals, now) => {
+    let inserted = 0;
     for (const signal of signals) {
       if (!signal.symbol || typeof signal.symbol !== 'string') continue;
       insertSignal.run(
@@ -85,7 +80,9 @@ export function createSignalsService({ dbPath, maxBatchSignals = 100, ingestKey 
         Number(signal.rr) || 0,
         JSON.stringify(signal.context || {}).slice(0, 2000)
       );
+      inserted++;
     }
+    return inserted;
   });
 
   function ingestSignals(payload) {
@@ -99,10 +96,11 @@ export function createSignalsService({ dbPath, maxBatchSignals = 100, ingestKey 
     }
 
     const now = new Date().toISOString();
-    insertMany(incoming, now);
+    const inserted = insertMany(incoming, now);
 
     return {
-      ingested: incoming.length,
+      ingested: inserted,
+      skipped: incoming.length - inserted,
       total: countSignals.get().count,
     };
   }

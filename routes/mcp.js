@@ -3,11 +3,13 @@ import crypto from 'crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { secureCompare } from '../services/signals.js';
+import { secureCompare } from '../utils/security.js';
+
+const MCP_SESSION_TTL_MS = 30 * 60 * 1000; // 30 min idle timeout
 
 export function createMcpRouter({ config, exaService, signalsService }) {
   const router = express.Router();
-  const transports = new Map();
+  const transports = new Map(); // sessionId -> { transport, lastActivity, timer }
 
   function mcpAuthMiddleware(req, res, next) {
     if (!config.mcpAuthKey) return next();
@@ -16,6 +18,30 @@ export function createMcpRouter({ config, exaService, signalsService }) {
       return res.status(401).json({ error: 'MCP auth required. Set x-mcp-key header.' });
     }
     return next();
+  }
+
+  function touchSession(sessionId) {
+    const entry = transports.get(sessionId);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    entry.lastActivity = Date.now();
+    entry.timer = setTimeout(() => {
+      transports.delete(sessionId);
+      console.log(`[MCP] Session expired (idle): ${sessionId}`);
+    }, MCP_SESSION_TTL_MS);
+  }
+
+  function registerSession(sessionId, transport) {
+    const timer = setTimeout(() => {
+      transports.delete(sessionId);
+      console.log(`[MCP] Session expired (idle): ${sessionId}`);
+    }, MCP_SESSION_TTL_MS);
+    transports.set(sessionId, { transport, lastActivity: Date.now(), timer });
+  }
+
+  function getTransport(sessionId) {
+    const entry = transports.get(sessionId);
+    return entry?.transport || null;
   }
 
   function createMcpServer() {
@@ -128,9 +154,10 @@ export function createMcpRouter({ config, exaService, signalsService }) {
 
   router.post('/mcp', mcpAuthMiddleware, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'];
-    let transport = sessionId ? transports.get(sessionId) : null;
+    let transport = sessionId ? getTransport(sessionId) : null;
 
     if (transport) {
+      touchSession(sessionId);
       await transport.handleRequest(req, res);
       return;
     }
@@ -142,14 +169,15 @@ export function createMcpRouter({ config, exaService, signalsService }) {
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (id) => {
-        transports.set(id, transport);
+        registerSession(id, transport);
         console.log(`[MCP] Session created: ${id}`);
       },
     });
 
     transport.onclose = () => {
-      for (const [id, currentTransport] of transports.entries()) {
-        if (currentTransport === transport) {
+      for (const [id, entry] of transports.entries()) {
+        if (entry.transport === transport) {
+          clearTimeout(entry.timer);
           transports.delete(id);
           console.log(`[MCP] Session closed: ${id}`);
           break;
@@ -164,21 +192,23 @@ export function createMcpRouter({ config, exaService, signalsService }) {
 
   router.get('/mcp', mcpAuthMiddleware, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'];
-    const transport = sessionId ? transports.get(sessionId) : null;
+    const transport = sessionId ? getTransport(sessionId) : null;
     if (!transport) {
       return res.status(400).json({ error: 'No active MCP session.' });
     }
+    touchSession(sessionId);
     await transport.handleRequest(req, res);
   });
 
   router.delete('/mcp', mcpAuthMiddleware, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'];
-    const transport = sessionId ? transports.get(sessionId) : null;
-    if (!transport) {
+    const entry = sessionId ? transports.get(sessionId) : null;
+    if (!entry) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    await transport.handleRequest(req, res);
+    await entry.transport.handleRequest(req, res);
+    clearTimeout(entry.timer);
     transports.delete(sessionId);
   });
 

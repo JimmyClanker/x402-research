@@ -131,7 +131,7 @@ export function createRestRouter({ config, exaService, signalsService }) {
   });
 
   router.post('/api/signals/ingest', (req, res) => {
-    const key = req.headers['x-ingest-key'] || req.query.key;
+    const key = req.headers['x-ingest-key'];
     if (!signalsService.authorizeIngestKey(key)) {
       return res.status(401).json({ error: 'Invalid ingest key' });
     }

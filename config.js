@@ -51,5 +51,11 @@ export function validateConfig(config) {
     );
   }
 
+  if (!config.mcpAuthKey && config.nvmEnv === 'production') {
+    throw new Error(
+      'FATAL: MCP_AUTH_KEY not set in production. MCP endpoint would be open. Refusing to start.'
+    );
+  }
+
   return config;
 }
