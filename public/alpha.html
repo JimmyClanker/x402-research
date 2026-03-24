@@ -429,7 +429,7 @@
   <main class="wrap">
     <section class="hero">
       <div class="chalk-title">Alpha Scanner</div>
-      <div class="sub">Lavagna operativa per leggere market, onchain, social, dev e tokenomics in un colpo solo.</div>
+      <div class="sub">Operational dashboard — market, onchain, social, dev & tokenomics at a glance.</div>
       <form id="scan-form" class="toolbar">
         <input id="project-input" name="project" type="text" maxlength="100" placeholder="solana, sei, jup, hyperliquid..." autocomplete="off" />
         <button type="submit">Scan</button>
@@ -801,7 +801,7 @@
       reportBox.classList.add('hidden');
       const project = input.value.trim();
       if (!project) {
-        showError('Inserisci un progetto da analizzare.');
+        showError('Enter a project to analyze.');
         return;
       }
       setLoading(true, mode);

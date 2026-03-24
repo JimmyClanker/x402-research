@@ -178,7 +178,7 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
   async function handleRequest(req, res, mode) {
     const projectName = normalizeProject(req.query.project);
     if (!projectName) {
-      return res.status(400).json({ error: 'Missing or invalid ?project= parameter (max 100 chars)' });
+      return res.status(400).json({ error: 'Missing or invalid ?project= parameter (max 100 characters)' });
     }
 
     if (
@@ -188,7 +188,7 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
       req.get('x-alpha-key') !== config.alphaAuthKey
     ) {
       return res.status(401).json({
-        error: 'Unauthorized: valid x-alpha-key header required for full alpha reports',
+        error: 'Unauthorized: a valid x-alpha-key header is required for full alpha reports',
       });
     }
 

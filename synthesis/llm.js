@@ -70,15 +70,15 @@ function extractOutputText(payload) {
 
 function buildPrompt(projectName, rawData, scores) {
   return [
-    'Sei un senior crypto analyst focalizzato su alpha discovery. Devi produrre un report utile a un investitore, non una recensione generica.',
-    'Usa SEMPRE i dati raw allegati come base numerica primaria.',
-    'Poi usa X Search per verificare sentiment su X/Twitter, whale mentions, KOL opinions, community tone e narrative in corso sul progetto.',
-    'Usa Web Search per verificare notizie recenti, audit/security notes, exchange listing rumors, partnership, governance changes, funding, contesto competitivo.',
-    'Se i dati esterni sono deboli o non verificabili, dillo chiaramente invece di inventare.',
-    'Restituisci SOLO JSON valido.',
-    'Campi obbligatori: verdict, analysis_text, moat, risks, catalysts, competitor_comparison, x_sentiment_summary, key_findings.',
-    'verdict deve essere uno tra: STRONG BUY, BUY, HOLD, AVOID, STRONG AVOID.',
-    'risks, catalysts, key_findings devono essere array di stringhe.',
+    'You are a senior crypto analyst focused on alpha discovery. Produce a report that is genuinely useful to an investor, not a generic review.',
+    'ALWAYS use the attached raw data as the primary numerical foundation.',
+    'Then use X Search to validate X/Twitter sentiment, whale mentions, KOL opinions, community tone, and the active narrative around the project.',
+    'Use Web Search to verify recent news, audit/security notes, exchange listing rumors, partnerships, governance changes, funding, and competitive context.',
+    'If external data is weak or cannot be verified, say so clearly instead of making things up.',
+    'Return ONLY valid JSON.',
+    'Required fields: verdict, analysis_text, moat, risks, catalysts, competitor_comparison, x_sentiment_summary, key_findings.',
+    'verdict must be one of: STRONG BUY, BUY, HOLD, AVOID, STRONG AVOID.',
+    'risks, catalysts, and key_findings must be arrays of strings.',
     `PROJECT: ${projectName}`,
     `SCORES: ${JSON.stringify(scores, null, 2)}`,
     `RAW_DATA: ${JSON.stringify(rawData, null, 2)}`,
@@ -93,38 +93,38 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
   const keyFindings = [];
 
   if ((rawData?.tokenomics?.pct_circulating || 0) < 50) {
-    risks.push('Circulating supply ancora limitata: rischio unlock/diluizione.');
+    risks.push('Circulating supply is still limited: unlock/dilution risk remains.');
   }
   if ((rawData?.onchain?.tvl_change_30d || 0) < 0) {
-    risks.push('TVL in contrazione sul mese.');
+    risks.push('TVL is contracting on a monthly basis.');
   }
   if ((rawData?.social?.sentiment || 'neutral') === 'bullish') {
-    catalysts.push('Sentiment social positivo e narrativa attiva.');
+    catalysts.push('Social sentiment is constructive and the narrative is active.');
   }
   if ((rawData?.github?.commits_90d || 0) > 30) {
-    catalysts.push('Sviluppo software visibile negli ultimi 90 giorni.');
+    catalysts.push('Visible software development over the last 90 days.');
   }
   if ((rawData?.market?.market_cap || 0) > 0) {
-    keyFindings.push(`Market cap rilevata: ${Number(rawData.market.market_cap).toLocaleString('en-US')}.`);
+    keyFindings.push(`Observed market cap: ${Number(rawData.market.market_cap).toLocaleString('en-US')}.`);
   }
   if ((rawData?.onchain?.tvl || 0) > 0) {
-    keyFindings.push(`TVL osservata: ${Number(rawData.onchain.tvl).toLocaleString('en-US')}.`);
+    keyFindings.push(`Observed TVL: ${Number(rawData.onchain.tvl).toLocaleString('en-US')}.`);
   }
 
   return {
     verdict,
-    analysis_text: `${projectName}: overall score ${overallScore}/10. Market ${scores?.market_strength?.score}/10, onchain ${scores?.onchain_health?.score}/10, social ${scores?.social_momentum?.score}/10, dev ${scores?.development?.score}/10, tokenomics ${scores?.tokenomics_health?.score}/10.${error ? ` Fallback usato: ${error}.` : ''}`,
+    analysis_text: `${projectName}: overall score ${overallScore}/10. Market ${scores?.market_strength?.score}/10, onchain ${scores?.onchain_health?.score}/10, social ${scores?.social_momentum?.score}/10, dev ${scores?.development?.score}/10, tokenomics ${scores?.tokenomics_health?.score}/10.${error ? ` Fallback used: ${error}.` : ''}`,
     moat:
-      'Da validare con dati qualitativi esterni; il vantaggio competitivo dipende da rete, liquidità, brand e execution.',
-    risks: risks.length ? risks : ['Copertura dati incompleta: servono ulteriori verifiche qualitative.'],
-    catalysts: catalysts.length ? catalysts : ['Nessun catalizzatore forte emerso dai dati disponibili.'],
+      'Requires external qualitative validation; competitive advantage depends on network effects, liquidity, brand, and execution.',
+    risks: risks.length ? risks : ['Data coverage is incomplete: further qualitative validation is required.'],
+    catalysts: catalysts.length ? catalysts : ['No strong catalyst emerged from the available data.'],
     competitor_comparison:
-      'Confronto competitor non disponibile in fallback; usare category/chains/narrative per peer set manuale.',
+      'Competitor comparison is unavailable in fallback mode; use category/chains/narrative to build a manual peer set.',
     x_sentiment_summary:
-      'X sentiment non disponibile in fallback locale; necessario X Search via Grok per validazione qualitativa.',
+      'X sentiment is unavailable in local fallback mode; Grok X Search is required for qualitative validation.',
     key_findings: keyFindings.length
       ? keyFindings
-      : ['Analisi basata solo su collector locali e scoring algoritmico.'],
+      : ['Analysis is based only on local collectors and algorithmic scoring.'],
   };
 }
 
@@ -176,9 +176,9 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
   }
 
   const prompt = [
-    'Genera una versione compatta e veloce del report.',
-    'Non usare tool esterni. Basati solo sui dati allegati.',
-    'Restituisci solo JSON valido con gli stessi campi richiesti.',
+    'Generate a compact, fast version of the report.',
+    'Do not use external tools. Rely only on the attached data.',
+    'Return only valid JSON with the same required fields.',
     `PROJECT: ${projectName}`,
     `SCORES: ${JSON.stringify(scores, null, 2)}`,
     `RAW_DATA: ${JSON.stringify(rawData, null, 2)}`,
