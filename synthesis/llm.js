@@ -710,7 +710,8 @@ function normalizeReport(payload, projectName, rawData, scores) {
     headline: (() => {
       const text = String(payload?.analysis_text || '').trim();
       if (!text) return null;
-      const firstSentence = text.match(/^[^.!?]+[.!?]/)?.[0];
+      // Match sentence end: a period/!/? that is NOT followed by a digit (to avoid cutting $92.36 → $92.)
+      const firstSentence = text.match(/^.+?[!?]|^.+?\.(?!\d)/)?.[0];
       return firstSentence ? firstSentence.trim() : text.slice(0, 120) + (text.length > 120 ? '...' : '');
     })(),
   };
@@ -770,12 +771,15 @@ export function validateReport(report, rawData) {
   }
 
   // 2. Validate market cap / price numbers in analysis_text against raw data
+  // Match "$X market cap" or "market cap of $X" or "market cap: $X" — use only the FIRST dollar value directly adjacent to "market cap"
   const market = rawData?.market;
   if (market && report.analysis_text) {
-    const reportedMcap = report.analysis_text.match(/market\s*cap[^$]*\$([0-9,.]+)\s*(billion|million|B|M)/i);
+    const reportedMcap = report.analysis_text.match(/\$([0-9,.]+)\s*(billion|million|B|M)\s+market\s*cap|market\s*cap\s+(?:of\s+|at\s+|:\s+|is\s+)?\$([0-9,.]+)\s*(billion|million|B|M)/i);
     if (reportedMcap && market.market_cap) {
-      const reportedValue = parseFloat(reportedMcap[1].replace(/,/g, ''));
-      const unit = reportedMcap[2].toLowerCase();
+      const rawVal = reportedMcap[1] ?? reportedMcap[3];
+      const rawUnit = reportedMcap[2] ?? reportedMcap[4];
+      const reportedValue = parseFloat(rawVal.replace(/,/g, ''));
+      const unit = rawUnit.toLowerCase();
       const multiplier = (unit === 'billion' || unit === 'b') ? 1e9 : 1e6;
       const reportedActual = reportedValue * multiplier;
       const realMcap = market.market_cap;
@@ -786,13 +790,17 @@ export function validateReport(report, rawData) {
     }
   }
 
-  // 2b. Validate TVL numbers
+  // 2b. Validate TVL numbers — match "TVL of $X" or "$X TVL" patterns only (not "TVL and $Y" which is a separate value)
   const onchain = rawData?.onchain;
   if (onchain?.tvl && report.analysis_text) {
-    const reportedTvl = report.analysis_text.match(/TVL[^$]*\$([0-9,.]+)\s*(billion|million|B|M)/i);
+    // Only match direct TVL value patterns: "$X TVL", "TVL of $X", "TVL: $X", "TVL at $X"
+    const reportedTvl = report.analysis_text.match(/\$([0-9,.]+)\s*(billion|million|B|M)\s+TVL|TVL\s+(?:of|at|:|stands at|is|totals|reached|hit)?\s*\$([0-9,.]+)\s*(billion|million|B|M)/i);
     if (reportedTvl) {
-      const reportedValue = parseFloat(reportedTvl[1].replace(/,/g, ''));
-      const unit = reportedTvl[2].toLowerCase();
+      // Pick the right capture groups depending on which pattern matched
+      const rawVal = reportedTvl[1] ?? reportedTvl[3];
+      const rawUnit = reportedTvl[2] ?? reportedTvl[4];
+      const reportedValue = parseFloat(rawVal.replace(/,/g, ''));
+      const unit = rawUnit.toLowerCase();
       const multiplier = (unit === 'billion' || unit === 'b') ? 1e9 : 1e6;
       const reportedActual = reportedValue * multiplier;
       const realTvl = onchain.tvl;
