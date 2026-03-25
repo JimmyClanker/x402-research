@@ -687,13 +687,13 @@ export function calculateScores(data) {
 
   // 7-dimension weights (Round 11): original 6 each reduced ~1.5%, new risk at 10%
   const WEIGHTS = {
-    market:      0.19,
-    onchain:     0.19,
-    social:      0.12,
-    development: 0.16,
-    tokenomics:  0.14,
-    distribution: 0.14,
-    risk:        0.10, // new dimension (Round 11)
+    market:      0.19, // Price/liquidity is a primary reality check, so market structure gets top billing.
+    onchain:     0.19, // For onchain projects, sustained usage/capital retention deserves equal weight to market action.
+    social:      0.12, // Social matters for reflexivity, but we keep it lower because narrative is noisier/manipulable.
+    development: 0.16, // Shipping velocity is a strong medium-term signal, especially when market data is early/noisy.
+    tokenomics:  0.14, // Supply mechanics materially affect upside/downside, but should not dominate alone.
+    distribution: 0.14, // Holder/unlock structure deserves separate weight because concentration can break otherwise good projects.
+    risk:        0.10, // Explicit risk check tempers bullish dimensions without overwhelming the composite score.
   };
 
   let overallValue =

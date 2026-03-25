@@ -91,6 +91,28 @@ const FLAG_PHRASES = {
   zombie_protocol:     'zombie protocol (no users or activity)',
 };
 
+
+function humanizePhraseKey(key, type) {
+  const readable = String(key ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((part, index) => {
+      const upper = part.toUpperCase();
+      if (['DEX', 'CEX', 'TVL', 'FDV', 'ATH', 'ATL'].includes(upper)) return upper;
+      return index === 0
+        ? part.charAt(0).toUpperCase() + part.slice(1)
+        : part.toLowerCase();
+    })
+    .join(' ');
+
+  console.warn(`[thesis-generator] Missing ${type} label for key "${key}". Using fallback label "${readable}".`);
+  return readable;
+}
+
+function getPhraseLabel(map, key, type) {
+  return map[key] ?? humanizePhraseKey(key, type);
+}
+
 function sortedDims(scores) {
   return Object.entries(scores)
     .filter(([k, v]) => DIM_LABELS[k] && typeof v === 'object' && v.score != null)
@@ -134,13 +156,13 @@ export function generateThesis(projectName, rawData = {}, scores = {}, redFlags 
     : '';
 
   // Top alpha signals
-  const strongSignals  = alphaSignals.filter((s) => s.strength === 'strong').map((s) => SIGNAL_PHRASES[s.signal] ?? s.signal);
-  const modSignals     = alphaSignals.filter((s) => s.strength === 'moderate').map((s) => SIGNAL_PHRASES[s.signal] ?? s.signal);
+  const strongSignals  = alphaSignals.filter((s) => s.strength === 'strong').map((s) => getPhraseLabel(SIGNAL_PHRASES, s.signal, 'signal'));
+  const modSignals     = alphaSignals.filter((s) => s.strength === 'moderate').map((s) => getPhraseLabel(SIGNAL_PHRASES, s.signal, 'signal'));
   const bullSignalText = [...strongSignals, ...modSignals].slice(0, 2).join(' and ');
 
   // Top red flags
-  const critFlags = redFlags.filter((f) => f.severity === 'critical').map((f) => FLAG_PHRASES[f.flag] ?? f.flag);
-  const warnFlags = redFlags.filter((f) => f.severity === 'warning').map((f) => FLAG_PHRASES[f.flag] ?? f.flag);
+  const critFlags = redFlags.filter((f) => f.severity === 'critical').map((f) => getPhraseLabel(FLAG_PHRASES, f.flag, 'flag'));
+  const warnFlags = redFlags.filter((f) => f.severity === 'warning').map((f) => getPhraseLabel(FLAG_PHRASES, f.flag, 'flag'));
   const bearFlagText = [...critFlags, ...warnFlags].slice(0, 2).join(' and ');
 
   // Round 23 (AutoResearch batch): trend reversal augmentation

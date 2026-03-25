@@ -34,6 +34,22 @@ import { buildRiskMatrix } from './risk-matrix.js';
 import { classifySector, getSectorWeights } from './sector-context.js';
 import { buildPriceAlerts, getScanVersion, storeScanHistory, buildResponse } from '../routes/alpha-helpers.js';
 
+
+function withPipelineStage(stage, error, context = {}) {
+  const wrapped = new Error(error?.message || `Alpha pipeline failed during ${stage}`);
+  wrapped.name = 'AlphaPipelineError';
+  wrapped.stage = stage;
+  wrapped.context = context;
+  wrapped.cause = error;
+  if (error?.stack) {
+    wrapped.stack = `${wrapped.name}: ${wrapped.message}
+[stage:${stage}]
+${error.stack}`;
+  }
+  return wrapped;
+}
+
+
 /**
  * Phase 1: Data Collection
  * Runs all collectors and returns rawData.
@@ -279,22 +295,39 @@ export async function phaseSynthesize({
  * Drop-in replacement for runAnalysis().
  */
 export async function runPipeline({ projectName, exaService, mode, config, collectAllFn, collectorCache, db }) {
-  // Phase 1: Collect
-  const rawData = await phaseCollect({ projectName, exaService, collectorCache, collectAllFn });
+  let rawData;
+  try {
+    rawData = await phaseCollect({ projectName, exaService, collectorCache, collectAllFn });
+  } catch (error) {
+    throw withPipelineStage('collector', error, { projectName, mode });
+  }
 
-  // Score (between Phase 1 and Phase 2)
-  const scores = calculateScores(rawData);
+  let scores;
+  try {
+    scores = calculateScores(rawData);
+  } catch (error) {
+    throw withPipelineStage('scoring', error, { projectName, mode });
+  }
 
-  // Phase 2: Enrich (sync)
-  const enrichment = phaseEnrich(rawData, scores);
+  let enrichment;
+  try {
+    enrichment = phaseEnrich(rawData, scores);
+  } catch (error) {
+    throw withPipelineStage('enrichment', error, { projectName, mode });
+  }
 
-  // Phase 2b: Enrich (async)
-  await phaseEnrichAsync(rawData, scores, enrichment, db, projectName);
+  try {
+    await phaseEnrichAsync(rawData, scores, enrichment, db, projectName);
+  } catch (error) {
+    throw withPipelineStage('async-enrichment', error, { projectName, mode });
+  }
 
-  // Phase 3: Synthesize
-  const response = await phaseSynthesize({
-    projectName, rawData, scores, enrichment, mode, config, db,
-  });
-
-  return response;
+  try {
+    return await phaseSynthesize({
+      projectName, rawData, scores, enrichment, mode, config, db,
+    });
+  } catch (error) {
+    throw withPipelineStage('synthesis', error, { projectName, mode });
+  }
 }
+

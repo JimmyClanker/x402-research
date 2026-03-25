@@ -12,6 +12,13 @@ import {
 } from './alpha-helpers.js';
 import { createHistoryRouter } from './alpha-history.js';
 
+
+function extractAlphaErrorDetails(error) {
+  const stage = error?.stage || error?.step || 'unknown';
+  const message = error?.cause?.message || error?.message || 'Unknown error';
+  return { stage, message };
+}
+
 export function createAlphaRouter({ config, exaService, signalsService, collectAllFn = collectAll, collectorCache = null }) {
   const router = express.Router();
   const cache = createCacheHelpers(signalsService.db);
@@ -92,8 +99,18 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
       res.set('X-Cache-Age-Ms', String(response?.cache?.age_ms ?? 0));
       return res.json(response);
     } catch (error) {
-      console.error(`[alpha:${mode}] ${error.stack || error.message}`);
-      return res.status(502).json({ error: 'Alpha analysis failed' });
+      const { stage, message } = extractAlphaErrorDetails(error);
+      console.error(`[alpha:${mode}] analysis failed at stage=${stage}: ${message}`, {
+        projectName,
+        cacheKey,
+        forceRefresh,
+        stack: error?.stack,
+        cause: error?.cause?.stack || error?.cause?.message || null,
+      });
+      return res.status(502).json({
+        error: `Alpha analysis failed during ${stage}`,
+        detail: message,
+      });
     }
   }
 
