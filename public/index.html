@@ -66,6 +66,8 @@
       overflow-x: hidden;
     }
 
+    /* Round 89: screen-reader only */
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border-width:0; }
     /* ── Skip-to-content link (a11y) ──────────── */
     .skip-link {
       position: absolute;
@@ -399,21 +401,53 @@
       gap: 40px;
       align-items: start;
     }
+    /* Round 84: improved code block */
     .code-block {
-      background: #0d0d0d;
+      background: #080808;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 24px;
-      overflow-x: auto;
+      padding: 0;
+      overflow: hidden;
+      position: relative;
     }
+    .code-block-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 10px 20px;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+    }
+    .code-block-lang {
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .code-copy-btn {
+      font-size: 0.72rem; font-family: 'Inter', sans-serif;
+      color: var(--muted); background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px; padding: 3px 10px; cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .code-copy-btn:hover { border-color: var(--border-hover); color: var(--text); }
+    .code-copy-btn.copied { color: #86efac; border-color: rgba(34,197,94,0.3); }
     .code-block pre {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.85rem;
-      line-height: 1.8;
-      color: #ccc;
+      font-size: 0.84rem;
+      line-height: 1.85;
+      color: #c8c8c8;
       white-space: pre-wrap;
       word-break: break-word;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 0;
     }
+    .code-block pre::-webkit-scrollbar { height: 4px; }
+    .code-block pre::-webkit-scrollbar-track { background: transparent; }
+    .code-block pre::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
     .code-block .comment { color: var(--muted); }
     .code-block .key { color: #79c0ff; }
     .code-block .val { color: #a5d6ff; }
@@ -546,10 +580,18 @@
       .social-proof-grid { grid-template-columns: repeat(2, 1fr); }
       .social-stat:nth-child(2) { border-right: none; }
       .social-stat:nth-child(3) { border-top: 1px solid var(--border); }
+      .social-stat:nth-child(4) { border-top: 1px solid var(--border); }
       .testimonials-grid { grid-template-columns: 1fr; }
+    }
+    /* Round 83: tablet — 2-col testimonials */
+    @media (max-width: 1060px) and (min-width: 641px) {
+      .testimonials-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 560px) {
       .social-proof-grid { grid-template-columns: repeat(2, 1fr); }
+      .social-stat-val { font-size: 1.5rem; }
+      .social-stat { padding: 18px 12px; }
+      .social-proof-section { padding: 48px 0; }
     }
 
     /* ── About ─────────────────────────────────── */
@@ -716,19 +758,22 @@
       margin-bottom: 28px;
       line-height: 1.6;
     }
+    /* Round 90: trynow steps — improved overflow handling */
     .trynow-steps {
       display: flex;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
       margin-bottom: 28px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: var(--muted);
+      line-height: 1.5;
     }
     .trynow-steps span {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
+      white-space: nowrap;
     }
     .trynow-steps .arrow { color: var(--border-hover); }
 
@@ -813,11 +858,21 @@
       .diff-card { padding: 18px 16px; }
     }
     @media (max-width: 400px) {
-      .container { width: calc(100% - 28px); }
-      h1.hero-headline { font-size: 2rem; }
+      .container { width: calc(100% - 24px); }
+      h1.hero-headline { font-size: 2rem; letter-spacing: -0.03em; }
       .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
       .hero-ctas { flex-direction: column; align-items: stretch; }
       .products-grid, .diff-grid { grid-template-columns: 1fr; }
+      /* Round 90: prevent trynow steps overflow */
+      .trynow-steps { font-size: 0.78rem; gap: 4px; }
+      .trynow-steps .arrow { display: none; }
+      section { padding: 44px 0; }
+    }
+    /* Round 90: about section typography improvements */
+    .about-chip { letter-spacing: 0.01em; }
+    /* Round 90: footer improvements */
+    @media (max-width: 400px) {
+      .footer-links { flex-direction: column; gap: 8px; }
     }
 
     /* ── Round 7: Performance — will-change for animated elements ── */
@@ -968,7 +1023,11 @@
       </div>
       <div class="api-grid">
         <div class="code-block fade-in">
-          <pre><span class="comment"># Streamable MCP (Model Context Protocol)</span>
+          <div class="code-block-header">
+            <span class="code-block-lang">HTTP / MCP</span>
+            <button class="code-copy-btn" id="copy-api-btn" aria-label="Copy code snippet">Copy</button>
+          </div>
+          <pre id="api-code-block"><span class="comment"># Streamable MCP (Model Context Protocol)</span>
 <span class="green">POST</span> https://api.clawnkers.com/mcp
 
 <span class="comment"># crypto_research tool</span>
@@ -1196,6 +1255,19 @@
     // ── Service Worker for offline landing page ──────────────────────
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {}); // fail silently
+    }
+    // ── Round 84: copy code button ───────────────────────────────────
+    const copyBtn = document.getElementById('copy-api-btn');
+    const codeEl  = document.getElementById('api-code-block');
+    if (copyBtn && codeEl) {
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(codeEl.textContent);
+          copyBtn.textContent = 'Copied!';
+          copyBtn.classList.add('copied');
+          setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 2000);
+        } catch(_) { copyBtn.textContent = 'Error'; }
+      });
     }
     // ── Round 68: hamburger toggle ───────────────────────────────────
     const hpHamburger = document.getElementById('hp-hamburger-btn');

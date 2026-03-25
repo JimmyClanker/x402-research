@@ -74,6 +74,13 @@
       overflow-x: hidden;
     }
 
+    /* Round 89: screen-reader only utility */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border-width: 0;
+    }
+
     .skip-link {
       position: absolute; top: -100%; left: 12px;
       background: var(--green); color: #000;
@@ -471,6 +478,25 @@
     .dex-price-val { font-size: 0.82rem; color: var(--buy); font-weight: 500; }
     .dex-vol { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
     .dex-loading, .dex-empty { padding: 14px 16px; color: var(--muted); font-size: 0.84rem; text-align: center; }
+
+    /* Round 88: dropdown keyboard hint footer + mobile sizing */
+    .dex-keyboard-hint {
+      padding: 7px 14px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      font-size: 0.67rem;
+      color: var(--muted);
+      display: flex; gap: 12px; align-items: center;
+      background: rgba(255,255,255,0.01);
+    }
+    .dex-keyboard-hint kbd {
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px; padding: 1px 5px; font-size: 0.65rem;
+      font-family: 'IBM Plex Mono', monospace; color: var(--muted2);
+    }
+    @media (max-width: 560px) {
+      .dex-dropdown { max-height: 260px; }
+      .dex-keyboard-hint { display: none; } /* touch devices don't need keyboard hints */
+    }
 
     /* ── Results Report ── */
     #results-section { display: none; }
@@ -1201,8 +1227,10 @@
               <input id="project-input" name="project" type="search" maxlength="100"
                 placeholder="solana, aave, 0x833589fCD6... or search by name"
                 autocomplete="off" aria-label="Project name or contract address"
+                aria-describedby="input-hint"
                 aria-haspopup="listbox" aria-controls="dex-dropdown" aria-expanded="false"
                 aria-activedescendant="" />
+            <div id="input-hint" class="sr-only">Enter a cryptocurrency project name, ticker, or contract address to scan</div>
               <div id="dex-dropdown" class="dex-dropdown" role="listbox" aria-label="Token suggestions"></div>
             </div>
             <div class="btn-row">

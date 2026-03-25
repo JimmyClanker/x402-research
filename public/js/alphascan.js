@@ -160,7 +160,8 @@
         </div>`;
     }
 
-    // ── Loading state ────────────────────────────────────────────────
+    // ── Loading state (Round 85: progressive contextual messages) ────
+    var _loadingInterval = null;
     function setLoading(isLoading, mode) {
       const scanBtn   = document.getElementById('scan-btn');
       const quickLinkEl = document.getElementById('quick-link');
@@ -169,20 +170,31 @@
         if (scanBtn)    { scanBtn.disabled = true; scanBtn.textContent = 'Scanning…'; scanBtn.setAttribute('aria-busy', 'true'); }
         if (quickLinkEl) quickLinkEl.style.pointerEvents = 'none';
 
-        const project   = escapeHtml(input.value.trim() || 'project');
-        const modeLabel = mode === 'quick'
-          ? 'Free quick scan — algorithmic scoring'
-          : 'Full deep scan — 10 sources + Claude Opus 4.6 · ~10–20s';
+        const project = escapeHtml(input.value.trim() || 'project');
+        const steps = mode === 'quick'
+          ? ['Fetching market data…', 'Running algorithmic scoring…', 'Calculating dimensions…', 'Building report…']
+          : ['Fetching market data…', 'Querying DeFiLlama TVL…', 'Scanning GitHub activity…', 'Collecting X/Twitter sentiment…', 'Running AI analysis…', 'Building report…'];
+        var stepIdx = 0;
 
         statusBox.innerHTML = `
           <div class="loading-wrap" role="status" aria-live="polite" aria-label="Scanning ${project}">
             <div class="chalk-loading">Scanning <span class="loading-project">${project}</span><span class="loading-dots"></span></div>
             <div class="loading-bar" aria-hidden="true"></div>
-            <div class="footnote">${modeLabel}</div>
+            <div class="footnote" id="loading-step-label" style="transition:opacity 0.2s;">${escapeHtml(steps[0])}</div>
           </div>`;
-        // Show skeleton while loading
+
+        clearInterval(_loadingInterval);
+        var stepMs = mode === 'quick' ? 2500 : 3000;
+        _loadingInterval = setInterval(function() {
+          stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+          var el = document.getElementById('loading-step-label');
+          if (el) { el.style.opacity='0'; setTimeout(function(){ el.textContent=steps[stepIdx]; el.style.opacity='1'; }, 200); }
+        }, stepMs);
+
         showSkeleton();
       } else {
+        clearInterval(_loadingInterval);
+        _loadingInterval = null;
         if (scanBtn)    { scanBtn.disabled = false; scanBtn.textContent = _persistedKey ? 'Full Scan' : 'Full Scan $1'; scanBtn.removeAttribute('aria-busy'); }
         if (quickLinkEl) quickLinkEl.style.pointerEvents = '';
         statusBox.innerHTML = '';
@@ -731,18 +743,25 @@
         const history90d = raw?.market?.price_history_90d || [];
         const sparkline = raw?.market?.sparkline_7d || [];
         const chartSvg = renderTradeChart(history90d, sparkline, ts, rr);
+        // Round 81: cleaner trade setup tile grid with color-coded borders
+        function tradeTile(label, val, color, bg) {
+          return `<div style="background:${bg||'rgba(255,255,255,0.03)'};border:1px solid ${color||'var(--border)'};border-radius:10px;padding:10px 14px;min-width:100px;text-align:center;flex:1;">
+            <div style="color:#666;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">${escapeHtml(label)}</div>
+            <div style="font-weight:700;color:${color||'var(--text)'};font-size:0.95rem;">${val}</div>
+          </div>`;
+        }
+        const setupTiles = [
+          tradeTile('Entry Zone', `$${escapeHtml(String(ts.entry_zone.low))} – $${escapeHtml(String(ts.entry_zone.high))}`, 'rgba(45,212,191,0.6)', 'rgba(45,212,191,0.04)'),
+          tradeTile('Stop Loss', `$${escapeHtml(String(ts.stop_loss??'n/a'))}`, 'rgba(239,68,68,0.7)', 'rgba(239,68,68,0.04)'),
+          ...(ts.take_profit_targets||[]).slice(0,2).map(tp=>tradeTile(escapeHtml(tp.label), `$${escapeHtml(String(tp.price))}<span style="font-size:10px;color:#7e7e7e;font-weight:400;"> +${escapeHtml(String(tp.pct_gain))}%</span>`, '#86efac', 'rgba(34,197,94,0.04)')),
+          ts.risk_reward_ratio!=null ? tradeTile('R/R', `${escapeHtml(String(ts.risk_reward_ratio))}x`, qualColor, '') : '',
+          rr?.position_size_suggestion ? tradeTile('Position Size', escapeHtml(rr.position_size_suggestion), '#fbbf24', 'rgba(251,191,36,0.04)') : '',
+        ].filter(Boolean).join('');
         panel4 = `<section class="panel" style="margin-top:18px;">
           <div class="section-label">📐 Trade Setup</div>
           ${chartSvg}
-          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
-            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Entry Zone</div><div style="font-weight:700;">$${escapeHtml(String(ts.entry_zone.low))} – $${escapeHtml(String(ts.entry_zone.high))}</div></div>
-            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Stop Loss</div><div style="font-weight:700;color:#ef4444;">$${escapeHtml(String(ts.stop_loss??'n/a'))}</div></div>
-            ${(ts.take_profit_targets||[]).slice(0,3).map(tp=>`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">${escapeHtml(tp.label)}</div><div style="font-weight:700;color:#86efac;">$${escapeHtml(String(tp.price))} <span style="font-size:11px;color:#7e7e7e;">(+${escapeHtml(String(tp.pct_gain))}%)</span></div></div>`).join('')}
-            ${ts.risk_reward_ratio!=null?`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">R/R Ratio</div><div style="font-weight:700;">${escapeHtml(String(ts.risk_reward_ratio))}x</div></div>`:''}
-            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Setup Quality</div><div style="font-weight:700;color:${qualColor};">${escapeHtml(ts.setup_quality||'?')}</div></div>
-            ${rr?.position_size_suggestion?`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Position Size</div><div style="font-weight:700;color:#fbbf24;">${escapeHtml(rr.position_size_suggestion)}</div></div>`:''}
-          </div>
-
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">${setupTiles}</div>
+          <div style="margin-top:8px;font-size:0.78rem;color:var(--muted);">Not financial advice. Use as a research tool only.</div>
         </section>`;
       }
 
@@ -755,14 +774,32 @@
       const rq = payload?.report_quality;
       // Also include competitor comparison in footer if present
       const compComp = analysis.competitor_comparison && analysis.competitor_comparison !== 'n/a' ? `<div style="margin-bottom:8px;font-size:0.82rem;color:#94a3b8;"><strong style="color:#c5c5c5;">Competitors:</strong> ${escapeHtml(analysis.competitor_comparison)}</div>` : '';
-      const panel6 = `<section class="panel" style="margin-top:18px;border-color:rgba(251,191,36,0.2);">
-        ${rq ? `<div style="margin-bottom:8px;font-size:0.85rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Report quality: <strong style="color:${rq.grade==='A'?'#22c55e':rq.grade==='B'?'#86efac':rq.grade==='C'?'#fbbf24':rq.grade==='D'?'#f97316':'#ef4444'}">${escapeHtml(rq.grade)}</strong> (${rq.quality_score ?? rq.score}/100)${rq.verdict_confidence ? `<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${rq.verdict_confidence==='high'?'rgba(34,197,94,0.15)':rq.verdict_confidence==='medium'?'rgba(251,191,36,0.15)':'rgba(248,113,113,0.15)'};color:${rq.verdict_confidence==='high'?'#22c55e':rq.verdict_confidence==='medium'?'#fbbf24':'#f87171'}">verdict confidence: ${escapeHtml(rq.verdict_confidence)}</span>` : ''}${rq.dimension_coverage_pct != null ? `<span style="font-size:0.75rem;color:#94a3b8;">${rq.dimension_coverage_pct}% dim coverage</span>` : ''}</div>` : ''}
-        ${compComp}
-        ${ds.length ? `<div style="font-size:0.78rem;color:#86efac;margin-bottom:4px;">✅ Data sources: ${ds.map(s=>escapeHtml(s)).join(', ')}</div>` : ''}
-        ${dg.length ? `<div style="font-size:0.78rem;color:#fbbf24;margin-bottom:4px;">⚠ Data gaps: ${dg.map(g=>escapeHtml(g)).join(', ')}</div>` : ''}
-        ${vw.length ? `<div style="font-size:0.78rem;color:#f97316;margin-top:4px;">🔍 Validation notes: ${vw.map(w=>escapeHtml(w)).join('; ')}</div>` : ''}
-
-        <div class="footnote" style="margin-top:6px;">Powered by Claude Opus 4.6 + Grok Fast + CoinGecko + DeFiLlama</div>
+      // Round 82: cleaner quality footer with confidence bar
+      const gradeColor = rq ? (rq.grade==='A'?'#22c55e':rq.grade==='B'?'#86efac':rq.grade==='C'?'#fbbf24':rq.grade==='D'?'#f97316':'#ef4444') : null;
+      const qScore = rq?.quality_score ?? rq?.score ?? 0;
+      const confColor = rq?.verdict_confidence==='high'?'#22c55e':rq?.verdict_confidence==='medium'?'#fbbf24':'#f87171';
+      const panel6 = `<section class="panel" style="margin-top:18px;border-color:rgba(255,255,255,0.06);">
+        <div style="display:grid;gap:10px;">
+          ${rq ? `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;">Data quality</span>
+              <strong style="font-size:1rem;color:${gradeColor}">${escapeHtml(rq.grade)}</strong>
+              <span style="font-size:0.75rem;color:var(--muted);">${qScore}/100</span>
+            </div>
+            ${rq.verdict_confidence ? `<span style="font-size:0.72rem;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,0.04);border:1px solid ${confColor}33;color:${confColor};">confidence: ${escapeHtml(rq.verdict_confidence)}</span>` : ''}
+          </div>
+          <div style="height:4px;background:rgba(255,255,255,0.05);border-radius:999px;overflow:hidden;">
+            <div style="height:100%;width:${qScore}%;background:${gradeColor};border-radius:999px;transition:width 1s ease;"></div>
+          </div>` : ''}
+          ${compComp}
+          ${ds.length ? `<div style="font-size:0.75rem;color:#86efac;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span style="opacity:0.7;">✓ Sources:</span>${ds.map(s=>`<span style="padding:1px 7px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.15);border-radius:999px;">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
+          ${dg.length ? `<div style="font-size:0.75rem;color:#fbbf24;">⚠ Data gaps: ${dg.map(g=>escapeHtml(g)).join(' · ')}</div>` : ''}
+          ${vw.length ? `<div style="font-size:0.75rem;color:#f97316;">🔍 ${vw.map(w=>escapeHtml(w)).join(' · ')}</div>` : ''}
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:6px;border-top:1px solid var(--border);">
+            <div class="footnote">Powered by Claude Opus 4.6 + Grok Fast + CoinGecko + DeFiLlama</div>
+            <button onclick="window.scrollTo({top:0,behavior:'smooth'})" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;font-size:0.75rem;cursor:pointer;font-family:inherit;transition:border-color 0.2s,color 0.2s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='';this.style.color=''">↑ New scan</button>
+          </div>
+        </div>
       </section>`;
 
       reportBox.innerHTML = panel1 + panel2 + panel3 + panel4 + panel6;
@@ -774,6 +811,11 @@
       rescanBtn.addEventListener('click', () => runScan(_persistedKey ? 'full' : 'quick'));
       reportBox.insertBefore(rescanBtn, reportBox.firstChild);
       resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Round 89: focus management for screen readers
+      setTimeout(() => {
+        var nameEl = reportBox.querySelector('.project-name');
+        if (nameEl) { nameEl.setAttribute('tabindex', '-1'); nameEl.focus({ preventScroll: true }); }
+      }, 650);
     }
 
     function showError(msg, hint) {
@@ -914,6 +956,9 @@
           </div>`;
       }).join('');
 
+      // Round 88: keyboard hint footer
+      dexDropdown.insertAdjacentHTML('beforeend', `<div class="dex-keyboard-hint"><span><kbd>↑↓</kbd> Navigate</span><span><kbd>↵</kbd> Select</span><span><kbd>Esc</kbd> Close</span></div>`);
+
       dexDropdown.classList.add('open');
       updateDexAriaState();
 
@@ -1003,6 +1048,9 @@
             </div>
           </div>`;
       }).join('');
+      // Round 88: keyboard hint footer
+      dexDropdown.insertAdjacentHTML('beforeend', `<div class="dex-keyboard-hint"><span><kbd>↑↓</kbd> Navigate</span><span><kbd>↵</kbd> Select</span><span><kbd>Esc</kbd> Close</span></div>`);
+
       dexDropdown.classList.add('open');
       updateDexAriaState();
       dexDropdown.querySelectorAll('.dex-item').forEach((el) => {

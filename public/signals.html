@@ -53,6 +53,38 @@
     /* Footer */
     .footer { text-align: center; padding: 30px 0; color: var(--muted); font-size: 0.8rem; }
     .update-time { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; }
+
+    /* Round 87: responsive — card view on mobile */
+    @media (max-width: 680px) {
+      .signals-table { display: none; }
+      .signals-cards { display: grid !important; gap: 10px; }
+    }
+    .signals-cards { display: none; }
+    .signal-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .signal-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .signal-card-symbol { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+    .signal-card-time { font-size: 0.75rem; color: var(--muted); }
+    .signal-card-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.82rem; padding: 4px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .signal-card-row:last-child { border-bottom: none; }
+    .signal-card-label { color: var(--muted); }
+    /* Round 87: stats cards responsive */
+    @media (max-width: 500px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .header h1 { font-size: 1.4rem; }
+      .container { padding: 16px 14px; }
+    }
   </style>
 </head>
 <body>
@@ -115,6 +147,7 @@
       return `${days}d ago`;
     }
 
+    // Round 87: render both table and card views
     function renderSignals(sigs) {
       const container = document.getElementById('signals-container');
       if (!sigs || sigs.length === 0) {
@@ -122,14 +155,16 @@
         return;
       }
 
-      let html = `<table class="signals-table">
+      let tableHtml = `<table class="signals-table">
         <thead><tr><th>Time</th><th>Symbol</th><th>Direction</th><th>Strategy</th><th>Entry</th><th>SL</th><th>TP</th><th>R:R</th></tr></thead><tbody>`;
+      let cardsHtml = '<div class="signals-cards">';
 
       for (const s of sigs) {
         const dirClass = s.direction === 'LONG' ? 'long' : 'short';
         const stratClass = s.strategy === 'DIVERGENCE' ? 'div' : 'convergence';
         const rrClass = s.rr >= 3 ? 'rr-high' : '';
-        html += `<tr>
+        // Table row
+        tableHtml += `<tr>
           <td title="${s.timestamp}">${timeAgo(s.timestamp)}</td>
           <td><strong>${s.symbol}</strong></td>
           <td class="${dirClass}">${s.direction}</td>
@@ -139,9 +174,25 @@
           <td>${Number(s.tp).toPrecision(6)}</td>
           <td class="${rrClass}">${Number(s.rr).toFixed(1)}x</td>
         </tr>`;
+        // Card
+        cardsHtml += `<div class="signal-card">
+          <div class="signal-card-header">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="signal-card-symbol">${s.symbol}</span>
+              <span class="${dirClass}" style="font-size:0.82rem;font-weight:600;">${s.direction}</span>
+              <span class="strategy-badge ${stratClass}" style="font-size:0.68rem;">${s.strategy}</span>
+            </div>
+            <span class="signal-card-time">${timeAgo(s.timestamp)}</span>
+          </div>
+          <div class="signal-card-row"><span class="signal-card-label">Entry</span><strong>${Number(s.entry).toPrecision(6)}</strong></div>
+          <div class="signal-card-row"><span class="signal-card-label">Stop Loss</span><span style="color:var(--red);">${Number(s.sl).toPrecision(6)}</span></div>
+          <div class="signal-card-row"><span class="signal-card-label">Take Profit</span><span style="color:var(--green);">${Number(s.tp).toPrecision(6)}</span></div>
+          <div class="signal-card-row"><span class="signal-card-label">R:R</span><span class="${rrClass}">${Number(s.rr).toFixed(1)}x</span></div>
+        </div>`;
       }
-      html += '</tbody></table>';
-      container.innerHTML = html;
+      tableHtml += '</tbody></table>';
+      cardsHtml += '</div>';
+      container.innerHTML = tableHtml + cardsHtml;
     }
 
     async function loadStats() {
