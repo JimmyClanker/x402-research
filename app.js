@@ -159,7 +159,7 @@ export function createApp({
     res.redirect(302, '/alphascan' + qs);
   });
 
-  app.use(express.static(join(__dirname, 'public'), { maxAge: '5m', setHeaders: (res, path) => { if (path.endsWith('.js') || path.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); } }));
+  app.use(express.static(join(__dirname, 'public'), { maxAge: '5m', setHeaders: (res, path) => { if (path.endsWith('.js') || path.endsWith('.html')) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'); } }));
 
   if (!config.nvmApiKey) {
     console.warn('NVM_API_KEY not set — endpoints OPEN (dev mode)');
