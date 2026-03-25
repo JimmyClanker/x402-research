@@ -380,12 +380,17 @@
     }
 
     // ── Trade Chart SVG (TradingView-style) ──────────────────────────
-    function renderTradeChart(sparkline, tradeSetup, riskReward) {
-      const prices = Array.isArray(sparkline) ? sparkline.filter(p => typeof p === 'number' && isFinite(p)) : [];
+    function renderTradeChart(history90d, sparkline, tradeSetup, riskReward) {
+      // Use 90d history if available, fallback to 7d sparkline
+      const histData = Array.isArray(history90d) && history90d.length > 5 ? history90d : null;
+      const prices = histData
+        ? histData.map(d => d.p).filter(p => typeof p === 'number' && isFinite(p))
+        : (Array.isArray(sparkline) ? sparkline.filter(p => typeof p === 'number' && isFinite(p)) : []);
+      const timestamps = histData ? histData.map(d => d.t) : null;
       if (!prices.length || !tradeSetup?.entry_zone?.low) return '';
 
-      const W = 600, H = 300;
-      const padL = 10, padR = 72, padT = 20, padB = 32;
+      const W = 660, H = 320;
+      const padL = 10, padR = 78, padT = 20, padB = 36;
       const chartW = W - padL - padR;
       const chartH = H - padT - padB;
 
@@ -399,10 +404,12 @@
 
       const sparkMin = Math.min(...prices);
       const sparkMax = Math.max(...prices);
-      const upperBound = tp2Price ? tp2Price * 1.03 : (tp1Price ? tp1Price * 1.1 : sparkMax);
-      const lowerBound = sl > 0 ? Math.min(sparkMin, sl * 0.97) : sparkMin * 0.97;
-      const minPrice = Math.min(sparkMin, lowerBound);
-      const maxPrice = Math.max(sparkMax, upperBound);
+      const allLevels = [sparkMin, sparkMax, entryLow, entryHigh];
+      if (sl > 0) allLevels.push(sl);
+      if (tp1Price) allLevels.push(tp1Price);
+      if (tp2Price) allLevels.push(tp2Price);
+      const minPrice = Math.min(...allLevels) * 0.97;
+      const maxPrice = Math.max(...allLevels) * 1.03;
       const priceRange = maxPrice - minPrice || 1;
 
       function py(price) {
@@ -411,71 +418,88 @@
       function px(i, total) {
         return padL + (i / (total - 1)) * chartW;
       }
+      function fmtPrice(p) {
+        if (p >= 1000) return `$${(p/1000).toFixed(1)}k`;
+        if (p >= 1) return `$${p.toFixed(2)}`;
+        return `$${p.toFixed(p < 0.001 ? 6 : 4)}`;
+      }
 
       // Grid lines (5 levels)
       const gridLines = [];
       for (let i = 0; i <= 4; i++) {
         const price = minPrice + (priceRange * i / 4);
         const y = py(price);
-        const label = price >= 1 ? `$${price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : `$${price.toFixed(price < 0.001 ? 6 : 4)}`;
-        gridLines.push(`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#333" stroke-width="1"/>`);
-        gridLines.push(`<text x="${W - padR + 5}" y="${(y + 4).toFixed(1)}" fill="#7e7e7e" font-size="10" font-family="Inter,sans-serif">${escapeHtml(label)}</text>`);
+        gridLines.push(`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#282828" stroke-width="1"/>`);
+        gridLines.push(`<text x="${W - padR + 5}" y="${(y + 4).toFixed(1)}" fill="#666" font-size="9.5" font-family="Inter,monospace">${fmtPrice(price)}</text>`);
       }
 
-      // X-axis labels
-      const xLabels = ['7d ago','5d','3d','1d','Now'];
-      const xAxisY = H - 8;
-      const xAxisItems = xLabels.map((lbl, i) => {
-        const x = padL + (i / (xLabels.length - 1)) * chartW;
-        return `<text x="${x.toFixed(1)}" y="${xAxisY}" fill="#7e7e7e" font-size="10" font-family="Inter,sans-serif" text-anchor="middle">${lbl}</text>`;
-      }).join('');
+      // X-axis labels (date-based if timestamps available)
+      const xAxisY = H - 6;
+      let xAxisItems = '';
+      if (timestamps && timestamps.length) {
+        const nLabels = 5;
+        const step = Math.floor((timestamps.length - 1) / (nLabels - 1));
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        xAxisItems = Array.from({length: nLabels}, (_, i) => {
+          const idx = Math.min(i * step, timestamps.length - 1);
+          const d = new Date(timestamps[idx]);
+          const lbl = `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+          const x = px(idx, prices.length);
+          return `<text x="${x.toFixed(1)}" y="${xAxisY}" fill="#666" font-size="9.5" font-family="Inter,sans-serif" text-anchor="middle">${lbl}</text>`;
+        }).join('');
+      } else {
+        const xLabels = ['7d ago','5d','3d','1d','Now'];
+        xAxisItems = xLabels.map((lbl, i) => {
+          const x = padL + (i / (xLabels.length - 1)) * chartW;
+          return `<text x="${x.toFixed(1)}" y="${xAxisY}" fill="#666" font-size="9.5" font-family="Inter,sans-serif" text-anchor="middle">${lbl}</text>`;
+        }).join('');
+      }
 
       // Price polyline
       const pts = prices.map((p, i) => `${px(i, prices.length).toFixed(1)},${py(p).toFixed(1)}`).join(' ');
       const lastX = px(prices.length - 1, prices.length);
       const lastY = py(prices[prices.length - 1]);
-      // Area fill path
       const firstX = px(0, prices.length);
       const baseY = padT + chartH;
       const areaPath = `M${firstX.toFixed(1)},${baseY} L${prices.map((p, i) => `${px(i, prices.length).toFixed(1)},${py(p).toFixed(1)}`).join(' L')} L${lastX.toFixed(1)},${baseY} Z`;
 
-      // SL zone (from entryLow down to SL)
+      // SL zone
       const slZone = sl > 0 ? (() => {
         const y1 = Math.min(py(entryLow), py(sl));
         const y2 = Math.max(py(entryLow), py(sl));
         const slPct = entryLow > 0 ? (((sl - entryLow) / entryLow) * 100).toFixed(1) : '?';
         const labelY = ((y1 + y2) / 2 + 4).toFixed(1);
-        return `<rect x="${padL}" y="${y1.toFixed(1)}" width="${chartW}" height="${(y2 - y1).toFixed(1)}" fill="rgba(239,68,68,0.1)"/>
-        <text x="${(W - padR + 5).toFixed(1)}" y="${labelY}" fill="#f87171" font-size="10" font-family="Inter,sans-serif">SL ${slPct}%</text>`;
+        return `<rect x="${padL}" y="${y1.toFixed(1)}" width="${chartW}" height="${(y2 - y1).toFixed(1)}" fill="rgba(239,68,68,0.08)"/>
+        <line x1="${padL}" y1="${py(sl).toFixed(1)}" x2="${W - padR}" y2="${py(sl).toFixed(1)}" stroke="#ef4444" stroke-width="1" stroke-dasharray="6 3"/>
+        <text x="${(W - padR + 5).toFixed(1)}" y="${(py(sl) + 4).toFixed(1)}" fill="#f87171" font-size="9.5" font-family="Inter,monospace">SL ${fmtPrice(sl)}</text>`;
       })() : '';
 
       // Entry zone
       const entryY1 = Math.min(py(entryLow), py(entryHigh));
       const entryY2 = Math.max(py(entryLow), py(entryHigh));
       const entryMidY = ((entryY1 + entryY2) / 2).toFixed(1);
-      const entryZoneSvg = `<rect x="${padL}" y="${entryY1.toFixed(1)}" width="${chartW}" height="${(entryY2 - entryY1 + 0.5).toFixed(1)}" fill="rgba(45,212,191,0.08)" stroke="rgba(45,212,191,0.4)" stroke-width="1" stroke-dasharray="4 3"/>`;
-      const entryLabel = `<text x="${(padL + chartW / 2).toFixed(1)}" y="${(Number(entryMidY) - 3).toFixed(1)}" fill="rgba(45,212,191,0.9)" font-size="10" font-family="Inter,sans-serif" text-anchor="middle">Entry $${escapeHtml(String(tradeSetup.entry_zone.low))}–$${escapeHtml(String(tradeSetup.entry_zone.high))}${rrRatio ? ` · R/R ${rrRatio}x` : ''}</text>`;
+      const entryZoneSvg = `<rect x="${padL}" y="${entryY1.toFixed(1)}" width="${chartW}" height="${(Math.max(entryY2 - entryY1, 2)).toFixed(1)}" fill="rgba(45,212,191,0.08)" stroke="rgba(45,212,191,0.4)" stroke-width="1" stroke-dasharray="4 3"/>`;
+      const entryLabel = `<text x="${(W - padR + 5).toFixed(1)}" y="${(Number(entryMidY) + 4).toFixed(1)}" fill="rgba(45,212,191,0.9)" font-size="9.5" font-family="Inter,monospace">Entry ${fmtPrice((entryLow+entryHigh)/2)}</text>`;
 
-      // TP1 zone (entryHigh → TP1)
+      // TP1 zone
       const tp1Zone = tp1Price ? (() => {
         const y1 = Math.min(py(entryHigh), py(tp1Price));
         const y2 = Math.max(py(entryHigh), py(tp1Price));
         const tp1Pct = entryHigh > 0 ? `+${(((tp1Price - entryHigh) / entryHigh) * 100).toFixed(1)}%` : '';
-        const labelY = (y1 + 12).toFixed(1);
-        return `<rect x="${padL}" y="${y1.toFixed(1)}" width="${chartW}" height="${(y2 - y1).toFixed(1)}" fill="rgba(34,197,94,0.1)"/>
-        <text x="${(W - padR + 5).toFixed(1)}" y="${labelY}" fill="#86efac" font-size="10" font-family="Inter,sans-serif">TP1 ${escapeHtml(tp1Pct)}</text>`;
+        return `<rect x="${padL}" y="${y1.toFixed(1)}" width="${chartW}" height="${(y2 - y1).toFixed(1)}" fill="rgba(34,197,94,0.06)"/>
+        <line x1="${padL}" y1="${py(tp1Price).toFixed(1)}" x2="${W - padR}" y2="${py(tp1Price).toFixed(1)}" stroke="#22c55e" stroke-width="1" stroke-dasharray="6 3"/>
+        <text x="${(W - padR + 5).toFixed(1)}" y="${(py(tp1Price) + 4).toFixed(1)}" fill="#86efac" font-size="9.5" font-family="Inter,monospace">TP1 ${fmtPrice(tp1Price)}</text>`;
       })() : '';
 
       // TP2 dashed line
       const tp2Line = tp2Price ? (() => {
         const y = py(tp2Price).toFixed(1);
-        const tp2Pct = entryHigh > 0 ? `+${(((tp2Price - entryHigh) / entryHigh) * 100).toFixed(1)}%` : '';
-        return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(134,239,172,0.5)" stroke-width="1" stroke-dasharray="5 4"/>
-        <text x="${(W - padR + 5).toFixed(1)}" y="${(Number(y) + 4).toFixed(1)}" fill="#86efac" font-size="10" font-family="Inter,sans-serif">TP2 ${escapeHtml(tp2Pct)}</text>`;
+        return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(134,239,172,0.4)" stroke-width="1" stroke-dasharray="5 4"/>
+        <text x="${(W - padR + 5).toFixed(1)}" y="${(Number(y) + 4).toFixed(1)}" fill="#86efac" font-size="9.5" font-family="Inter,monospace">TP2 ${fmtPrice(tp2Price)}</text>`;
       })() : '';
 
       return `<div class="trade-chart">
-        <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Trade setup chart" role="img">
+        <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="90-day price chart with trade levels" role="img">
           ${gridLines.join('')}
           ${slZone}
           ${tp1Zone}
@@ -664,8 +688,9 @@
       let panel4 = '';
       if (ts && ts.entry_zone?.low) {
         const qualColor = {strong:'#22c55e',moderate:'#fbbf24',weak:'#ef4444'}[ts.setup_quality]||'#e8e8e8';
+        const history90d = raw?.market?.price_history_90d || [];
         const sparkline = raw?.market?.sparkline_7d || [];
-        const chartSvg = renderTradeChart(sparkline, ts, rr);
+        const chartSvg = renderTradeChart(history90d, sparkline, ts, rr);
         panel4 = `<section class="panel" style="margin-top:18px;">
           <div class="section-label">📐 Trade Setup</div>
           ${chartSvg}

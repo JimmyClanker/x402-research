@@ -74,10 +74,12 @@ export async function collectMarket(projectName) {
     }
 
     const coinUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}?localization=false&tickers=false&community_data=true&developer_data=false&sparkline=true&price_change_percentage=1h%2C24h%2C7d%2C14d%2C30d%2C60d%2C200d%2C1y`;
-    const [coinData, trendingData, tickersData] = await Promise.allSettled([
+    const chartUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}/market_chart?vs_currency=usd&days=90&interval=daily`;
+    const [coinData, trendingData, tickersData, chartData] = await Promise.allSettled([
       fetchJson(coinUrl),
       fetchJson(COINGECKO_TRENDING_URL),
       fetchJson(`${COINGECKO_TICKERS_URL}/${encodeURIComponent(firstCoin.id)}/tickers?per_page=100`),
+      fetchJson(chartUrl),
     ]).then((results) => results.map((r) => (r.status === 'fulfilled' ? r.value : null)));
     const marketData = coinData?.market_data || {};
     const communityData = coinData?.community_data || {};
@@ -230,6 +232,7 @@ export async function collectMarket(projectName) {
       cex_volume_pct: cexVolumePct != null ? Math.round(cexVolumePct * 100) / 100 : null,
       top_exchanges: topExchanges,
       sparkline_7d: coinData?.market_data?.sparkline_7d?.price || [],
+      price_history_90d: (chartData?.prices || []).map(([ts, price]) => ({ t: ts, p: price })),
       error: null,
     };
   } catch (error) {
