@@ -459,3 +459,155 @@
 - **Change:** Added `watchlist_score` (0-100) to watchlist endpoint output — balances overall score (60%), alpha signals (20%), red flag penalties (20%), volatility penalty. Updated sort to use watchlist_score. Also surfaces `one_line_risk` in watchlist items.
 - **Files:** `routes/alpha.js`
 - **Tests:** 164/164 pass
+
+## AutoResearch UX & Layout Batch — 30 Rounds (2026-03-26 00:30 UTC)
+
+### Round 61 — Mobile hamburger menu (alphascan.html)
+- **Change:** Added hamburger button + sliding mobile nav panel to scanner page header. Keyboard accessible, aria-expanded, closes on outside click. Logic in `hamburger.js`.
+- **Files:** `public/alphascan.html`, `public/js/hamburger.js`
+- **Tests:** 164/164 pass
+
+### Round 62 — Input field polish: hover state, stronger focus ring, better placeholder contrast
+- **Change:** Improved #project-input with hover state, 4px focus box-shadow, dimmer placeholder (#5e5e5e vs #7e7e7e) for better visual feedback. Slightly larger padding (15px vs 14px).
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 63 — Score rows: 2-col stack on mobile (label + value / bar below)
+- **Change:** At ≤720px, score rows switch to 2-col (label + score), bar spans full width below — much more readable than the 3-col grid that compressed too hard.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 64 — Skeleton screens: staggered reveal + pulse glow + smoother shimmer
+- **Change:** Skeleton panels now stagger in (0/8/16ms), have a subtle orange-border pulse animation, and use a wider (800px) shimmer gradient for smoother loading feel.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 65 — Loading bar: multi-color sweep glow animation
+- **Change:** Replaced flat progress bar with a 60%-width glow sweep (warm palette), added a ::after pulse, smoother cubic-bezier timing.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 66 — Scanner hero: tighter vertical padding (72px vs 96px)
+- **Change:** Scanner page hero feels less wasteful — more screen estate for the scan form above fold on medium-sized screens.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 67 — How-it-works cards: consistent height, border, hover elevation, connector tweaks
+- **Change:** Each how-step is now a proper card (border + bg + radius + hover lift). Connector line repositioned to center of step numbers accurately.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 68 — Landing page (index.html) mobile hamburger menu
+- **Change:** Same hamburger pattern applied to index.html header. Tablet layout updated (2-col products/diff grid at 641-1060px). Trust logos smaller on mobile.
+- **Files:** `public/index.html`
+- **Tests:** 164/164 pass
+
+### Round 69 — Verdict badge redesign: flex column layout, glow shadow, mono overall score
+- **Change:** Verdict badge now uses box-shadow glow matching its class (buy/hold/avoid), overall score uses IBM Plex Mono, verdict-wrap is flex column vs grid.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 70 — Section labels: left accent bar + spacing improvements
+- **Change:** All .section-label elements get a 14px orange accent bar via ::before pseudo. Result panel spacing is now consistent 20px gaps.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 71 — Score bars: color-coded value + tone pill color
+- **Change:** Score value now uses the bar's own color (green→orange→red). Tone label (High conviction / Constructive / Mixed / Fragile) uses matching color. Bar glow via box-shadow.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 72 — Project intro card: ticker badge + website link
+- **Change:** Intro card now shows symbol ticker (monospace badge) and optional website link inline with the title row.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 73 — Analysis text: Inter font, drop-cap first letter, improved line-height
+- **Change:** Analysis text switched from IBM Plex Mono to Inter (much more readable for body text). First letter gets an orange drop-cap. Line-height 1.85.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 74 — Radar chart: score ticks, radial gradient fill, better aria-label
+- **Change:** Grid ticks show scores at even levels (2/4/6/8/10). Radar fill uses radialGradient (center bright, edge dim). aria-label lists all dimension scores for accessibility.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 75 — Scan buttons: full-width on ≤560px
+- **Change:** At small screen widths, both scan buttons stack full-width (flex-column) for easier thumb tapping.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 76 — Payment modal: step indicator + feature badges + cleaner pricing block
+- **Change:** Modal now shows ① Connect → ② Confirm tx → ③ Analysis step indicator that advances during payment. Feature badges show what's included. Pricing in a bordered card.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 77 — Landing page: tablet product grid + trust logo mobile improvements
+- **Change:** Products grid → 2-col at 641-1060px. Diff grid → 2-col at same breakpoint. Trust logos get smaller font/padding on mobile.
+- **Files:** `public/index.html`
+- **Tests:** 164/164 pass
+
+### Round 78 — Landing page: mobile hero / CTA improvements
+- **Change:** Buttons stretch full-width, centered max-width container. Hero sub smaller on mobile. Product/diff cards more compact. Hero badge font-size scales down.
+- **Files:** `public/index.html`
+- **Tests:** 164/164 pass
+
+### Round 79 — Scroll-to-top button
+- **Change:** Fixed orange-themed scroll-to-top button appears after 400px scroll, hover lift animation, CSP-compliant (moved to utils.js).
+- **Files:** `public/alphascan.html`, `public/js/utils.js`
+- **Tests:** 164/164 pass
+
+### Round 80 — Bull/Bear panels: card treatment instead of border-left
+- **Change:** Bull and bear columns now have card backgrounds (green/red tint), border, border-radius, and hover states — much cleaner visual separation.
+- **Files:** `public/alphascan.html`
+- **Tests:** 164/164 pass
+
+### Round 81 — Trade setup panel: color-coded tiles with border/bg per type
+- **Change:** Entry/SL/TP/RR tiles now have matching border and background colors (cyan=entry, red=SL, green=TP, yellow=position size). "Not financial advice" disclaimer added.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 82 — Report quality footer: data confidence bar + source badges
+- **Change:** Replaced flat text quality section with animated quality score bar, verdict confidence pill, data sources as styled badges, and a "New scan" button in footer.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 83 — Social proof section: tablet 2-col testimonials + mobile stat fixes
+- **Change:** Testimonials grid → 2-col at tablet breakpoint. Social stat borders fixed for 4th cell. stat-val smaller on mobile.
+- **Files:** `public/index.html`
+- **Tests:** 164/164 pass
+
+### Round 84 — API code block: header with language label + copy button
+- **Change:** Code block gets a styled header row with "HTTP / MCP" label and a copy-to-clipboard button that shows "Copied!" feedback.
+- **Files:** `public/index.html`
+- **Tests:** 164/164 pass
+
+### Round 85 — Loading state: progressive contextual step messages
+- **Change:** Instead of a static "Full deep scan..." message, the footer label cycles through contextual steps (Fetching market data → Querying DeFiLlama → GitHub → X/Twitter → AI analysis → Building report) with fade transitions.
+- **Files:** `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 86 — Metrics dashboard: mono stat values + card hover + tablet responsive
+- **Change:** Stat values use IBM Plex Mono. Cards get hover border highlight. Tablet breakpoint for grid-3 → 2-col at 641-900px. Progress bars slightly thinner (6px).
+- **Files:** `public/metrics.html`
+- **Tests:** 164/164 pass
+
+### Round 87 — Signals page: mobile card view for signal table
+- **Change:** At ≤680px, the signals table is hidden and a card-based view appears instead. Each signal card shows symbol/direction/strategy header + entry/SL/TP/RR rows. Stats grid 2-col on ≤500px.
+- **Files:** `public/signals.html`
+- **Tests:** 164/164 pass
+
+### Round 88 — DexScreener autocomplete: keyboard hint footer + mobile sizing
+- **Change:** Dropdown gets a keyboard hint bar (↑↓ Navigate / ↵ Select / Esc Close) below results. Hidden on mobile (touch devices don't use keyboard). Max-height 260px on small screens.
+- **Files:** `public/alphascan.html`, `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 89 — Accessibility: sr-only utility, aria-describedby on input, focus management
+- **Change:** Added .sr-only utility class. Input gets aria-describedby pointing to a hidden description. After results load, project name receives tabindex=-1 focus for screen reader announcement.
+- **Files:** `public/alphascan.html`, `public/index.html`, `public/js/alphascan.js`
+- **Tests:** 164/164 pass
+
+### Round 90 — Landing page: mobile overflow fixes + footer improvements
+- **Change:** trynow-steps arrows hidden on ≤400px to prevent overflow, font-size reduced. Footer links stack on very small screens. About chip letter-spacing. Section padding reduced on ultra-small.
+- **Files:** `public/index.html`
+- **Tests:** 164/164 pass
