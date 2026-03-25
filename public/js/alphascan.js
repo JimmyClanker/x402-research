@@ -560,23 +560,42 @@
       const llmBull = analysis?.bull_case;
       const llmBear = analysis?.bear_case;
       const thesis  = payload?.thesis;
+      // Gather signals/findings/flags for integration into bull/bear
+      const alphaSignals = payload?.alpha_signals || [];
+      const keyFindings = analysis?.key_findings || [];
+      const redFlags = payload?.red_flags || [];
+      const critFlags = redFlags.filter(f=>f.severity==='critical');
+      const warnFlags = redFlags.filter(f=>f.severity==='warning');
+      const bullishSignals = alphaSignals.filter(s => s.strength === 'strong' || s.strength === 'moderate');
+      const bearishFindings = keyFindings.filter(f => /risk|decline|drop|weak|concern|negative/i.test(f));
+      const bullishFindings = keyFindings.filter(f => !(/risk|decline|drop|weak|concern|negative/i.test(f)));
+      const xSentiment = analysis?.x_sentiment_summary && analysis.x_sentiment_summary !== 'n/a';
+
       let panel3 = '';
       if (llmBull || llmBear) {
         const bullCol = `<div class="bull-col">
           <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐂 Bull Case${probBadge(llmBull?.probability)}</h3>
           ${llmBull?.thesis ? `<p class="thesis">${escapeHtml(llmBull.thesis)}</p>` : ''}
           ${llmBull?.catalysts?.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#86efac;margin:12px 0 6px;">Catalysts</h4><ul>${llmBull.catalysts.map(c=>`<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+          ${bullishSignals.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#86efac;margin:12px 0 6px;">🚀 Alpha Signals</h4><ul>${bullishSignals.map(s=>`<li><span style="background:rgba(34,197,94,0.15);padding:1px 6px;border-radius:999px;font-size:0.72rem;font-weight:700;color:#86efac;margin-right:6px;">${escapeHtml(s.strength||'?')}</span>${escapeHtml(humanizeLabel(s.signal))}: ${escapeHtml(s.detail)}</li>`).join('')}</ul>` : ''}
+          ${bullishFindings.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin:12px 0 6px;">Key Findings</h4><ul>${bullishFindings.slice(0,3).map(f=>`<li>${escapeHtml(f)}</li>`).join('')}</ul>` : ''}
           ${llmBull?.target_conditions ? `<div class="conditions"><strong>Target conditions:</strong> ${escapeHtml(llmBull.target_conditions)}</div>` : ''}
         </div>`;
         const bearCol = `<div class="bear-col">
           <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐻 Bear Case${probBadge(llmBear?.probability)}</h3>
           ${llmBear?.thesis ? `<p class="thesis">${escapeHtml(llmBear.thesis)}</p>` : ''}
           ${llmBear?.risks?.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#f87171;margin:12px 0 6px;">Risks</h4><ul>${llmBear.risks.map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ul>` : ''}
+          ${critFlags.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#ef4444;margin:12px 0 6px;">🚨 Critical Flags</h4><ul>${critFlags.map(f=>`<li style="color:#fca5a5;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>` : ''}
+          ${warnFlags.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#f97316;margin:12px 0 6px;">⚠ Warnings</h4><ul>${warnFlags.map(f=>`<li style="color:#fdba74;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>` : ''}
+          ${bearishFindings.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin:12px 0 6px;">Concerns</h4><ul>${bearishFindings.slice(0,3).map(f=>`<li>${escapeHtml(f)}</li>`).join('')}</ul>` : ''}
           ${llmBear?.failure_conditions ? `<div class="conditions"><strong>Failure conditions:</strong> ${escapeHtml(llmBear.failure_conditions)}</div>` : ''}
         </div>`;
+        // X Sentiment as full-width row under bull/bear
+        const xRow = xSentiment ? `<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);"><span style="font-size:0.78rem;font-weight:700;color:#c5c5c5;text-transform:uppercase;letter-spacing:0.08em;">𝕏 Sentiment</span><div style="margin-top:6px;font-size:0.88rem;line-height:1.65;color:var(--text);">${formatAnalysisText(analysis.x_sentiment_summary)}</div></div>` : '';
         panel3 = `<section class="panel" style="margin-top:18px;">
           <div class="section-label">📊 Bull / Bear Analysis</div>
           <div class="bull-bear-grid">${bullCol}${bearCol}</div>
+          ${xRow}
         </section>`;
       } else if (thesis) {
         // Fallback: old thesis format
@@ -642,57 +661,9 @@
         </section>`;
       }
 
-      // ── Panel 5: Signals & Intelligence ─────────────────────────
-      const xSentiment = analysis.x_sentiment_summary && analysis.x_sentiment_summary !== 'n/a';
-      const alphaSignals = payload?.alpha_signals || [];
-      const keyFindings = analysis.key_findings || [];
-      const redFlags = payload?.red_flags || [];
-      const critFlags = redFlags.filter(f=>f.severity==='critical');
-      const warnFlags = redFlags.filter(f=>f.severity==='warning');
-      const hasSignals = xSentiment || alphaSignals.length || keyFindings.length || critFlags.length || warnFlags.length;
+      // Panel 5 removed — signals/findings/flags integrated into bull/bear panel
 
-      let panel5 = '';
-      if (hasSignals) {
-        let subSections = '';
-        if (xSentiment) {
-          const nm = raw?.social?.news_momentum;
-          const vc = raw?.social?.very_recent_news_count;
-          const momBadge = (nm && nm !== 'no_data') ? (() => {
-            const col = nm==='accelerating'?'#22c55e':nm==='declining'?'#f87171':'#fbbf24';
-            return `<span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;background:${col}22;color:${col};font-weight:600;margin-left:6px;">${nm==='accelerating'?'📈':nm==='declining'?'📉':'➡️'} ${nm}${vc?` (${vc} recent)`:''}</span>`;
-          })() : '';
-          subSections += `<div class="sub-section">
-            <div class="sub-label">𝕏 Sentiment${momBadge}</div>
-            <div class="analysis">${formatAnalysisText(analysis.x_sentiment_summary)}</div>
-          </div>`;
-        }
-        if (alphaSignals.length) {
-          subSections += `<div class="sub-section">
-            <div class="sub-label">🚀 Alpha Signals (${alphaSignals.length})</div>
-            <ul>${alphaSignals.map(s=>`<li style="margin-bottom:6px;"><span style="background:rgba(34,197,94,0.15);padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;color:#86efac;margin-right:8px;">${escapeHtml(s.strength||'?')}</span><strong>${escapeHtml(humanizeLabel(s.signal))}</strong>: ${escapeHtml(s.detail)}</li>`).join('')}</ul>
-          </div>`;
-        }
-        if (keyFindings.length) {
-          subSections += `<div class="sub-section">
-            <div class="sub-label">🔍 Key Findings (${keyFindings.length})</div>
-            <ul>${renderList(keyFindings)}</ul>
-          </div>`;
-        }
-        if (critFlags.length || warnFlags.length) {
-          const total = critFlags.length + warnFlags.length;
-          subSections += `<div class="sub-section">
-            <div class="sub-label">⚠ Risk Flags (${total})</div>
-            ${critFlags.length?`<div style="margin-bottom:6px;font-size:0.78rem;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Critical (${critFlags.length})</div><ul>${critFlags.map(f=>`<li style="color:#fca5a5;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
-            ${warnFlags.length?`<div style="margin:8px 0 6px;font-size:0.78rem;color:#f97316;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Warnings (${warnFlags.length})</div><ul>${warnFlags.map(f=>`<li style="color:#fdba74;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
-          </div>`;
-        }
-        panel5 = `<section class="panel" style="margin-top:18px;">
-          <div class="section-label">📡 Signals &amp; Intelligence</div>
-          ${subSections}
-        </section>`;
-      }
-
-      // ── Panel 6: Footer / Data Reliability ───────────────────────
+      // ── Panel 5: Footer / Data Reliability ───────────────────────
       const dg = analysis?.data_gaps || payload?.data_gaps || [];
       const vw = payload?._validation?.warnings || [];
       const ds = payload?._validation?.data_sources_available || [];
@@ -712,7 +683,7 @@
         <div class="footnote" style="margin-top:6px;">Powered by Claude Opus 4.6 + Grok Fast + CoinGecko + DeFiLlama</div>
       </section>`;
 
-      reportBox.innerHTML = panel1 + panel2 + panel3 + panel4 + panel5 + panel6;
+      reportBox.innerHTML = panel1 + panel2 + panel3 + panel4 + panel6;
       resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
