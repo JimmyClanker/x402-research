@@ -71,6 +71,19 @@ export function calculateConfidence(rawData = {}) {
   };
 }
 
+// Round 50 (AutoResearch): Stablecoin detection — skip momentum penalties for stable assets
+const STABLECOIN_SYMBOLS = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'USDD', 'FDUSD', 'PYUSD', 'USDE', 'USDX', 'SUSD', 'EURS', 'TUSD', 'GUSD', 'USDP', 'CRVUSD', 'GHO', 'MATIC_USDT', 'USDN']);
+
+function isStablecoin(market = {}) {
+  const sym = (market.symbol || '').toUpperCase();
+  if (STABLECOIN_SYMBOLS.has(sym)) return true;
+  // Heuristic: current price within 3% of $1 and ATH within $1.10
+  const price = Number(market.current_price ?? market.price ?? 0);
+  const ath = Number(market.ath ?? 0);
+  if (price > 0 && Math.abs(price - 1.0) < 0.03 && ath > 0 && ath < 1.15) return true;
+  return false;
+}
+
 function scoreMarketStrength(market = {}) {
   const volume = safeNumber(market.total_volume);
   const marketCap = safeNumber(market.market_cap);
@@ -164,6 +177,20 @@ function scoreMarketStrength(market = {}) {
   else if (exchangeCount >= 10) raw += 0.2;
   else if (exchangeCount >= 5) raw += 0.1;
 
+  // Round 50 (AutoResearch): Stablecoin guard — raw score override for stable assets
+  // Stablecoins should never score high on price momentum (they're supposed to be flat)
+  const stablecoin = isStablecoin(market);
+  if (stablecoin) {
+    return {
+      score: 5.0,
+      market_efficiency_score: 50,
+      is_new_project: false,
+      is_stablecoin: true,
+      age_months: null,
+      reasoning: 'Stablecoin detected — market strength scoring replaced with neutral 5.0 (price momentum metrics not applicable to pegged assets).',
+    };
+  }
+
   // Round 39 (AutoResearch): market_efficiency_score — how efficiently the market prices the asset
   // Measures: liquidity depth (vol/mcap), listing quality, trend confirmation, info efficiency
   const meComponents = [
@@ -242,6 +269,28 @@ function scoreOnchainHealth(onchain = {}) {
   else if (maturity === 'tier3') raw += 0.15;
   // 'emerging' → no bonus, not penalized
 
+  // Round 55 (AutoResearch): protocol_age_tier — classify protocol by age for context
+  // Uses tokenomics launch_date if available (passed via rawData in outer calculateScores)
+  // Here we rely on what's available in onchain context
+  const tvlForAge = safeNumber(onchain.tvl ?? 0);
+  const feesForAge = safeNumber(onchain.fees_7d ?? 0);
+  // Estimate maturity tier from TVL and fees patterns (no direct date in onchain)
+  let protocolAgeTier = 'unknown';
+  const maturityFromField = onchain.protocol_maturity;
+  if (maturityFromField) {
+    // Map existing maturity field to age tier
+    const ageMap = { tier1: 'mature', tier2: 'established', tier3: 'growing', emerging: 'early' };
+    protocolAgeTier = ageMap[maturityFromField] ?? 'unknown';
+  } else if (tvlForAge > 1_000_000_000 && feesForAge > 1_000_000) {
+    protocolAgeTier = 'mature';
+  } else if (tvlForAge > 100_000_000) {
+    protocolAgeTier = 'established';
+  } else if (tvlForAge > 10_000_000) {
+    protocolAgeTier = 'growing';
+  } else if (tvlForAge > 0) {
+    protocolAgeTier = 'early';
+  }
+
   // Round 37 (AutoResearch): onchain_maturity_score — normalized 0-100 sustainability composite
   const tvl = safeNumber(onchain.tvl ?? 0);
   const omComponents = [
@@ -258,7 +307,8 @@ function scoreOnchainHealth(onchain = {}) {
   return {
     score: clampScore(raw),
     onchain_maturity_score: onchainMaturityScore,
-    reasoning: `7-day TVL change ${trend7d.toFixed(2)}%, 30-day TVL change ${trend30d.toFixed(2)}%, 7-day fees $${fees.toLocaleString('en-US', { maximumFractionDigits: 0 })}, chains ${chainCount}${multichainBonus > 0 ? ` (+${multichainBonus} multichain bonus)` : ''}${tvlStickiness ? `, capital stickiness ${tvlStickiness}` : ''}${activeAddresses7d > 0 ? `, active addresses (7d) ${activeAddresses7d.toLocaleString('en-US')}` : ''}${revenueToFees !== null ? `, revenue capture ${(revenueToFees * 100).toFixed(0)}%` : ''}${maturity ? `, maturity ${maturity}` : ''}, onchain_maturity_score ${onchainMaturityScore}.`,
+    protocol_age_tier: protocolAgeTier,
+    reasoning: `7-day TVL change ${trend7d.toFixed(2)}%, 30-day TVL change ${trend30d.toFixed(2)}%, 7-day fees $${fees.toLocaleString('en-US', { maximumFractionDigits: 0 })}, chains ${chainCount}${multichainBonus > 0 ? ` (+${multichainBonus} multichain bonus)` : ''}${tvlStickiness ? `, capital stickiness ${tvlStickiness}` : ''}${activeAddresses7d > 0 ? `, active addresses (7d) ${activeAddresses7d.toLocaleString('en-US')}` : ''}${revenueToFees !== null ? `, revenue capture ${(revenueToFees * 100).toFixed(0)}%` : ''}${maturity ? `, maturity ${maturity}` : ''}, onchain_maturity_score ${onchainMaturityScore}, protocol_age_tier ${protocolAgeTier}.`,
   };
 }
 
@@ -320,9 +370,21 @@ function scoreSocialMomentum(social = {}) {
   if (partnershipMentions >= 3) raw += 0.25;
   else if (partnershipMentions >= 1) raw += 0.1;
 
+  // Round 48 (AutoResearch): social_health_index — 0-100 normalized composite
+  // Measures community health: volume, sentiment quality, narrative depth, engagement quality
+  const shiComponents = [
+    Math.min(Math.log2(filteredMentions + 1) / Math.log2(200), 1) * 30,      // mention volume (0-30)
+    Math.max(0, (sentimentScore + 1) / 2) * 25,                               // sentiment quality (0-25)
+    Math.min(narratives / 4, 1) * 20,                                         // narrative depth (0-20)
+    signalQualityMultiplier * 15,                                              // signal quality / bot ratio (0-15)
+    (institutionalMentions >= 2 ? 1 : institutionalMentions >= 1 ? 0.5 : 0) * 10, // institutional (0-10)
+  ];
+  const socialHealthIndex = Math.round(Math.min(100, shiComponents.reduce((a, b) => a + b, 0)));
+
   return {
     score: clampScore(raw),
-    reasoning: `Filtered mentions ${filteredMentions} (${botFilteredCount} bots filtered), sentiment score ${sentimentScore.toFixed(2)}, confidence ${confidence.toFixed(2)}, signal quality ${(signalQualityMultiplier * 100).toFixed(0)}%, narratives ${narratives}${institutionalMentions > 0 ? `, institutional ${institutionalMentions}` : ''}${upgradeMentions > 0 ? `, upgrades ${upgradeMentions}` : ''}.`,
+    social_health_index: socialHealthIndex,
+    reasoning: `Filtered mentions ${filteredMentions} (${botFilteredCount} bots filtered), sentiment score ${sentimentScore.toFixed(2)}, confidence ${confidence.toFixed(2)}, signal quality ${(signalQualityMultiplier * 100).toFixed(0)}%, narratives ${narratives}${institutionalMentions > 0 ? `, institutional ${institutionalMentions}` : ''}${upgradeMentions > 0 ? `, upgrades ${upgradeMentions}` : ''}, social_health_index ${socialHealthIndex}.`,
   };
 }
 
@@ -577,9 +639,19 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
     raw -= Math.min((1 - buySellRatio) * 0.8, 0.8); // max -0.8 for strong sell pressure
   }
 
+  // Round 58 (AutoResearch): liquidity_risk_score — 0-100 normalized (higher = safer/more liquid)
+  const lrsComponents = [
+    dexLiquidity > 0 ? Math.min(Math.log10(dexLiquidity + 1) / 8, 1) * 40 : (mcap > 0 && volume / mcap > 0.05 ? 15 : 5), // liquidity depth (0-40)
+    topConcentration > 0 ? Math.max(0, (1 - topConcentration / 100)) * 30 : 15, // holder diversification (0-30)
+    volatility < 5 ? 20 : volatility < 15 ? 12 : volatility < 30 ? 5 : 0, // volatility penalty (0-20)
+    liquidityCategory === 'deep' ? 10 : liquidityCategory === 'adequate' ? 6 : liquidityCategory === 'shallow' ? 2 : 0, // DEX category (0-10)
+  ];
+  const liquidityRiskScore = Math.round(Math.min(100, lrsComponents.reduce((a, b) => a + b, 0)));
+
   return {
     score: clampScore(raw),
-    reasoning: `Volatility ${volatility.toFixed(1)}%, liquidity ${dexLiquidity > 0 ? `$${dexLiquidity.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : `volume/market cap ${mcap > 0 ? (volume / mcap).toFixed(3) : 'n/a'}`}, concentration ${topConcentration > 0 ? `${topConcentration.toFixed(1)}%` : 'n/a'}, revenue efficiency ${revEfficiency > 0 ? `$${revEfficiency.toFixed(0)}/$1M TVL/week` : 'n/a'}${pressureSignal ? `, DEX ${pressureSignal} (buy/sell ratio: ${buySellRatio.toFixed(2)})` : ''}.`,
+    liquidity_risk_score: liquidityRiskScore,
+    reasoning: `Volatility ${volatility.toFixed(1)}%, liquidity ${dexLiquidity > 0 ? `$${dexLiquidity.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : `volume/market cap ${mcap > 0 ? (volume / mcap).toFixed(3) : 'n/a'}`}, concentration ${topConcentration > 0 ? `${topConcentration.toFixed(1)}%` : 'n/a'}, revenue efficiency ${revEfficiency > 0 ? `$${revEfficiency.toFixed(0)}/$1M TVL/week` : 'n/a'}${pressureSignal ? `, DEX ${pressureSignal} (buy/sell ratio: ${buySellRatio.toFixed(2)})` : ''}, liquidity_risk_score ${liquidityRiskScore}/100.`,
   };
 }
 

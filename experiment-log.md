@@ -309,3 +309,153 @@
 - **Change:** Updated endpoint directory in `/api/health` to include all new endpoints: `/alpha/batch`, `/alpha/history`, `/alpha/compare`, `/alpha/leaderboard`, `/alpha/trending`, `/alpha/stats`, `/alpha/export`.
 - **Files:** `routes/rest.js`
 - **Tests:** 15/15 pass
+
+### Round 31 — X/Twitter Sentiment Supplement in calculateScores
+- **Change:** Added X/Twitter (Grok Fast) sentiment adjustment to `scoreSocialMomentum` via `calculateScores`. KOL-weighted: volume-adjusted sentiment score contributes max ±0.5 + ±0.15 KOL bonus to social score.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 32 — Alpha Signals: X/Twitter KOL Bullish/Bearish Signals
+- **Change:** Added `kol_bullish_x_sentiment` and `kol_bearish_x_sentiment` signals to `detectAlphaSignals` using x_social data (notable accounts + sentiment).
+- **Files:** `services/alpha-signals.js`
+- **Tests:** 164/164 pass
+
+### Round 33 — Category Weights: RWA and DePIN Categories
+- **Change:** Added `rwa` and `depin` category weight sets to `CATEGORY_WEIGHTS`; added 9 new CATEGORY_MAP entries for real-world assets and decentralized physical infrastructure.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 164/164 pass
+
+### Round 34 — Circuit Breakers: Stablecoin De-peg + Thin Liquidity Dump
+- **Change:** Added stablecoin de-peg circuit breaker (10%+ off peg = cap 3.0, 3%+ = cap 5.0); added cascading failure breaker for active dump + <$500K liquidity.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 164/164 pass
+
+### Round 35 — Templates: X/Twitter KOL Names in Text Report
+- **Change:** Surface x_social notable_accounts (as @handles) and key_narratives in the text report's X sentiment section when available.
+- **Files:** `synthesis/templates.js`
+- **Tests:** 164/164 pass
+
+### Round 36 — Development Score: dev_quality_index (0-100)
+- **Change:** Added `dev_quality_index` normalized 0-100 composite to development score output. Combines contributor breadth, commit velocity, traction (stars), freshness, CI/CD, repo health, ecosystem breadth, license.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 37 — Onchain Health: onchain_maturity_score (0-100)
+- **Change:** Added `onchain_maturity_score` normalized 0-100 composite measuring protocol sustainability (fees, TVL stability, stickiness, chain diversification, active users, value capture).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 38 — Volatility Guard: risk_tier Label
+- **Change:** Added `risk_tier` field to `assessVolatility` return — combines 24h regime + weekly class into a human-readable label (low_risk/moderate_risk/elevated_risk/high_risk/critical_risk).
+- **Files:** `services/volatility-guard.js`
+- **Tests:** 164/164 pass
+
+### Round 39 — Market Strength: market_efficiency_score (0-100)
+- **Change:** Added `market_efficiency_score` normalized 0-100 metric to `scoreMarketStrength` output. Measures volume/mcap liquidity, trend confirmation, listing quality, market rank, community signal, FDV transparency.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 40 — MCP: New `x_sentiment` Tool
+- **Change:** Added `x_sentiment` MCP server tool that queries x_social collector and returns structured X/Twitter sentiment for a project (sentiment, volume, KOL, narratives, notable accounts).
+- **Files:** `routes/mcp.js`
+- **Tests:** 164/164 pass
+
+### Round 41 — Tokenomics Score: tokenomics_risk_score (0-100)
+- **Change:** Added `tokenomics_risk_score` normalized 0-100 (higher=safer) composite to tokenomics output. Combines circulating pct, inflation, distribution data, dilution risk, unlock safety.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 42 — Fetch.js: Improved Error Messages
+- **Change:** HTTP error messages now include `statusText` and a truncated URL hint (max 120 chars → ellipsis) for cleaner debug logs.
+- **Files:** `collectors/fetch.js`
+- **Tests:** 164/164 pass
+
+### Round 43 — Thesis Generator: conviction_score (0-100)
+- **Change:** Added `conviction_score` field to thesis output combining overall score (50%), evidence richness (25%), and data coverage (25%).
+- **Files:** `services/thesis-generator.js`
+- **Tests:** 164/164 pass
+
+### Round 44 — Templates: Structured data_quality_summary in JSON Output
+- **Change:** Added `data_quality` structured object to JSON report with total/ok/failed collectors, coverage_pct, completeness_pct, overall_confidence, data_freshness_score, quality_tier.
+- **Files:** `synthesis/templates.js`
+- **Tests:** 164/164 pass
+
+### Round 45 — Alpha Signals: Social Divergence (X vs Web)
+- **Change:** Added `x_vs_web_bullish_divergence` and `x_vs_web_bearish_divergence` signals when X/Twitter sentiment diverges >0.5 from Exa/web sentiment score.
+- **Files:** `services/alpha-signals.js`
+- **Tests:** 164/164 pass
+
+### Round 46 — Templates: category_detection Metadata in JSON Output
+- **Change:** Added `category_detection` object to JSON report exposing detected category, source, confidence, and confidence_label — helps consumers understand how reliable the category-adaptive weights are.
+- **Files:** `synthesis/templates.js`
+- **Tests:** 164/164 pass
+
+### Round 47 — Change Detector: velocity_acceleration
+- **Change:** Added `velocity_acceleration` and `acceleration_label` to change detection output — compares the most recent score delta to the prior delta to detect if improvement/decline is accelerating or decelerating.
+- **Files:** `services/change-detector.js`
+- **Tests:** 164/164 pass
+
+### Round 48 — Social Score: social_health_index (0-100)
+- **Change:** Added `social_health_index` normalized 0-100 composite to social momentum output. Combines mention volume, sentiment quality, narrative depth, signal quality (bot ratio), and institutional mentions.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 49 — Alpha Signals: Short Interest Proxy
+- **Change:** Added `short_interest_proxy` signal detecting high FDV/MCap (>5x) combined with active DEX sell pressure (<0.6 buy/sell ratio) — proxy for potential insider/VC distribution.
+- **Files:** `services/alpha-signals.js`
+- **Tests:** 164/164 pass (reverted naming conflict in first attempt)
+
+### Round 50 — Market Score: Stablecoin Guard
+- **Change:** Added `isStablecoin()` detection function; stablecoins get a flat 5.0 market strength score instead of invalid momentum signals. Added `STABLECOIN_SYMBOLS` constant covering 20+ stable assets.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 51 — Narrative Momentum: narrative_dominance_score (0-100)
+- **Change:** Added `narrative_dominance_score` to `detectNarrativeMomentum` output — measures narrative concentration/coherence (higher = stronger story). Bullish alignment adds +15 bonus.
+- **Files:** `services/narrative-momentum.js`
+- **Tests:** 164/164 pass
+
+### Round 52 — Templates: composite_alpha_index (0-100) in JSON Output
+- **Change:** Added `composite_alpha_index` to JSON report — single normalized 0-100 opportunity score combining overall score (50%), alpha signal count (15%), data quality tier (20%), and thesis conviction (15%).
+- **Files:** `synthesis/templates.js`
+- **Tests:** 164/164 pass
+
+### Round 53 — Alpha Signals: getSignalStrengthScore() Export
+- **Change:** Added `getSignalStrengthScore(signals)` export to alpha-signals.js — computes 0-100 weighted aggregate signal strength (strong=20pts, moderate=12pts, weak=6pts per signal).
+- **Files:** `services/alpha-signals.js`
+- **Tests:** 164/164 pass
+
+### Round 54 — Templates: red_flags_summary in JSON Output
+- **Change:** Added compact `red_flags_summary` object to JSON report with total/critical/warnings/info counts, worst_flag, and risk_level tier — for fast MCP consumer risk assessment.
+- **Files:** `synthesis/templates.js`
+- **Tests:** 164/164 pass
+
+### Round 55 — Onchain Score: protocol_age_tier Field
+- **Change:** Added `protocol_age_tier` field to onchain health output (mature/established/growing/early/unknown) derived from TVL, fees, and existing protocol_maturity field.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 56 — LLM Data Summary: X vs Web Sentiment Divergence
+- **Change:** Added X/Twitter vs web/Exa sentiment divergence delta to `buildDataSummary` LLM context. Also improved KOL account formatting (added @ prefix). Gives LLM explicit divergence signal.
+- **Files:** `synthesis/llm.js`
+- **Tests:** 164/164 pass
+
+### Round 57 — Momentum: momentum_alignment_score (0-100)
+- **Change:** Added `momentum_alignment_score` and `momentum_alignment_label` to `calculateMomentum` output — measures how many dimensions are aligned improving/declining.
+- **Files:** `services/momentum.js`
+- **Tests:** 164/164 pass
+
+### Round 58 — Risk Score: liquidity_risk_score (0-100)
+- **Change:** Added `liquidity_risk_score` normalized 0-100 (higher=safer) composite to risk score output. Combines DEX liquidity depth, holder concentration, volatility, and liquidity category.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 59 — Elevator Pitch: one_line_risk Field
+- **Change:** Added `one_line_risk` field to elevator pitch output — extracts the worst red flag detail (truncated to 120 chars) as a one-liner risk for quick consumption.
+- **Files:** `services/elevator-pitch.js`
+- **Tests:** 164/164 pass
+
+### Round 60 — Watchlist: watchlist_score + one_line_risk
+- **Change:** Added `watchlist_score` (0-100) to watchlist endpoint output — balances overall score (60%), alpha signals (20%), red flag penalties (20%), volatility penalty. Updated sort to use watchlist_score. Also surfaces `one_line_risk` in watchlist items.
+- **Files:** `routes/alpha.js`
+- **Tests:** 164/164 pass

@@ -150,6 +150,19 @@ export function calculateMomentum(rawData = {}, previousScanData = null) {
     }
   }
 
+  // Round 57 (AutoResearch): momentum_alignment_score — 0-100 measuring how many dims are aligned
+  // All improving = 100, all declining = 0, mixed = proportional
+  const dimDirections = [marketMomentum, onchainMomentum, socialMomentum, devMomentum, tokenomicsMomentum, dexMomentum];
+  const improvingCount = dimDirections.filter((d) => d === 'improving').length;
+  const decliningCount = dimDirections.filter((d) => d === 'declining').length;
+  const totalDims = dimDirections.length;
+  const momentumAlignmentScore = Math.round((improvingCount / totalDims) * 100);
+  const momentumAlignmentLabel = improvingCount > decliningCount * 2 ? 'strongly_bullish'
+    : improvingCount > decliningCount ? 'mildly_bullish'
+    : decliningCount > improvingCount * 2 ? 'strongly_bearish'
+    : decliningCount > improvingCount ? 'mildly_bearish'
+    : 'neutral';
+
   return {
     market:     { direction: marketMomentum },
     onchain:    { direction: onchainMomentum },
@@ -159,5 +172,7 @@ export function calculateMomentum(rawData = {}, previousScanData = null) {
     dex:        { direction: dexMomentum },
     overall:    { direction: overallMomentum },
     price_vol_divergence: priceVolDivergence,
+    momentum_alignment_score: momentumAlignmentScore,
+    momentum_alignment_label: momentumAlignmentLabel,
   };
 }

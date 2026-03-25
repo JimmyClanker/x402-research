@@ -136,9 +136,40 @@ const json = {
           confidence_label: rawData.category_weights.confidence >= 0.8 ? 'high' : rawData.category_weights.confidence >= 0.5 ? 'medium' : 'low',
         }
       : null,
+    // Round 52 (AutoResearch): composite_alpha_index — 0-100 normalized overall opportunity score
+    // Combines: overall score (50%), signal count (15%), quality tier (20%), thesis conviction (15%)
+    composite_alpha_index: (() => {
+      const overallScore = scores?.overall?.score ?? 5;
+      const alphaSignalCount = Math.min(Array.isArray(rawData?.alpha_signals) ? rawData.alpha_signals.length : 0, 5);
+      const qualityTier = dataQualitySummary.quality_tier;
+      const qualityBonus = qualityTier === 'high' ? 20 : qualityTier === 'medium' ? 10 : 0;
+      const convictionScore = rawData?.thesis?.conviction_score ?? 50;
+      return Math.round(
+        (overallScore / 10) * 50 +        // normalized score (0-50)
+        alphaSignalCount * 3 +            // alpha signals (0-15)
+        qualityBonus +                    // data quality (0-20)
+        (convictionScore / 100) * 15      // thesis conviction (0-15)
+      );
+    })(),
     score: scores?.overall?.score ?? null,
     validation_warnings: llmAnalysis?._validation?.warnings ?? [],
     data_quality: dataQualitySummary,
+    // Round 54 (AutoResearch): red_flags_summary — compact risk overview for MCP consumers
+    red_flags_summary: (() => {
+      const flags = Array.isArray(rawData?.red_flags) ? rawData.red_flags : [];
+      const critical = flags.filter((f) => f.severity === 'critical');
+      const warnings = flags.filter((f) => f.severity === 'warning');
+      const infos = flags.filter((f) => f.severity === 'info');
+      const worst = critical[0] ?? warnings[0] ?? infos[0] ?? null;
+      return {
+        total: flags.length,
+        critical: critical.length,
+        warnings: warnings.length,
+        info: infos.length,
+        worst_flag: worst ? { flag: worst.flag, severity: worst.severity } : null,
+        risk_level: critical.length >= 2 ? 'critical' : critical.length >= 1 ? 'high' : warnings.length >= 3 ? 'elevated' : warnings.length >= 1 ? 'moderate' : 'low',
+      };
+    })(),
     key_metrics: keyMetrics,
     scores,
     llm_analysis: llmAnalysis,

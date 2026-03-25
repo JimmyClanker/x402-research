@@ -251,11 +251,26 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
         for (const dim of ['market_strength', 'onchain_health', 'social_momentum', 'development', 'tokenomics_health', 'risk']) {
           dimScores[dim] = scores[dim]?.score ?? null;
         }
+        // Round 60 (AutoResearch): watchlist_score — prioritization score for watchlist sorting
+        // Balances: overall score, alpha signals, volatility risk, red flags
+        const overallScore = scores.overall?.score ?? 5;
+        const alphaSignals = r.alpha_signals ?? [];
+        const redFlagCount = (r.red_flags ?? []).length;
+        const criticalFlagCount = (r.red_flags ?? []).filter((f) => f.severity === 'critical').length;
+        const volPenalty = r.volatility?.regime === 'extreme' ? 20 : r.volatility?.regime === 'high' ? 10 : 0;
+        const watchlistScore = Math.round(
+          (overallScore / 10) * 60 +                               // overall score (0-60)
+          Math.min(alphaSignals.length * 5, 20) +                  // alpha signals (0-20)
+          Math.max(0, 20 - redFlagCount * 4 - criticalFlagCount * 8) - // red flags penalty (0-20)
+          volPenalty                                               // volatility penalty (0-20)
+        );
+
         return {
           project: projectName,
           ok: true,
           verdict: r.verdict,
-          overall_score: scores.overall?.score ?? null,
+          overall_score: overallScore,
+          watchlist_score: Math.max(0, Math.min(100, watchlistScore)),
           dimension_scores: dimScores,
           key_metrics: {
             price_fmt: r.key_metrics?.price_fmt,
@@ -264,17 +279,18 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
           },
           red_flag_count: (r.red_flags ?? []).length,
           critical_flag_count: (r.red_flags ?? []).filter((f) => f.severity === 'critical').length,
-          alpha_signal_count: (r.alpha_signals ?? []).length,
+          alpha_signal_count: alphaSignals.length,
           volatility_regime: r.volatility?.regime ?? 'calm',
           elevator_pitch: r.elevator_pitch ?? null,
+          one_line_risk: r.elevator_pitch?.one_line_risk ?? null,
           cache_hit: r.cache?.hit ?? false,
         };
       }
       return { project: projectName, ok: false, error: result.reason?.message ?? 'Scan failed' };
     });
 
-    // Sort by overall_score descending for at-a-glance ranking
-    const sorted = [...watchlist].sort((a, b) => (b.overall_score ?? -1) - (a.overall_score ?? -1));
+    // Round 60: Sort by watchlist_score descending (better prioritization than raw score)
+    const sorted = [...watchlist].sort((a, b) => (b.watchlist_score ?? b.overall_score ?? -1) - (a.watchlist_score ?? a.overall_score ?? -1));
 
     return res.json({
       watchlist: sorted,

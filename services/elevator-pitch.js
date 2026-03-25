@@ -107,9 +107,20 @@ export function generateElevatorPitch(projectName, rawData, scores, analysis) {
     sentence5 = patternLabels[trendReversal.pattern] ?? null;
   }
 
+  // Round 59 (AutoResearch): one_line_risk — top risk in one sentence from red flags
+  const redFlags = Array.isArray(rawData?.red_flags) ? rawData.red_flags : [];
+  const criticalFlag = redFlags.find((f) => f.severity === 'critical');
+  const worstFlag = criticalFlag ?? redFlags.find((f) => f.severity === 'warning') ?? null;
+  let oneLineRisk = null;
+  if (worstFlag) {
+    // Truncate to max 120 chars
+    const riskText = worstFlag.detail ?? worstFlag.flag ?? '';
+    oneLineRisk = riskText.length > 120 ? riskText.slice(0, 117) + '…' : riskText;
+  }
+
   const sentences = [sentence1, sentence2, sentence3, sentence4];
   if (sentence5) sentences.push(sentence5);
   const pitch = sentences.join(' ');
 
-  return { pitch };
+  return { pitch, one_line_risk: oneLineRisk };
 }

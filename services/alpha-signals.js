@@ -364,6 +364,20 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // Round 49 (AutoResearch): Short interest proxy signal — extreme sell pressure + high FDV overhang
+  // These conditions suggest informed sellers (team, VCs) may be distributing
+  const shortFdv = safeN(market.fully_diluted_valuation ?? 0);
+  const shortMcap = safeN(market.market_cap ?? 0);
+  const shortFdvRatio = shortMcap > 0 && shortFdv > 0 ? shortFdv / shortMcap : null;
+  const shortBuySellRatio = safeN(dex.buy_sell_ratio ?? 0);
+  if (shortFdvRatio !== null && shortFdvRatio > 5 && shortBuySellRatio > 0 && shortBuySellRatio < 0.6) {
+    signals.push({
+      signal: 'short_interest_proxy',
+      strength: shortFdvRatio > 10 && shortBuySellRatio < 0.4 ? 'strong' : 'moderate',
+      detail: `FDV/MCap ${shortFdvRatio.toFixed(1)}x combined with DEX sell pressure (ratio ${shortBuySellRatio}) suggests potential insider/VC distribution — high unlock overhang with active selling.`,
+    });
+  }
+
   // Round 45 (AutoResearch): Social divergence signal — X/Twitter vs Exa/Reddit sentiment divergence
   // When KOLs are bullish but web mentions are bearish (or vice versa), it's a contrarian signal
   const xSocial = rawData.x_social ?? {};
@@ -418,4 +432,18 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     seen.add(s.signal);
     return true;
   });
+}
+
+/**
+ * Round 53 (AutoResearch): Calculate a 0-100 signal strength score for an array of alpha signals.
+ * Strong signals contribute more weight than weak ones; more signals = higher score (capped).
+ *
+ * @param {Array<{signal: string, strength: string}>} signals - result of detectAlphaSignals()
+ * @returns {number} score 0-100
+ */
+export function getSignalStrengthScore(signals = []) {
+  if (!Array.isArray(signals) || signals.length === 0) return 0;
+  const WEIGHTS = { strong: 20, moderate: 12, weak: 6 };
+  const raw = signals.reduce((sum, s) => sum + (WEIGHTS[s.strength] ?? 8), 0);
+  return Math.min(100, raw);
 }

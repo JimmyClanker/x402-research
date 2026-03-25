@@ -80,11 +80,22 @@ export function detectNarrativeMomentum(rawData = {}) {
     ? `Active crypto narratives: ${activeNarratives.map((n) => n.replace(/_/g, ' ')).join(', ')}. Narrative alignment: ${narrativeAlignment}.`
     : 'No strong macro narrative detected in available data.';
 
+  // Round 51 (AutoResearch): narrative_dominance_score — 0-100 how concentrated the narrative is
+  // Low = scattered/unfocused; High = strong coherent story around the project
+  // 1 narrative = 30, 2 = 50, 3 = 70, 4+ = 85, all bullish alignment = +15 bonus
+  const narrativeDominanceBase = activeNarratives.length === 0 ? 0
+    : activeNarratives.length === 1 ? 30
+    : activeNarratives.length === 2 ? 50
+    : activeNarratives.length === 3 ? 70
+    : 85;
+  const narrativeDominanceScore = Math.min(100, narrativeDominanceBase + (narrativeAlignment === 'bullish' ? 15 : 0));
+
   return {
     active_narratives: activeNarratives,
     narrative_count: activeNarratives.length,
     dominant_narrative: dominantNarrative,
     narrative_alignment: narrativeAlignment,
+    narrative_dominance_score: narrativeDominanceScore,
     detail,
   };
 }

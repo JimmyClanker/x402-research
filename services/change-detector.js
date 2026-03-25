@@ -169,6 +169,28 @@ export function detectChanges(db, projectName, currentData) {
   };
   changes.push(flagChange);
 
+  // Round 47 (AutoResearch): velocity_acceleration — compare this delta to the previous delta
+  // Positive acceleration = score improving faster; negative = losing momentum
+  let velocityAcceleration = null;
+  let accelerationLabel = 'stable';
+  try {
+    const rows = db.prepare(
+      "SELECT scores_json FROM scan_history WHERE project_name = ? ORDER BY scanned_at DESC LIMIT 3"
+    ).all(currentData.projectName ?? currentData.project_name ?? '');
+    if (rows.length >= 3) {
+      const s0 = safeN(JSON.parse(rows[0].scores_json ?? '{}')?.overall?.score);
+      const s1 = safeN(JSON.parse(rows[1].scores_json ?? '{}')?.overall?.score);
+      const s2 = safeN(JSON.parse(rows[2].scores_json ?? '{}')?.overall?.score);
+      if (s0 != null && s1 != null && s2 != null) {
+        const delta1 = s0 - s1; // most recent change
+        const delta2 = s1 - s2; // prior change
+        velocityAcceleration = parseFloat((delta1 - delta2).toFixed(2));
+        if (velocityAcceleration > 0.3) accelerationLabel = 'accelerating';
+        else if (velocityAcceleration < -0.3) accelerationLabel = 'decelerating';
+      }
+    }
+  } catch { /* db query failed — skip */ }
+
   return {
     has_previous: true,
     previous_scan_at: previousRow.scanned_at,
@@ -177,6 +199,8 @@ export function detectChanges(db, projectName, currentData) {
     score_momentum: scoreMomentum,
     verdict_direction: verdictDirection,
     overall_score_delta: overallScoreDelta,
+    velocity_acceleration: velocityAcceleration,
+    acceleration_label: accelerationLabel,
     flag_change: flagChange,
   };
 }

@@ -295,9 +295,15 @@ export function buildDataSummary(rawData = {}) {
     if (xSocial.sentiment) lines.push(`- Sentiment: ${xSocial.sentiment} (score: ${xSocial.sentiment_score})`);
     if (xSocial.mention_volume) lines.push(`- Mention volume: ${xSocial.mention_volume}`);
     if (xSocial.key_narratives?.length) lines.push(`- Key narratives: ${xSocial.key_narratives.join(', ')}`);
-    if (xSocial.notable_accounts?.length) lines.push(`- Notable accounts: ${xSocial.notable_accounts.join(', ')}`);
+    if (xSocial.notable_accounts?.length) lines.push(`- Notable accounts: ${xSocial.notable_accounts.map((a) => `@${a}`).join(', ')}`);
     if (xSocial.kol_sentiment) lines.push(`- KOL sentiment: ${xSocial.kol_sentiment}`);
     if (xSocial.summary) lines.push(`- Summary: ${xSocial.summary}`);
+    // Round 56 (AutoResearch): surface divergence between X and Exa/web sentiment for LLM context
+    const webSocial = rawData.social || {};
+    if (!webSocial.error && webSocial.sentiment_score != null && xSocial.sentiment_score != null) {
+      const div = (xSocial.sentiment_score - webSocial.sentiment_score).toFixed(2);
+      lines.push(`- Divergence vs web: ${div > 0 ? '+' : ''}${div} (X vs web/Exa sentiment)`);
+    }
     lines.push('');
   }
 
