@@ -333,8 +333,9 @@ function buildPrompt(projectName, rawData, scores) {
     '5. If you cannot verify a catalyst or risk with data, prefix it with "[Unverified]" or omit it entirely.',
     '6. For competitor_comparison: ONLY compare metrics that exist in RAW_DATA or that you verified via search. Do not invent TVL, fees, or market cap numbers for competitors.',
     '7. For x_sentiment_summary: If X Search returned nothing meaningful, write "Limited X/Twitter data available for this project." Do NOT fabricate community sentiment.',
-    '8. Numbers in your analysis (TVL, market cap, volume, etc.) MUST match RAW_DATA exactly. Do not round creatively or use different numbers.',
+    '8. Numbers in your analysis MUST match RAW_DATA but FORMAT THEM FOR HUMANS: $292.6M not 292636115, -2.48% not -2.484401525322113%. Round to 2 decimal places max. Always include $ for USD values.',
     '9. When in doubt, say LESS. A shorter, accurate report is infinitely better than a longer, hallucinated one.',
+    '10. NEVER expose internal field names (tvl_change_7d, dex_liquidity_usd, ecosystem.chain_count). Use human labels: "7-day TVL change", "DEX liquidity", "supported chains".',
 
     '## INSTRUCTIONS',
     '1. Use the attached RAW_DATA and SCORES as your PRIMARY and AUTHORITATIVE data source. These are verified from CoinGecko, DeFiLlama, GitHub, Messari, DexScreener, Reddit, and Etherscan.',
@@ -342,8 +343,8 @@ function buildPrompt(projectName, rawData, scores) {
     '3. Use Web Search to check for RECENT news. Report ONLY what you actually find with source URLs. If no results, say so.',
     '4. Synthesize into a coherent thesis, but ONLY use verified information.',
     '5. Clearly separate FACTS (from data) from OPINIONS (your analysis). Your opinions are welcome but must be labeled as such.',
-    '6. For every non-trivial sentence in analysis_text, include inline provenance tags like [source: RAW_DATA.market.market_cap] or [source: web:<url>] or [source: x_search:<query/topic>].',
-    '7. If a claim has no provenance tag, delete it.',
+    '6. INTERNAL tracking: for each claim, mentally verify which data source backs it. But do NOT put [source: ...] tags in analysis_text, moat, risks, catalysts, or x_sentiment_summary. Those tags make the output unreadable for humans.',
+    '7. Put source references ONLY in the facts_verified array (e.g., "TVL: $414.8M [source: RAW_DATA.onchain.tvl]").',
 
     '## SCORING CALIBRATION',
     `The algorithmic score is ${overallScore}/10. Use this as a starting point but adjust based on qualitative factors:`,
@@ -356,7 +357,7 @@ function buildPrompt(projectName, rawData, scores) {
     '## OUTPUT FORMAT',
     'Return ONLY valid JSON. Required fields:',
     '- verdict: "STRONG BUY" | "BUY" | "HOLD" | "AVOID" | "STRONG AVOID"',
-    '- analysis_text: 3-4 paragraphs. Para 1: summary thesis with key numbers FROM RAW_DATA. Para 2: on-chain/fundamental evidence citing specific RAW_DATA fields. Para 3: market/sentiment context from search results (or "limited data" if none found). Para 4: near-term outlook based on verified catalysts only.',
+    '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. Para 1: summary thesis with key metrics. Para 2: on-chain/fundamental evidence. Para 3: market/sentiment context. Para 4: near-term outlook. FORMAT ALL NUMBERS READABLY: use $414.8M not 414828652, use -2.48% not -2.484401525322113%, use $292.6M not 292636115. NO source tags, NO field names like "tvl_change_7d" — write human-readable labels.',
     '- moat: competitive advantage in 1-2 sentences. Must be based on RAW_DATA or verified search results.',
     '- risks: array of 3-5 risk strings. Format: "Risk type: specific detail [source: RAW_DATA field or search]." Only include risks you can substantiate.',
     '- catalysts: array of 2-4 upcoming catalysts. ONLY include catalysts you found via Web/X Search with evidence. Prefix unverified ones with "[Unverified]". It is OK to have fewer catalysts if data is limited.',
@@ -604,18 +605,96 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
   };
 }
 
+/**
+ * Clean report text fields: strip source tags, format raw numbers, humanize field names.
+ */
+function cleanReportText(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  let cleaned = text;
+
+  // 1. Remove [source: ...] tags
+  cleaned = cleaned.replace(/\s*\[source:\s*[^\]]*\]/gi, '');
+
+  // 2. Fix overly precise percentages FIRST — e.g., -2.484401525322113% → -2.48%
+  // (must run before number formatting to avoid conflicts)
+  cleaned = cleaned.replace(/([-+]?\d+\.\d{3,})%/g, (match, numStr) => {
+    const num = parseFloat(numStr);
+    if (isNaN(num)) return match;
+    return `${num.toFixed(2)}%`;
+  });
+
+  // 3. Format raw large numbers with $ — match patterns like "292636115" or "414828652.77889"
+  // Only match numbers NOT followed by % (those were already handled)
+  cleaned = cleaned.replace(/\$?(\d{7,}(?:\.\d+)?)(?!%)/g, (match, numStr) => {
+    const num = parseFloat(numStr);
+    if (isNaN(num)) return match;
+    if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
+    if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
+    return `$${num.toFixed(2)}`;
+  });
+
+  // 4. Replace snake_case field names with human labels
+  const fieldMap = {
+    'tvl_change_7d': '7-day TVL change',
+    'tvl_change_30d': '30-day TVL change',
+    'fees_7d': '7-day fees',
+    'fees_30d': '30-day fees',
+    'revenue_7d': '7-day revenue',
+    'revenue_30d': '30-day revenue',
+    'dex_liquidity_usd': 'DEX liquidity',
+    'dex_pair_count': 'DEX pair count',
+    'dex_price_usd': 'DEX price',
+    'buy_sell_ratio': 'buy/sell ratio',
+    'market_cap_rank': 'market cap rank',
+    'price_change_24h': '24h price change',
+    'price_change_7d': '7-day price change',
+    'price_change_30d': '30-day price change',
+    'current_price': 'current price',
+    'market_cap': 'market cap',
+    'total_volume': '24h volume',
+    'fully_diluted_valuation': 'fully diluted valuation',
+    'ecosystem.chain_count': 'supported chains',
+    'ecosystem.primary_chain': 'primary chain',
+    'github.contributors': 'contributors',
+    'github.stars': 'stars',
+    'github.commits_90d': 'commits (90d)',
+    'top10_concentration_pct': 'top 10 holder concentration',
+    'contract.verified': 'contract verified',
+  };
+  for (const [raw, human] of Object.entries(fieldMap)) {
+    // Match with optional dot notation prefix (e.g., "onchain.tvl_change_7d" or just "tvl_change_7d")
+    const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(`(?:RAW_DATA[.])?(?:\\w+[.])?${escaped}`, 'g'), human);
+  }
+
+  // 5. Remove leftover "RAW_DATA." prefix references
+  cleaned = cleaned.replace(/RAW_DATA\.\w+\.\w+/g, (match) => {
+    // Extract last part and humanize
+    const parts = match.split('.');
+    return parts[parts.length - 1].replace(/_/g, ' ');
+  });
+
+  // 6. Remove "FACT_REGISTRY" references
+  cleaned = cleaned.replace(/\bFACT_REGISTRY\b\s*/gi, '');
+
+  return cleaned.trim();
+}
+
 function normalizeReport(payload, projectName, rawData, scores) {
   const overallScore = Number(scores?.overall?.score || 0);
   return {
     verdict: normalizeVerdict(payload?.verdict, overallScore),
     analysis_text:
-      String(payload?.analysis_text || '').trim() || fallbackReport(projectName, rawData, scores).analysis_text,
-    moat: String(payload?.moat || '').trim() || 'n/a',
-    risks: normalizeList(payload?.risks, ['n/a']),
-    catalysts: normalizeList(payload?.catalysts, ['n/a']),
-    competitor_comparison: String(payload?.competitor_comparison || '').trim() || 'n/a',
-    x_sentiment_summary: String(payload?.x_sentiment_summary || '').trim() || 'n/a',
-    key_findings: normalizeList(payload?.key_findings, ['n/a']),
+      cleanReportText(String(payload?.analysis_text || '').trim()) || fallbackReport(projectName, rawData, scores).analysis_text,
+    moat: cleanReportText(String(payload?.moat || '').trim()) || 'n/a',
+    risks: normalizeList(payload?.risks, ['n/a']).map(r => cleanReportText(r)),
+    catalysts: normalizeList(payload?.catalysts, ['n/a']).map(c => cleanReportText(c)),
+    competitor_comparison: cleanReportText(String(payload?.competitor_comparison || '').trim()) || 'n/a',
+    x_sentiment_summary: cleanReportText(String(payload?.x_sentiment_summary || '').trim()) || 'n/a',
+    key_findings: normalizeList(payload?.key_findings, ['n/a']).map(f => cleanReportText(f)),
     data_gaps: normalizeList(payload?.data_gaps, []),
     facts_verified: normalizeList(payload?.facts_verified, []),
     opinions: normalizeList(payload?.opinions, []),
@@ -837,7 +916,8 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     '6. For competitor_comparison: only compare if you have data. Otherwise write "No competitor data available in this scan."',
     '7. For x_sentiment_summary: only use data from social collector. If no social data, write "No social data available."',
     '8. A shorter, accurate report is ALWAYS better than a longer, hallucinated one.',
-    '9. Add [source: RAW_DATA.<field>] tags to factual statements so readers can audit claims.',
+    '9. Do NOT put [source: ...] tags in analysis_text, moat, risks, or catalysts — those are for human readers. Put source references ONLY in facts_verified.',
+    '10. FORMAT ALL NUMBERS for humans: $414.8M not 414828652, -2.48% not -2.484401525322113%. NEVER expose field names like tvl_change_7d — write "7-day TVL change" instead.',
 
     '## SCORING CALIBRATION',
     `Algorithmic score: ${overallScore}/10. Adjust verdict based on data quality and signal strength:`,
@@ -850,7 +930,7 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     '## OUTPUT FORMAT',
     'Return ONLY valid JSON with these REQUIRED fields:',
     '- verdict: "STRONG BUY" | "BUY" | "HOLD" | "AVOID" | "STRONG AVOID"',
-    '- analysis_text: 2-3 paragraphs (thesis → evidence → outlook)',
+    '- analysis_text: 2-3 clean paragraphs for HUMAN READERS (thesis → evidence → outlook). Format numbers readably ($292.6M, -2.48%). No source tags, no field names.',
     '- moat: specific competitive advantage (1-2 sentences, avoid generics like "first mover")',
     '- risks: array of 3-5 risks, format: "Risk type: specific detail"',
     '- catalysts: array of 1-3 catalysts ONLY inferable from data (e.g., active dev = likely updates). Do NOT invent events. Prefix uncertain ones with "[Inferred]".',

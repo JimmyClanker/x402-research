@@ -1311,6 +1311,24 @@
       return `<div class="github-card"><div class="github-card-header"><span class="github-icon">⌥</span><span class="github-title">Repository</span>${url}</div>${desc}<div class="github-badges">${lang}${lic}${github.stars!=null?`<span class="stat-badge">★ ${Number(github.stars).toLocaleString()}</span>`:''} ${github.watchers!=null?`<span class="stat-badge">👁 ${Number(github.watchers).toLocaleString()}</span>`:''}</div></div>`;
     }
 
+    function formatAnalysisText(text) {
+      if (!text) return '<p>No analysis available.</p>';
+      // Split into paragraphs on double newline or single newline
+      const paragraphs = text.split(/\n\n+|\n(?=[A-Z])/).filter(p => p.trim());
+      if (paragraphs.length <= 1) {
+        // Try splitting long single-paragraph text at sentence boundaries (~every 2-3 sentences)
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        if (sentences.length > 4) {
+          const chunks = [];
+          for (let i = 0; i < sentences.length; i += 3) {
+            chunks.push(sentences.slice(i, i + 3).join(' ').trim());
+          }
+          return chunks.map(p => `<p style="margin:0 0 12px 0;line-height:1.8;">${escapeHtml(p)}</p>`).join('');
+        }
+      }
+      return paragraphs.map(p => `<p style="margin:0 0 12px 0;line-height:1.8;">${escapeHtml(p.trim())}</p>`).join('');
+    }
+
     function renderList(items, fallback='n/a') {
       if (!Array.isArray(items)||!items.length) return `<li>${escapeHtml(fallback)}</li>`;
       return items.map(i=>`<li>${escapeHtml(i)}</li>`).join('');
@@ -1346,7 +1364,7 @@
                 ${(()=>{const sa=scores?.overall?.score_anomaly;if(!sa||sa==='normal')return'';return`<div style="margin-top:4px;padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:999px;font-size:10px;font-weight:600;display:inline-block;">⚠ ${sa==='high_variance'?'uneven scores':'mixed signals'}</div>`})()}
               </div>
             </div>
-            <p class="analysis">${escapeHtml(analysis.analysis_text||'No analysis available.')}</p>
+            <div class="analysis">${formatAnalysisText(analysis.analysis_text||'No analysis available.')}</div>
             <div class="mini-grid">
               <div class="card moat"><h3>🛡 Moat</h3><div>${escapeHtml(analysis.moat||'n/a')}</div></div>
               <div class="card risks"><h3>⚠ Risks</h3><ul>${renderList(analysis.risks)}</ul></div>
@@ -1368,12 +1386,12 @@
 
         ${analysis.x_sentiment_summary&&analysis.x_sentiment_summary!=='n/a'?`<section class="panel" style="margin-top:18px;">
           <div class="section-label" style="display:flex;align-items:center;gap:8px;">X Sentiment${(()=>{const nm=payload?.raw_data?.social?.news_momentum;const vc=payload?.raw_data?.social?.very_recent_news_count;if(!nm||nm==='no_data')return'';const col=nm==='accelerating'?'#22c55e':nm==='declining'?'#f87171':'#fbbf24';return`<span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;background:${col}22;color:${col};font-weight:600;">${nm==='accelerating'?'📈':nm==='declining'?'📉':'➡️'} ${nm}${vc?` (${vc} recent)`:''}`;})()}</div>
-          <p class="analysis">${escapeHtml(analysis.x_sentiment_summary)}</p>
+          <div class="analysis">${formatAnalysisText(analysis.x_sentiment_summary)}</div>
         </section>`:''}
 
         ${analysis.competitor_comparison&&analysis.competitor_comparison!=='n/a'?`<section class="panel" style="margin-top:18px;">
           <div class="section-label">Competitor Comparison</div>
-          <p class="analysis">${escapeHtml(analysis.competitor_comparison)}</p>
+          <div class="analysis">${formatAnalysisText(analysis.competitor_comparison)}</div>
         </section>`:''}
 
         ${analysis.key_findings&&analysis.key_findings.length?`<section class="panel" style="margin-top:18px;">
