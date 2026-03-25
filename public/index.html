@@ -118,10 +118,11 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(10,10,10,0.92); /* slightly higher opacity as fallback for no backdrop-filter */
+      background: rgba(10,10,10,0.92);
       -webkit-backdrop-filter: blur(12px);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
+      /* Round 68: needed so absolute mobile-nav positions relative to header */
     }
     .header-inner {
       display: flex;
@@ -735,8 +736,57 @@
     @media (max-width: 860px) {
       .products-grid { grid-template-columns: 1fr; }
       .api-grid { grid-template-columns: 1fr; }
-      nav a:not(.btn-nav) { display: none; }
+      nav a:not(.btn-nav):not(.nav-hamburger) { display: none; }
       .trynow-inner { padding: 32px 20px; }
+      /* Round 68: mobile nav */
+      .nav-hamburger {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px; height: 36px;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--muted2);
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px;
+        transition: border-color 0.2s, color 0.2s;
+      }
+      .nav-hamburger:hover { border-color: var(--border-hover); color: var(--text); }
+      .nav-hamburger span { display: block; width: 16px; height: 1.5px; background: currentColor; border-radius: 2px; transition: transform 0.2s, opacity 0.2s; }
+      .nav-hamburger.open span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+      .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+      .nav-hamburger.open span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+      .mobile-nav {
+        display: none;
+        position: absolute;
+        top: 64px; left: 0; right: 0;
+        background: rgba(10,10,10,0.97);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        z-index: 99;
+        padding: 12px 20px;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .mobile-nav.open { display: flex; }
+      .mobile-nav a {
+        color: var(--muted2);
+        font-size: 0.95rem;
+        font-weight: 500;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+        transition: color 0.2s;
+      }
+      .mobile-nav a:last-child { border-bottom: none; }
+      .mobile-nav a:hover { color: var(--text); opacity: 1; }
+    }
+    @media (min-width: 861px) {
+      .nav-hamburger { display: none !important; }
+      .mobile-nav { display: none !important; }
     }
     @media (max-width: 560px) {
       .hero-section { padding: 64px 0 56px; }
@@ -779,7 +829,17 @@
           <a href="#api">API</a>
           <a href="#about">About</a>
           <a href="/alphascan" class="btn-nav">Alpha Scanner →</a>
+          <button class="nav-hamburger" id="hp-hamburger-btn" aria-label="Open navigation menu" aria-expanded="false" aria-controls="hp-mobile-nav">
+            <span></span><span></span><span></span>
+          </button>
         </nav>
+      </div>
+    </div>
+    <nav id="hp-mobile-nav" class="mobile-nav" aria-label="Mobile navigation">
+      <a href="#products">Products</a>
+      <a href="#api">API</a>
+      <a href="#about">About</a>
+      <a href="/alphascan">Alpha Scanner →</a>
       </div>
     </div>
   </header>
@@ -1120,5 +1180,22 @@
     // ── Service Worker for offline landing page ──────────────────────
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {}); // fail silently
+    }
+    // ── Round 68: hamburger toggle ───────────────────────────────────
+    const hpHamburger = document.getElementById('hp-hamburger-btn');
+    const hpMobileNav = document.getElementById('hp-mobile-nav');
+    if (hpHamburger && hpMobileNav) {
+      hpHamburger.addEventListener('click', () => {
+        const isOpen = hpMobileNav.classList.toggle('open');
+        hpHamburger.classList.toggle('open', isOpen);
+        hpHamburger.setAttribute('aria-expanded', String(isOpen));
+      });
+      document.addEventListener('click', (e) => {
+        if (!hpHamburger.contains(e.target) && !hpMobileNav.contains(e.target)) {
+          hpMobileNav.classList.remove('open');
+          hpHamburger.classList.remove('open');
+          hpHamburger.setAttribute('aria-expanded', 'false');
+        }
+      });
     }
   </script>

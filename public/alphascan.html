@@ -148,10 +148,10 @@
       opacity: 1 !important;
     }
 
-    /* ── Hero (exact match to landing) ── */
+    /* ── Hero (Round 66: tighter scan page hero) ── */
     .hero-section {
       position: relative; overflow: hidden;
-      padding: 96px 0 80px;
+      padding: 72px 0 64px;
     }
     .hero-bg {
       position: absolute; inset: 0;
@@ -229,22 +229,34 @@
       transform: translateY(-1px); opacity: 1;
     }
 
-    /* ── Section commons ── */
+    /* ── Section commons (Round 70: improved label + spacing) ── */
     section { padding: 80px 0; }
     .section-label {
-      font-size: 0.78rem; font-weight: 600; color: var(--green);
-      text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 12px;
+      font-size: 0.73rem; font-weight: 700; color: var(--green);
+      text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-label::before {
+      content: '';
+      display: inline-block;
+      width: 14px; height: 2px;
+      background: var(--green);
+      border-radius: 999px;
+      opacity: 0.7;
     }
     h2.section-title {
-      font-size: clamp(2rem, 4vw, 3rem);
+      font-size: clamp(1.9rem, 4vw, 2.8rem);
       font-weight: 800; letter-spacing: -0.04em;
       line-height: 1.1; margin-bottom: 14px;
     }
     .section-sub {
-      color: #a8a8a8; font-size: 1.05rem;
-      max-width: 560px; line-height: 1.7;
+      color: #a8a8a8; font-size: 1.02rem;
+      max-width: 560px; line-height: 1.75;
     }
     .section-head { margin-bottom: 48px; }
+    /* Result panels: consistent 20px gap */
+    .results-container > section + section,
+    .results-container > #report > section + section { margin-top: 20px; }
 
     /* ── Product card style (for how-it-works cards) ── */
     .card-panel {
@@ -318,23 +330,33 @@
     .toolbar .btn-row {
       display: flex; gap: 12px; justify-content: center;
     }
+    /* Round 62: sticky scan bar on mobile */
+    @media (max-width: 720px) {
+      .toolbar { position: relative; }
+      .input-wrap { width: 100%; }
+    }
     .input-wrap { position: relative; }
     #project-input {
       width: 100%; min-width: 0;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      border: 1.5px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text);
-      padding: 14px 16px;
+      padding: 15px 18px;
       font-family: 'Inter', sans-serif; font-size: 1rem;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    #project-input:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.14);
     }
     #project-input:focus {
       border-color: var(--green);
-      box-shadow: 0 0 0 3px rgba(212,88,10,0.12);
+      box-shadow: 0 0 0 4px rgba(212,88,10,0.14);
+      background: rgba(255,255,255,0.05);
     }
-    #project-input::placeholder { color: var(--muted); }
+    #project-input::placeholder { color: #5e5e5e; font-size: 0.95rem; }
 
     .hero-note {
       color: var(--muted); font-size: 0.82rem;
@@ -363,19 +385,31 @@
       content: ''; display: inline-block; width: 1.4em;
       text-align: left; animation: dots 1.2s steps(4, end) infinite;
     }
+    /* Round 65: enhanced loading bar with multi-color glow sweep */
     .loading-bar {
-      position: relative; height: 4px; border-radius: 999px;
-      overflow: hidden; background: rgba(255,255,255,0.07);
-      border: 1px solid var(--border);
+      position: relative; height: 5px; border-radius: 999px;
+      overflow: hidden; background: rgba(255,255,255,0.06);
+      margin: 8px 0;
     }
     .loading-bar::before {
-      content: ''; position: absolute; inset: 0; transform: translateX(-100%);
-      background: linear-gradient(90deg, rgba(212,88,10,0.15), var(--hold), var(--buy), rgba(212,88,10,0.15));
-      animation: progressSweep 1.7s ease-in-out infinite;
+      content: ''; position: absolute; top: 0; left: 0; bottom: 0;
+      width: 60%; transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, rgba(212,88,10,0.3), var(--buy), rgba(255,211,182,0.8), var(--buy), rgba(212,88,10,0.3), transparent);
+      animation: progressSweep 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      border-radius: 999px;
+    }
+    .loading-bar::after {
+      content: ''; position: absolute; inset: 0;
+      background: rgba(212,88,10,0.06);
+      animation: barGlow 1.8s ease-in-out infinite;
+    }
+    @keyframes barGlow {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
     }
 
     @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
-    @keyframes progressSweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    @keyframes progressSweep { 0% { transform: translateX(-167%); } 100% { transform: translateX(267%); } }
     @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes fillBar { from { width: 0; } to { width: var(--target-width, 0%); } }
 
@@ -476,26 +510,32 @@
       gap: 16px; flex-wrap: wrap; align-items: center;
     }
 
+    /* Round 69: redesigned verdict + header */
     .project-name {
       font-family: 'Inter', sans-serif; font-weight: 800;
-      font-size: clamp(2rem, 5vw, 3.5rem); margin: 0;
-      letter-spacing: -0.04em;
+      font-size: clamp(1.8rem, 5vw, 3.2rem); margin: 0;
+      letter-spacing: -0.04em; line-height: 1.1;
     }
-    .verdict-wrap { display: grid; justify-items: end; gap: 8px; }
+    .verdict-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
     .verdict-meta {
-      color: var(--muted); font-size: 0.78rem;
+      color: var(--muted); font-size: 0.72rem;
       letter-spacing: 0.14em; text-transform: uppercase;
     }
     .verdict {
-      font-size: clamp(1.6rem, 4vw, 2.4rem);
-      padding: 14px 24px; border-radius: 999px;
-      border: 1px solid currentColor;
-      font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
-      background: radial-gradient(circle at top, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+      font-size: clamp(1.4rem, 3.5vw, 2rem);
+      padding: 10px 22px; border-radius: 999px;
+      border: 1.5px solid currentColor;
+      font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;
+      background: radial-gradient(circle at top, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+      position: relative;
+      transition: box-shadow 0.3s;
     }
+    .verdict.buy { box-shadow: 0 0 20px rgba(212,88,10,0.18); }
+    .verdict.hold { box-shadow: 0 0 20px rgba(255,211,182,0.12); }
+    .verdict.avoid { box-shadow: 0 0 20px rgba(255,139,148,0.12); }
     .overall-score {
-      font-family: 'Inter', sans-serif; font-weight: 700;
-      font-size: 1.8rem; line-height: 1;
+      font-family: 'IBM Plex Mono', monospace; font-weight: 700;
+      font-size: 1.5rem; line-height: 1; letter-spacing: -0.02em;
     }
 
     .buy { color: var(--buy); }
@@ -689,7 +729,7 @@
 
     svg { width: 100%; height: auto; display: block; overflow: visible; }
 
-    /* ── How It Works Section ── */
+    /* ── How It Works Section (Round 67: card heights + connector) ── */
     .how-section {
       background: var(--surface);
       border-top: 1px solid var(--border);
@@ -697,37 +737,47 @@
     }
     .how-grid {
       display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 20px; position: relative;
+      gap: 20px; position: relative; align-items: stretch;
     }
     .how-grid::before {
       content: ''; position: absolute;
-      top: 32px;
-      left: calc(16.66% + 16px); right: calc(16.66% + 16px);
+      top: 27px; /* center of how-num (56px/2 - border) */
+      left: calc(16.66% + 24px); right: calc(16.66% + 24px);
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(212,88,10,0.5), transparent);
-      opacity: 0.6;
+      background: linear-gradient(90deg, rgba(212,88,10,0.6), rgba(212,88,10,0.3), rgba(212,88,10,0.6));
+      opacity: 0.5;
+      pointer-events: none;
     }
     .how-step {
-      padding: 28px;
+      padding: 28px 24px;
       text-align: center;
       display: flex; flex-direction: column;
       align-items: center; gap: 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .how-step:hover {
+      border-color: rgba(212,88,10,0.2);
+      transform: translateY(-2px);
     }
     .how-num {
-      width: 56px; height: 56px; border-radius: 50%;
-      border: 1px solid rgba(212,88,10,0.35);
-      background: rgba(212,88,10,0.08);
+      width: 54px; height: 54px; border-radius: 50%;
+      border: 1.5px solid rgba(212,88,10,0.4);
+      background: rgba(212,88,10,0.1);
       display: flex; align-items: center; justify-content: center;
       font-size: 1.4rem; position: relative; z-index: 1;
+      flex-shrink: 0;
     }
     .how-step h3 {
-      font-size: 1.1rem; font-weight: 700;
+      font-size: 1.05rem; font-weight: 700;
       color: var(--text); margin: 0;
       letter-spacing: -0.02em;
     }
     .how-step p {
-      color: var(--muted2); font-size: 0.9rem;
-      line-height: 1.65; margin: 0;
+      color: var(--muted2); font-size: 0.88rem;
+      line-height: 1.7; margin: 0;
     }
 
     /* ── Stats Section ── */
@@ -759,15 +809,15 @@
     .scanner-fade-delay-1 { transition-delay: 0.1s; }
     .scanner-fade-delay-2 { transition-delay: 0.2s; }
 
-    /* ── Round 2: Skeleton loading state ── */
+    /* ── Round 2 + Round 64: Skeleton loading state ── */
     @keyframes shimmer {
-      0% { background-position: -600px 0; }
-      100% { background-position: 600px 0; }
+      0% { background-position: -800px 0; }
+      100% { background-position: 800px 0; }
     }
     .skeleton {
-      background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
-      background-size: 600px 100%;
-      animation: shimmer 1.4s infinite linear;
+      background: linear-gradient(90deg, rgba(255,255,255,0.03) 20%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 80%);
+      background-size: 800px 100%;
+      animation: shimmer 1.6s infinite linear;
       border-radius: 6px;
     }
     .skeleton-panel {
@@ -777,16 +827,26 @@
       padding: 24px;
       margin-bottom: 18px;
       display: grid; gap: 14px;
+      /* Round 64: staggered reveal */
+      animation: panelSlideIn 0.4s ease both;
     }
-    .skeleton-title { height: 40px; width: 55%; }
-    .skeleton-badge { height: 32px; width: 30%; border-radius: 999px; }
-    .skeleton-line { height: 14px; }
+    .skeleton-panel:nth-child(2) { animation-delay: 0.08s; }
+    .skeleton-panel:nth-child(3) { animation-delay: 0.16s; }
+    .skeleton-title { height: 44px; width: 52%; border-radius: 8px; }
+    .skeleton-badge { height: 36px; width: 28%; border-radius: 999px; }
+    .skeleton-line { height: 13px; border-radius: 4px; }
     .skeleton-line.w-full { width: 100%; }
     .skeleton-line.w-80 { width: 80%; }
     .skeleton-line.w-60 { width: 60%; }
     .skeleton-line.w-40 { width: 40%; }
-    .skeleton-bar { height: 12px; border-radius: 999px; }
+    .skeleton-bar { height: 10px; border-radius: 999px; }
     .skeleton-score { display: grid; grid-template-columns: 120px 1fr 72px; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    /* Round 64: pulse glow on skeleton panels to indicate activity */
+    @keyframes skeletonPulse {
+      0%, 100% { border-color: var(--border); }
+      50% { border-color: rgba(212,88,10,0.12); }
+    }
+    .skeleton-panel { animation: panelSlideIn 0.4s ease both, skeletonPulse 2.5s ease-in-out infinite; }
 
     /* ── Round 2: Smooth results reveal ── */
     #results-section {
@@ -901,10 +961,70 @@
       .stats-grid { grid-template-columns: 1fr; }
       .stat-box { border-right: none; border-bottom: 1px solid var(--border); }
       .stat-box:last-child { border-bottom: none; }
+      /* Round 61: hamburger menu */
+      .nav-hamburger {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px; height: 36px;
+        background: none;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--muted2);
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px;
+        transition: border-color 0.2s, color 0.2s;
+      }
+      .nav-hamburger:hover { border-color: var(--border-hover); color: var(--text); }
+      .nav-hamburger span { display: block; width: 16px; height: 1.5px; background: currentColor; border-radius: 2px; transition: transform 0.2s, opacity 0.2s; }
+      .nav-hamburger.open span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+      .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+      .nav-hamburger.open span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+      .mobile-nav {
+        display: none;
+        position: absolute;
+        top: 64px; left: 0; right: 0;
+        background: rgba(10,10,10,0.97);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        z-index: 99;
+        padding: 12px 20px;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .mobile-nav.open { display: flex; }
+      .mobile-nav a {
+        color: var(--muted2);
+        font-size: 0.95rem;
+        font-weight: 500;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+        transition: color 0.2s;
+      }
+      .mobile-nav a:last-child { border-bottom: none; }
+      .mobile-nav a:hover { color: var(--text); opacity: 1; }
+    }
+    @media (min-width: 861px) {
+      .nav-hamburger { display: none; }
+      .mobile-nav { display: none !important; }
     }
     @media (max-width: 720px) {
       .toolbar { grid-template-columns: 1fr; gap: 8px; }
-      .score-row { grid-template-columns: 1fr; gap: 6px; }
+      /* Round 63: score rows stack vertically — label + score on same row, bar below */
+      .score-row {
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        gap: 4px 8px;
+      }
+      .score-row .bar {
+        grid-column: 1 / -1;
+        height: 10px;
+      }
+      .score-row .score-label { grid-column: 1; }
+      .score-row .score-value { grid-column: 2; align-self: center; font-size: 0.88rem; }
       .header-row { align-items: flex-start; flex-direction: column; gap: 12px; }
       .verdict-wrap { justify-items: start; width: 100%; }
       .verdict { width: 100%; text-align: center; font-size: 1.4rem; padding: 12px 20px; }
@@ -914,7 +1034,7 @@
       .table th { width: auto; margin-bottom: 4px; color: var(--info); }
       .two-col { grid-template-columns: 1fr; }
       .sentiment-box { word-break: break-word; overflow-wrap: anywhere; }
-      .analysis { font-size: 0.85rem; }
+      .analysis { font-size: 0.85rem; line-height: 1.85; }
       .panel { padding: 16px; overflow-x: hidden; }
       .card { padding: 14px; }
       .dex-dropdown { max-height: 300px; }
@@ -1021,7 +1141,16 @@
           <a href="/#products">Products</a>
           <a href="/#about">About</a>
           <a href="/alphascan" class="active btn-nav" aria-current="page">Alpha Scanner →</a>
+          <button class="nav-hamburger" id="hamburger-btn" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobile-nav-menu">
+            <span></span><span></span><span></span>
+          </button>
         </nav>
+      </div>
+    </div>
+    <nav id="mobile-nav-menu" class="mobile-nav" aria-label="Mobile navigation">
+      <a href="/#products">Products</a>
+      <a href="/#about">About</a>
+      <a href="/alphascan" aria-current="page">Alpha Scanner →</a>
       </div>
     </div>
   </header>
@@ -1134,5 +1263,25 @@
   </footer>
 
   <script src="js/alphascan.js"></script>
+  <script>
+    // Round 61: hamburger toggle
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const mobileNavMenu = document.getElementById('mobile-nav-menu');
+    if (hamburgerBtn && mobileNavMenu) {
+      hamburgerBtn.addEventListener('click', () => {
+        const isOpen = mobileNavMenu.classList.toggle('open');
+        hamburgerBtn.classList.toggle('open', isOpen);
+        hamburgerBtn.setAttribute('aria-expanded', String(isOpen));
+      });
+      // close on outside click
+      document.addEventListener('click', (e) => {
+        if (!hamburgerBtn.contains(e.target) && !mobileNavMenu.contains(e.target)) {
+          mobileNavMenu.classList.remove('open');
+          hamburgerBtn.classList.remove('open');
+          hamburgerBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+  </script>
 </body>
 </html>
