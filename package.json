@@ -1,6 +1,6 @@
 {
   "name": "x402-research-service",
-  "version": "6.0.0",
+  "version": "7.1.0",
   "description": "Alpha Scanner — Crypto Alpha Discovery Engine",
   "type": "module",
   "scripts": {

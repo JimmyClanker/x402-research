@@ -17,6 +17,7 @@ import { assessVolatility } from '../services/volatility-guard.js';
 import { computeScoreVelocity } from '../services/score-velocity.js';
 import { detectTrendReversal } from '../services/trend-reversal.js';
 import { detectNarrativeMomentum } from '../services/narrative-momentum.js';
+import { calculateMomentum } from '../services/momentum.js';
 
 export function safeParseJSON(str) {
   try { return str ? JSON.parse(str) : null; } catch { return null; }
@@ -297,6 +298,11 @@ export async function runAnalysis({ projectName, exaService, mode, config, colle
   const narrativeMomentum = detectNarrativeMomentum(rawData);
   rawData.narrative_momentum = narrativeMomentum;
 
+  // Round 27 (AutoResearch nightly): compute momentum service data and inject into rawData
+  // so alpha-signals.js can detect price-volume divergence patterns
+  const momentumData = calculateMomentum(rawData);
+  rawData.momentum = momentumData;
+
   const analysis =
     mode === 'quick'
       ? await generateQuickReport(projectName, rawData, scores, { apiKey: config?.xaiApiKey })
@@ -385,6 +391,8 @@ export async function runAnalysis({ projectName, exaService, mode, config, colle
   response.elevator_pitch = elevatorPitch.pitch;
   response.thesis = thesis;
   response.changes = changes;
+  // Round 28 (AutoResearch nightly): include momentum data in response
+  response.momentum = momentumData;
 
   // Add scan versioning
   if (scanVersion !== null) {

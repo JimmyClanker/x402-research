@@ -26,7 +26,7 @@ test('loadConfig keeps defaults and compatibility', () => {
 
   assert.equal(config.port, 4021);
   assert.equal(config.nvmEnv, 'production');
-  assert.equal(config.version, '6.0.0');
+  assert.equal(config.version, '7.1.0');
   assert.equal(config.alphaAuthKey, null);
 });
 

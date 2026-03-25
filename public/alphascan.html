@@ -1382,7 +1382,7 @@
         </section>`:''}
 
         ${(()=>{const t=payload?.thesis;if(!t)return'';return`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">Investment Thesis</div>
+          <div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">Investment Thesis${t.metrics_snapshot?`<span style="font-size:0.72rem;color:#94a3b8;font-weight:400;">${escapeHtml(t.metrics_snapshot)}</span>`:''}${t.one_liner?`<span style="font-size:0.75rem;padding:2px 10px;background:rgba(212,88,10,0.12);border:1px solid rgba(212,88,10,0.3);border-radius:999px;color:#ffd3b6;margin-left:auto;">${escapeHtml(t.one_liner)}</span>`:''}</div>
           <div class="mini-grid">
             <div class="card" style="border-color:rgba(34,197,94,0.3)"><h3>🐂 Bull Case</h3><div>${escapeHtml(t.bull_case||'n/a')}</div></div>
             <div class="card" style="border-color:rgba(239,68,68,0.3)"><h3>🐻 Bear Case</h3><div>${escapeHtml(t.bear_case||'n/a')}</div></div>
@@ -1411,7 +1411,7 @@
             <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Setup Quality</div><div style="font-weight:700;color:${qualColor};">${escapeHtml(ts.setup_quality||'?')}</div></div>
             ${rr?.position_size_suggestion?`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Position Size</div><div style="font-weight:700;color:#fbbf24;">${escapeHtml(rr.position_size_suggestion)}</div></div>`:''}
           </div>
-          ${rr?.expected_value!=null?`<div style="font-size:0.82rem;color:#7e7e7e;">Kelly: ${rr.kelly_fraction!=null?(rr.kelly_fraction*100).toFixed(1)+'%':'n/a'} · EV: ${escapeHtml(String(rr.expected_value))} · TP1 prob: ${rr.probability_tp1!=null?(rr.probability_tp1*100).toFixed(0)+'%':'n/a'}</div>`:''}
+          ${rr?.expected_value!=null?`<div style="font-size:0.82rem;color:#7e7e7e;">Kelly: ${rr.kelly_fraction!=null?(rr.kelly_fraction*100).toFixed(1)+'%':'n/a'} · EV: <span style="color:${rr.expected_value>0?'#86efac':rr.expected_value<0?'#f87171':'#7e7e7e'}">${escapeHtml(String(rr.expected_value))}</span>${rr.vol_adjusted_ev!=null&&rr.vol_adjusted_ev!==rr.expected_value?` · vol-adj EV: <span style="color:${rr.vol_adjusted_ev>0?'#86efac':'#f87171'}">${escapeHtml(String(rr.vol_adjusted_ev))}</span>`:''}${rr.ev_label?` <span style="font-size:0.75rem;color:#94a3b8;">(${escapeHtml(rr.ev_label)})</span>`:''} · TP1 prob: ${rr.probability_tp1!=null?(rr.probability_tp1*100).toFixed(0)+'%':'n/a'}</div>`:''}
         </section>`;})()}
 
         ${(()=>{
