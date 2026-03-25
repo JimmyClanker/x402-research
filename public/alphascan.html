@@ -1315,6 +1315,20 @@
     function humanizeLabel(snakeCase) {
       if (!snakeCase) return snakeCase;
       const labels = {
+        'young_project': 'Limited track record',
+        'low_market_cap': 'Extremely low market cap',
+        'no_github': 'Unverifiable development activity',
+        'github_inactive': 'No recent development activity',
+        'dev_quality_concern': 'Development quality concerns',
+        'whale_concentration': 'High whale concentration',
+        'high_concentration': 'High holder concentration',
+        'no_onchain_data': 'No on-chain data',
+        'declining_tvl': 'Declining protocol TVL',
+        'low_volume': 'Very low trading volume',
+        'bearish_sentiment': 'Overwhelmingly bearish sentiment',
+        'zero_social_mentions': 'No recent social mentions',
+        'no_license': 'Unlicensed codebase',
+        'extreme_fdv_ratio': 'Extreme token unlock overhang',
         'exploit_mentions_social': 'Exploit mentions in social media',
         'low_revenue_capture': 'Low revenue capture',
         'zero_revenue_capture': 'Zero revenue capture',
@@ -1323,12 +1337,28 @@
         'regulatory_risk_mentions': 'Regulatory risk mentions',
         'near_all_time_low': 'Near all-time low',
         'atl_proximity': 'ATL proximity',
-        'no_onchain_data': 'No on-chain data',
         'flash_crash': 'Flash crash detected',
-        'high_concentration': 'High holder concentration',
         'unverified_contract': 'Unverified contract',
+        'dex_sell_pressure': 'DEX sell pressure dominance',
+        'dex_dump_pattern': 'DEX dump pattern detected',
+        'dex_pump_pattern': 'DEX pump-and-dump pattern',
+        'no_dex_pairs': 'No DEX liquidity pairs',
+        'very_low_dex_liquidity': 'Critically low DEX liquidity',
+        'very_low_exchange_count': 'Very few exchange listings',
+        'high_inflation': 'High token inflation rate',
+        'hyperinflationary': 'Hyperinflationary token supply',
+        'high_team_allocation': 'Excessive team token allocation',
+        'severe_price_decline': 'Severe recent price decline',
+        'single_chain_tvl_concentration': 'TVL concentrated on single chain',
+        'single_pool_liquidity_concentration': 'Liquidity concentrated in single pool',
+        'stablecoin_depeg': 'Stablecoin depeg risk',
+        'uneven_dimension_scores': 'Uneven score profile',
+        'zombie_protocol': 'Zombie protocol',
         'recent_release': 'Recent release',
+        'dev_acceleration': 'Accelerating development velocity',
+        'improving_sector_position': 'Improving sector standing',
         'multi_exchange_listing': 'Broad exchange distribution',
+        'tvl_growth_spike': 'Strong TVL inflow',
         'coingecko_trending': 'CoinGecko trending',
         'strong_dex_presence': 'Strong DEX presence',
         'dex_buy_pressure': 'DEX buy pressure',
@@ -1338,12 +1368,25 @@
         'strong_dex_liquidity_health': 'Strong DEX liquidity health',
         'flash_pump': 'Flash pump detected',
         'ath_breakout': 'ATH breakout',
+        'near_ath_breakout': 'Near ATH breakout attempt',
         'recovery_from_low': 'Recovery from low',
+        'atl_recovery_momentum': 'Recovery momentum from all-time low',
         'volume_surge': 'Volume surge',
+        'volume_spike_no_price_move': 'Unusual volume without price reaction',
         'strong_positive_sentiment': 'Strong positive sentiment',
         'price_volume_divergence': 'Price-volume divergence',
+        'price_volume_divergence_bullish': 'Bullish price-volume divergence',
         'multi_chain_presence': 'Multi-chain presence',
+        'multichain_expansion': 'Multi-chain expansion activity',
         'ecosystem_growth': 'Ecosystem growth',
+        'active_governance': 'Active governance participation',
+        'revenue_generating': 'Fee/revenue generation confirmed',
+        'strong_revenue_capture': 'Strong protocol revenue capture',
+        'high_fee_efficiency': 'High fee-to-TVL efficiency',
+        'low_price_to_tvl': 'Undervalued relative to TVL',
+        'strong_treasury': 'Strong protocol treasury',
+        'strong_long_term_trend': 'Sustained long-term uptrend',
+        'accelerating_news_coverage': 'Accelerating news coverage',
       };
       return labels[snakeCase] || snakeCase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
@@ -1354,7 +1397,7 @@
       const paragraphs = text.split(/\n\n+|\n(?=[A-Z])/).filter(p => p.trim());
       if (paragraphs.length <= 1) {
         // Try splitting long single-paragraph text at sentence boundaries (~every 2-3 sentences)
-        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        const sentences = text.match(/.+?[!?]+|.+?\.(?!\d)/g) || [text];
         if (sentences.length > 4) {
           const chunks = [];
           for (let i = 0; i < sentences.length; i += 3) {
