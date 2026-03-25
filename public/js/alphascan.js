@@ -183,7 +183,7 @@
         // Show skeleton while loading
         showSkeleton();
       } else {
-        if (scanBtn)    { scanBtn.disabled = false; scanBtn.textContent = 'Full Scan $1'; scanBtn.removeAttribute('aria-busy'); }
+        if (scanBtn)    { scanBtn.disabled = false; scanBtn.textContent = _persistedKey ? 'Full Scan' : 'Full Scan $1'; scanBtn.removeAttribute('aria-busy'); }
         if (quickLinkEl) quickLinkEl.style.pointerEvents = '';
         statusBox.innerHTML = '';
       }
@@ -1112,6 +1112,11 @@
 
     // ── Persist API key from URL (survives replaceState) ─────────────
     const _persistedKey = new URLSearchParams(location.search).get('key') || '';
+    // If key present, relabel Full Scan button (no payment needed)
+    if (_persistedKey) {
+      const scanBtn = document.getElementById('scan-btn');
+      if (scanBtn) { scanBtn.textContent = 'Full Scan'; }
+    }
 
     // ── Main scan function ────────────────────────────────────────────
     async function runScan(mode = 'full') {
@@ -1142,7 +1147,7 @@
           const payload = await res.json();
           if (!res.ok) throw new Error(payload?.error || `Server error (${res.status})`);
           renderReport(payload);
-          history.replaceState({}, '', `/?project=${encodeURIComponent(project)}&mode=quick${_persistedKey ? '&key=' + encodeURIComponent(_persistedKey) : ''}`);
+          history.replaceState({}, '', `${location.pathname}?project=${encodeURIComponent(project)}&mode=quick${_persistedKey ? '&key=' + encodeURIComponent(_persistedKey) : ''}`);
         } catch(err) {
           const [msg, hint] = err.name === 'AbortError'
             ? ['Request timed out', 'The quick scan took too long. Try again.']
@@ -1173,7 +1178,7 @@
         } else {
           showPaymentModal(project, (result) => {
             renderReport(result);
-            history.replaceState({}, '', '/?project=' + encodeURIComponent(project) + '&mode=full' + (_persistedKey ? '&key=' + encodeURIComponent(_persistedKey) : ''));
+            history.replaceState({}, '', location.pathname + '?project=' + encodeURIComponent(project) + '&mode=full' + (_persistedKey ? '&key=' + encodeURIComponent(_persistedKey) : ''));
           });
         }
       }
