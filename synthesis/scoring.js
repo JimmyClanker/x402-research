@@ -622,6 +622,14 @@ export function calculateScores(data) {
   // Round 9: Reddit supplement to social momentum
   social_momentum.score = applyRedditSupplement(social_momentum.score, data?.reddit);
 
+  // Round 14 (AutoResearch nightly): news momentum supplement to social score
+  const newsMom = data?.social?.news_momentum;
+  if (newsMom === 'accelerating') {
+    social_momentum.score = Math.min(10, parseFloat((social_momentum.score + 0.3).toFixed(1)));
+  } else if (newsMom === 'declining') {
+    social_momentum.score = Math.max(1, parseFloat((social_momentum.score - 0.15).toFixed(1)));
+  }
+
   // Round 29 (AutoResearch batch): narrative momentum supplement
   social_momentum.score = applyNarrativeMomentumBonus(social_momentum.score, data?.narrative_momentum ?? null);
 
@@ -685,6 +693,17 @@ export function calculateScores(data) {
     .map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`)
     .join(', ');
 
+  // Round 22 (AutoResearch nightly): Score anomaly detection — flag unusual score spread
+  const allDimScores = [
+    market_strength.score, onchain_health.score, social_momentum.score,
+    development.score, tokenomics_health.score, distribution.score, risk.score
+  ].filter(Number.isFinite);
+  const dimMean = allDimScores.reduce((a, b) => a + b, 0) / allDimScores.length;
+  const dimVariance = allDimScores.reduce((s, v) => s + (v - dimMean) ** 2, 0) / allDimScores.length;
+  const dimStddev = Math.sqrt(dimVariance);
+  // High std dev (>2) = wildly uneven performance across dimensions — signals fragility
+  const scoreAnomaly = dimStddev > 2.5 ? 'high_variance' : dimStddev > 1.5 ? 'moderate_variance' : 'normal';
+
   return {
     market_strength,
     onchain_health,
@@ -697,7 +716,9 @@ export function calculateScores(data) {
       score: clampScore(overallValue),
       completeness: Math.round(completeness * 100),
       overall_confidence: confidence.overall_confidence,
-      reasoning: `Weighted blend: ${weightStr}. Data completeness: ${Math.round(completeness * 100)}%. Overall confidence: ${confidence.overall_confidence}%.`,
+      score_anomaly: scoreAnomaly,
+      dim_stddev: parseFloat(dimStddev.toFixed(2)),
+      reasoning: `Weighted blend: ${weightStr}. Data completeness: ${Math.round(completeness * 100)}%. Overall confidence: ${confidence.overall_confidence}%. Score spread: ${scoreAnomaly} (stddev ${dimStddev.toFixed(2)}).`,
     },
   };
 }

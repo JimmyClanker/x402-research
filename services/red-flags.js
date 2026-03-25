@@ -353,6 +353,62 @@ export function detectRedFlags(rawData = {}, scores = {}) {
     });
   }
 
+  // ── Price-based red flags (migrated from price-alerts.js) ──
+
+  const c1h = safeN(market.price_change_pct_1h, null);
+  const atl = safeN(market.atl, null);
+
+  // 31. Flash crash: 1h < -15%
+  if (c1h !== null && c1h <= -15) {
+    flags.push({
+      flag: 'flash_crash',
+      severity: c1h <= -30 ? 'critical' : 'warning',
+      detail: `Flash crash: ${c1h.toFixed(1)}% in 1h. Possible forced selling, exploit, or panic — verify cause before buying dip.`,
+    });
+  }
+
+  // 32. ATL proximity (within 10% above ATL)
+  if (atlDistancePct !== null && atlDistancePct <= 10 && atlDistancePct >= 0) {
+    flags.push({
+      flag: 'atl_proximity',
+      severity: atlDistancePct <= 3 ? 'critical' : 'warning',
+      detail: `Price is only ${atlDistancePct.toFixed(1)}% above ATL ($${atl?.toFixed ? atl.toFixed(6) : atl}) — extreme downside risk, near capitulation zone.`,
+    });
+  }
+
+  // Round 23 (AutoResearch nightly): Score anomaly — wildly uneven dimension scores signal fragility
+  const scoreAnomaly = scores?.overall?.score_anomaly;
+  const dimStddev = safeN(scores?.overall?.dim_stddev ?? null, null);
+  if (scoreAnomaly === 'high_variance' && dimStddev !== null) {
+    flags.push({
+      flag: 'uneven_dimension_scores',
+      severity: 'warning',
+      detail: `High variance across scoring dimensions (stddev ${dimStddev.toFixed(1)}) — project excels in some areas but has critical gaps in others. Concentrated risk.`,
+    });
+  }
+
+  // Round 7 (AutoResearch nightly): Single-chain TVL dominance — concentration risk for multi-chain protocols
+  const chainTvlDominance = safeN(onchain.chain_tvl_dominance_pct ?? null, null);
+  const chainCount = Array.isArray(onchain.chains) ? onchain.chains.length : 0;
+  if (chainTvlDominance !== null && chainCount >= 3 && chainTvlDominance > 85) {
+    flags.push({
+      flag: 'single_chain_tvl_concentration',
+      severity: 'warning',
+      detail: `${chainTvlDominance.toFixed(0)}% of TVL is on one chain despite being deployed on ${chainCount} chains — multichain presence is superficial, not diversified.`,
+    });
+  }
+
+  // Round 7 (AutoResearch nightly): Low revenue efficiency signal for established protocols
+  const revenueEfficiency = safeN(onchain.revenue_efficiency ?? null, null);
+  const tvlForEff = safeN(onchain.tvl ?? 0);
+  if (revenueEfficiency !== null && tvlForEff > 10_000_000 && revenueEfficiency < 1) {
+    flags.push({
+      flag: 'very_low_revenue_efficiency',
+      severity: 'info',
+      detail: `Protocol generates only $${revenueEfficiency.toFixed(2)}/week per $1M TVL — extremely low capital efficiency compared to sector peers.`,
+    });
+  }
+
   // Deduplicate flags by flag key (keep highest severity)
   const severityOrder = { critical: 3, warning: 2, info: 1 };
   const flagMap = new Map();

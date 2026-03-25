@@ -1343,6 +1343,7 @@
                 <div class="verdict ${verdictClass(verdict)}">${escapeHtml(verdict)}</div>
                 <div class="overall-score ${verdictClass(verdict)}">${avgScore!==null?`${avgScore.toFixed(1)}/10`:'n/a'}</div>
                 ${(()=>{const v=payload?.volatility;if(!v||v.regime==='calm')return'';const c={elevated:'#fbbf24',high:'#f97316',extreme:'#ef4444'}[v.regime]||'#fbbf24';const pct=v.volatility_pct_24h!=null?` (${v.volatility_pct_24h.toFixed(1)}% 24h)`:'';return`<div style="margin-top:6px;padding:4px 12px;background:${c};color:#000;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;display:inline-block;">⚡ ${v.regime}${pct}</div>`})()}
+                ${(()=>{const sa=scores?.overall?.score_anomaly;if(!sa||sa==='normal')return'';return`<div style="margin-top:4px;padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:999px;font-size:10px;font-weight:600;display:inline-block;">⚠ ${sa==='high_variance'?'uneven scores':'mixed signals'}</div>`})()}
               </div>
             </div>
             <p class="analysis">${escapeHtml(analysis.analysis_text||'No analysis available.')}</p>
@@ -1366,7 +1367,7 @@
         </section>`:''})()}
 
         ${analysis.x_sentiment_summary&&analysis.x_sentiment_summary!=='n/a'?`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">X Sentiment</div>
+          <div class="section-label" style="display:flex;align-items:center;gap:8px;">X Sentiment${(()=>{const nm=payload?.raw_data?.social?.news_momentum;const vc=payload?.raw_data?.social?.very_recent_news_count;if(!nm||nm==='no_data')return'';const col=nm==='accelerating'?'#22c55e':nm==='declining'?'#f87171':'#fbbf24';return`<span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;background:${col}22;color:${col};font-weight:600;">${nm==='accelerating'?'📈':nm==='declining'?'📉':'➡️'} ${nm}${vc?` (${vc} recent)`:''}`;})()}</div>
           <p class="analysis">${escapeHtml(analysis.x_sentiment_summary)}</p>
         </section>`:''}
 
@@ -1421,7 +1422,7 @@
           if (!dg.length && !vw.length && !rq) return '';
           return `<section class="panel" style="margin-top:18px;border-color:rgba(251,191,36,0.2);">
             <div class="section-label">📋 Data Reliability</div>
-            ${rq ? `<div style="margin-bottom:8px;font-size:0.85rem;">Report quality: <strong style="color:${rq.grade==='A'?'#22c55e':rq.grade==='B'?'#86efac':rq.grade==='C'?'#fbbf24':rq.grade==='D'?'#f97316':'#ef4444'}">${escapeHtml(rq.grade)}</strong> (${rq.quality_score ?? rq.score}/100)</div>` : ''}
+            ${rq ? `<div style="margin-bottom:8px;font-size:0.85rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Report quality: <strong style="color:${rq.grade==='A'?'#22c55e':rq.grade==='B'?'#86efac':rq.grade==='C'?'#fbbf24':rq.grade==='D'?'#f97316':'#ef4444'}">${escapeHtml(rq.grade)}</strong> (${rq.quality_score ?? rq.score}/100)${rq.verdict_confidence ? `<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${rq.verdict_confidence==='high'?'rgba(34,197,94,0.15)':rq.verdict_confidence==='medium'?'rgba(251,191,36,0.15)':'rgba(248,113,113,0.15)'};color:${rq.verdict_confidence==='high'?'#22c55e':rq.verdict_confidence==='medium'?'#fbbf24':'#f87171'}">verdict confidence: ${escapeHtml(rq.verdict_confidence)}</span>` : ''}${rq.dimension_coverage_pct != null ? `<span style="font-size:0.75rem;color:#94a3b8;">${rq.dimension_coverage_pct}% dim coverage</span>` : ''}</div>` : ''}
             ${ds.length ? `<div style="font-size:0.78rem;color:#86efac;margin-bottom:4px;">✅ Data sources: ${ds.map(s=>escapeHtml(s)).join(', ')}</div>` : ''}
             ${dg.length ? `<div style="font-size:0.78rem;color:#fbbf24;margin-bottom:4px;">⚠ Data gaps: ${dg.map(g=>escapeHtml(g)).join(', ')}</div>` : ''}
             ${vw.length ? `<div style="font-size:0.78rem;color:#f97316;margin-top:4px;">🔍 Validation notes: ${vw.map(w=>escapeHtml(w)).join('; ')}</div>` : ''}

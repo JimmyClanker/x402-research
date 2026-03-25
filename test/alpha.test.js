@@ -155,7 +155,7 @@ test('alpha full falls back when XAI_API_KEY is missing instead of erroring', as
     assert.equal(response.status, 200);
     const payload = await response.json();
     assert.ok(payload.llm_analysis.verdict);
-    assert.match(payload.llm_analysis.analysis_text, /Fallback used: XAI_API_KEY missing/);
+    assert.match(payload.llm_analysis.analysis_text, /Fallback.*XAI_API_KEY missing/);
   } finally {
     server.close();
     services.signals.close();

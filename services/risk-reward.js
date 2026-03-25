@@ -125,6 +125,17 @@ export function assessRiskReward(rawData, scores, tradeSetup) {
   // Round 65: Half-Kelly sizing suggestion (more conservative, common in practice)
   const halfKellyFraction = round(kellyFraction / 2, 4);
 
+  // Round 20 (AutoResearch nightly): volatility-adjusted EV — discount EV when market is in high-vol regime
+  const volatility = rawData?.volatility;
+  let volAdjustedEv = expectedValue;
+  if (volatility && expectedValue != null) {
+    const cautionMult = volatility.caution_multiplier ?? 1.0;
+    volAdjustedEv = round(expectedValue * cautionMult, 4);
+    if (volatility.regime !== 'calm') {
+      notes.push(`Volatility regime "${volatility.regime}" (caution ${cautionMult}) → vol-adjusted EV: ${volAdjustedEv}.`);
+    }
+  }
+
   return {
     rr_ratio: rrRatio,
     probability_tp1: pTP1,
@@ -133,6 +144,7 @@ export function assessRiskReward(rawData, scores, tradeSetup) {
     half_kelly_fraction: halfKellyFraction,
     position_size_suggestion: positionSizeSuggestion,
     expected_value: expectedValue,
+    vol_adjusted_ev: volAdjustedEv,
     ev_label: evLabel,
     notes,
   };

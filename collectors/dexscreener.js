@@ -142,6 +142,26 @@ export async function collectDexScreener(projectName) {
     else if (totalLiquidity >= 100_000) liquidityCategory = 'shallow';
     else if (totalLiquidity > 0) liquidityCategory = 'very_shallow';
 
+    // Round 3 (AutoResearch nightly): Liquidity health score (0–100) combining depth + diversity + pair quality
+    const liquidityHealthScore = (() => {
+      let lhs = 0;
+      // Depth component (0-40)
+      if (totalLiquidity >= 10_000_000) lhs += 40;
+      else if (totalLiquidity >= 1_000_000) lhs += 30;
+      else if (totalLiquidity >= 500_000) lhs += 20;
+      else if (totalLiquidity >= 100_000) lhs += 10;
+      else if (totalLiquidity >= 10_000) lhs += 5;
+      // Diversity component (0-30)
+      if (dexNames.size >= 5) lhs += 30;
+      else if (dexNames.size >= 3) lhs += 20;
+      else if (dexNames.size >= 2) lhs += 10;
+      // Quality component: decent pairs (0-30)
+      if (decentPairsCount >= 5) lhs += 30;
+      else if (decentPairsCount >= 3) lhs += 20;
+      else if (decentPairsCount >= 1) lhs += 10;
+      return lhs;
+    })();
+
     return {
       ...fallback,
       dex_volume_24h: totalVolume24h > 0 ? totalVolume24h : null,
@@ -163,6 +183,7 @@ export async function collectDexScreener(projectName) {
       decent_pairs_count: decentPairsCount,
       dex_diversity_score: dexDiversityScore,
       liquidity_category: liquidityCategory,
+      liquidity_health_score: liquidityHealthScore,
       error: null,
     };
   } catch (error) {

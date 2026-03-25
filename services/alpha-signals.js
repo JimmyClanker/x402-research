@@ -276,6 +276,94 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // ── Price-based alpha signals (migrated from price-alerts.js) ──
+
+  const c1hPrice = safeN(market.price_change_pct_1h, NaN);
+  const c30dPrice = safeN(market.price_change_pct_30d, NaN);
+  const athPrice = safeN(market.ath, NaN);
+
+  // 22. Flash pump: 1h > +15% (caution: potential FOMO trap)
+  if (Number.isFinite(c1hPrice) && c1hPrice >= 15) {
+    signals.push({
+      signal: 'flash_pump',
+      strength: c1hPrice >= 30 ? 'strong' : 'moderate',
+      detail: `Flash pump detected: +${c1hPrice.toFixed(1)}% in 1h. Potential FOMO trap — wait for consolidation before entering.`,
+    });
+  }
+
+  // 23. ATH breakout: price at or above ATH (enhance existing near_ath_breakout signal)
+  // Note: near_ath_breakout already exists (signal #8), so we only add breakout if ATH distance >= 0
+  if (Number.isFinite(athDistancePct) && athDistancePct >= 0 && Number.isFinite(athPrice)) {
+    signals.push({
+      signal: 'ath_breakout',
+      strength: 'strong',
+      detail: `Price is at/above ATH ($${athPrice.toFixed(4)}) — confirmed breakout into price discovery territory.`,
+    });
+  }
+
+  // 24. Recovery from prolonged downtrend: 7d positive after 30d negative
+  // Note: c7d already declared at line 225
+  if (Number.isFinite(c7d) && Number.isFinite(c30dPrice) && c7d >= 10 && c30dPrice <= -20) {
+    signals.push({
+      signal: 'recovery_from_low',
+      strength: 'moderate',
+      detail: `Recovery signal: +${c7d.toFixed(1)}% this week despite ${c30dPrice.toFixed(1)}% monthly drawdown — potential trend reversal forming.`,
+    });
+  }
+
+  // 25. Volume surge: volume > 50% of market cap
+  const volRatio = volume > 0 && mcap > 0 ? volume / mcap : 0;
+  if (volRatio >= 0.5) {
+    signals.push({
+      signal: 'volume_surge',
+      strength: volRatio >= 1.0 ? 'strong' : 'moderate',
+      detail: `Extraordinary volume: $${(volume / 1e6).toFixed(1)}M (${(volRatio * 100).toFixed(0)}% of market cap in 24h) — unusually high trading interest.`,
+    });
+  }
+
+  // Round 26 (AutoResearch nightly): Price-volume divergence from momentum service
+  const pvDiv = rawData?.momentum?.price_vol_divergence ?? null;
+  if (pvDiv === 'bullish_accumulation') {
+    signals.push({
+      signal: 'price_volume_divergence_bullish',
+      strength: 'strong',
+      detail: 'High trading volume with flat/minimal price movement — classic silent accumulation pattern, potential pre-breakout signal.',
+    });
+  } else if (pvDiv === 'bearish_low_vol_rally') {
+    // Note: this is a warning, not a signal — handled in red-flags; skip here
+  }
+
+  // Round 13 (AutoResearch nightly): News momentum signal — accelerating news coverage
+  const newsMomentum = social.news_momentum;
+  const veryRecentCount = safeN(social.very_recent_news_count ?? 0);
+  if (newsMomentum === 'accelerating' && veryRecentCount >= 3) {
+    signals.push({
+      signal: 'accelerating_news_coverage',
+      strength: veryRecentCount >= 5 ? 'strong' : 'moderate',
+      detail: `${veryRecentCount} news items in the last 3 days vs overall window — coverage is accelerating, suggesting a fresh catalyst or rising narrative interest.`,
+    });
+  }
+
+  // Round 8 (AutoResearch nightly): Revenue-to-fees ratio above 30% = strong value capture
+  const revenueToFees = safeN(rawData?.onchain?.revenue_to_fees_ratio ?? null, NaN);
+  if (Number.isFinite(revenueToFees) && revenueToFees >= 0.30) {
+    signals.push({
+      signal: 'strong_revenue_capture',
+      strength: revenueToFees >= 0.50 ? 'strong' : 'moderate',
+      detail: `Protocol captures ${(revenueToFees * 100).toFixed(0)}% of fees as revenue — strong value accrual to token holders.`,
+    });
+  }
+
+  // Round 8 (AutoResearch nightly): Liquidity health score above 70 = well-distributed DEX presence
+  const liqHealth = safeN(rawData?.dex?.liquidity_health_score ?? null, NaN);
+  if (Number.isFinite(liqHealth) && liqHealth >= 70) {
+    signals.push({
+      signal: 'strong_dex_liquidity_health',
+      strength: liqHealth >= 85 ? 'strong' : 'moderate',
+      detail: `DEX liquidity health score is ${liqHealth}/100 — deep, diversified liquidity across multiple venues.`,
+    });
+  }
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {

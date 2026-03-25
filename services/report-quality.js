@@ -190,12 +190,28 @@ export function scoreReportQuality(rawData, scores, analysis) {
   const scoreSpread = overallScore > 7 || overallScore < 4 ? 'polarized' : 'ambiguous';
   const verdictConfidence = overallConf >= 70 && score >= 70 ? 'high' : overallConf >= 50 && score >= 50 ? 'medium' : 'low';
 
+  // Round 4 (AutoResearch nightly): Compute dimension coverage — percentage of 7 dimensions with valid scores
+  const SCORE_DIMS = ['market_strength', 'onchain_health', 'social_momentum', 'development', 'tokenomics_health', 'distribution', 'risk'];
+  const dimCoverage = SCORE_DIMS.filter((d) => scores?.[d]?.score != null).length;
+  const dimCoveragePct = Math.round((dimCoverage / SCORE_DIMS.length) * 100);
+  if (dimCoveragePct < 60) {
+    issues.push(`Only ${dimCoverage}/${SCORE_DIMS.length} scoring dimensions have data — report accuracy is limited.`);
+    score = Math.max(0, score - 8);
+  }
+
+  // Round 4 (AutoResearch nightly): warn if LLM returned fallback verdict (no API key)
+  if (analysis?.is_fallback === true) {
+    issues.push('LLM analysis is a fallback (no xAI API key or timeout) — verdict is algorithmic only.');
+    score = Math.max(0, score - 15);
+  }
+
   return {
-    quality_score: score,
+    quality_score: Math.max(0, Math.min(100, score)),
     grade,
     issues,
     data_freshness_score: freshness,
     verdict_confidence: verdictConfidence,
     score_spread: scoreSpread,
+    dimension_coverage_pct: dimCoveragePct,
   };
 }

@@ -132,5 +132,19 @@ export function generateThesis(projectName, rawData = {}, scores = {}, redFlags 
     ? `${projectName} — ${verdict}: ${bullSignalText || strongest[0] || 'fundamentals'} justify entry${priceRangeNote}.`
     : `${projectName} — ${verdict}: ${bearFlagText || weakest[0] || 'weak fundamentals'} — avoid until conditions improve.`;
 
-  return { bull_case, bear_case, neutral_case, one_liner: oneLiner };
+  // Round 11 (AutoResearch nightly): Add key metrics snapshot to thesis for quick context
+  const m = rawData?.market ?? {};
+  const o = rawData?.onchain ?? {};
+  const price = m.current_price ?? m.price;
+  const mcap = m.market_cap;
+  const tvl = o.tvl;
+  const c7d = m.price_change_pct_7d;
+  const metricsSnap = [
+    price != null ? `$${Number(price).toLocaleString('en-US', { maximumSignificantDigits: 5 })}` : null,
+    mcap != null ? `MCap $${(Number(mcap) / 1e6).toFixed(1)}M` : null,
+    tvl != null ? `TVL $${(Number(tvl) / 1e6).toFixed(1)}M` : null,
+    c7d != null ? `7d ${Number(c7d) >= 0 ? '+' : ''}${Number(c7d).toFixed(1)}%` : null,
+  ].filter(Boolean).join(' | ');
+
+  return { bull_case, bear_case, neutral_case, one_liner: oneLiner, metrics_snapshot: metricsSnap || null };
 }

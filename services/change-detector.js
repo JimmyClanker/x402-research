@@ -153,6 +153,22 @@ export function detectChanges(db, projectName, currentData) {
     ? parseFloat((currOverallScore - prevOverallScore).toFixed(2))
     : null;
 
+  // Round 10 (AutoResearch nightly): Track red flag count changes between scans
+  const prevRedFlags = Array.isArray(prevReport?.red_flags) ? prevReport.red_flags.length : 0;
+  const currRedFlags = Array.isArray(currentData?.rawData?.red_flags) ? currentData.rawData.red_flags.length : 0;
+  const prevCriticalFlags = Array.isArray(prevReport?.red_flags) ? prevReport.red_flags.filter((f) => f.severity === 'critical').length : 0;
+  const currCriticalFlags = Array.isArray(currentData?.rawData?.red_flags) ? currentData.rawData.red_flags.filter((f) => f.severity === 'critical').length : 0;
+  const flagChange = {
+    metric: 'red_flag_count',
+    previous: prevRedFlags,
+    current: currRedFlags,
+    change: currRedFlags - prevRedFlags,
+    critical_change: currCriticalFlags - prevCriticalFlags,
+    direction: currRedFlags < prevRedFlags ? 'improved' : currRedFlags > prevRedFlags ? 'worsened' : 'flat',
+    significant: Math.abs(currRedFlags - prevRedFlags) >= 2 || Math.abs(currCriticalFlags - prevCriticalFlags) >= 1,
+  };
+  changes.push(flagChange);
+
   return {
     has_previous: true,
     previous_scan_at: previousRow.scanned_at,
@@ -161,5 +177,6 @@ export function detectChanges(db, projectName, currentData) {
     score_momentum: scoreMomentum,
     verdict_direction: verdictDirection,
     overall_score_delta: overallScoreDelta,
+    flag_change: flagChange,
   };
 }

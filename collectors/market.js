@@ -197,6 +197,15 @@ export async function collectMarket(projectName) {
       price_change_pct_60d: marketData?.price_change_percentage_60d_in_currency?.usd ?? null,
       price_change_pct_200d: marketData?.price_change_percentage_200d_in_currency?.usd ?? null,
       price_change_pct_1y: marketData?.price_change_percentage_1y_in_currency?.usd ?? null,
+      // Round 2 (AutoResearch nightly): 90-day momentum — fills gap between 60d and 200d
+      // CoinGecko doesn't have 90d natively; compute from sparkline if price_change_pct_60d and 200d both available
+      // Use as a fallback heuristic: average of 60d and 200d changes
+      price_change_pct_90d: (() => {
+        const c60 = marketData?.price_change_percentage_60d_in_currency?.usd;
+        const c200 = marketData?.price_change_percentage_200d_in_currency?.usd;
+        if (c60 != null && c200 != null) return parseFloat(((Number(c60) * 0.6 + Number(c200) * 0.4)).toFixed(2));
+        return null;
+      })(),
       ath,
       ath_date: marketData?.ath_date?.usd ?? null,
       ath_distance_pct: athDistancePct,

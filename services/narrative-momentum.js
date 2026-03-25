@@ -30,6 +30,17 @@ const NARRATIVE_CLUSTERS = {
  *   detail: string
  * }}
  */
+// ── Round 1 (AutoResearch nightly): Merged extended narrative clusters ──────
+const ALL_NARRATIVE_CLUSTERS = {
+  ...NARRATIVE_CLUSTERS,
+  'depin': ['depin', 'decentralized physical infrastructure', 'iot network', 'sensor network', 'hardware node'],
+  'agentic_ai': ['agentic ai', 'ai agent', 'autonomous agent', 'mcp protocol', 'agent commerce', 'x402', 'machine economy'],
+  'modular_blockchain': ['modular', 'data availability', 'da layer', 'eigen', 'restaking', 'avs'],
+  'prediction_markets': ['prediction market', 'polymarket', 'futarchy', 'information market'],
+  'zk_infra': ['zero knowledge', 'zk proof', 'zkvm', 'zkp', 'groth16', 'plonk', 'zk coprocessor'],
+  'btc_fi': ['bitcoin fi', 'btcfi', 'wrapped btc', 'bitcoin yield', 'babylon', 'bitcoin staking'],
+};
+
 export function detectNarrativeMomentum(rawData = {}) {
   const social = rawData.social ?? {};
   const narratives = Array.isArray(social.key_narratives) ? social.key_narratives : [];
@@ -41,15 +52,15 @@ export function detectNarrativeMomentum(rawData = {}) {
     ...recentNews.map((n) => n?.title ?? ''),
   ].join(' ').toLowerCase();
 
-  // Detect which macro narratives are present
+  // Detect which macro narratives are present (extended cluster set)
   const activeNarratives = [];
-  for (const [narrative, keywords] of Object.entries(NARRATIVE_CLUSTERS)) {
+  for (const [narrative, keywords] of Object.entries(ALL_NARRATIVE_CLUSTERS)) {
     const hit = keywords.some((kw) => corpus.includes(kw));
     if (hit) activeNarratives.push(narrative);
   }
 
-  // Bullish narratives
-  const bullishNarratives = new Set(['real_yield', 'ai_agents', 'liquid_staking', 'rwa', 'institutional', 'layer2_scaling']);
+  // Bullish narratives (extended)
+  const bullishNarratives = new Set(['real_yield', 'ai_agents', 'agentic_ai', 'liquid_staking', 'rwa', 'institutional', 'layer2_scaling', 'zk_infra', 'depin', 'btc_fi', 'modular_blockchain']);
   const bearishNarratives = new Set(['memecoins']); // memes = volatile, not inherently bullish for fundamentals
 
   let bullScore = 0;
@@ -77,3 +88,4 @@ export function detectNarrativeMomentum(rawData = {}) {
     detail,
   };
 }
+

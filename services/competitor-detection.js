@@ -6,6 +6,11 @@
 const DEFILLAMA_PROTOCOLS_URL = 'https://api.llama.fi/protocols';
 const FETCH_TIMEOUT_MS = 8000;
 
+// Round 16 (AutoResearch nightly): In-memory cache for protocols list (avoids repeated 10MB fetch per scan)
+let _protocolsCache = null;
+let _protocolsCacheAt = 0;
+const PROTOCOLS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 function safeN(v, fb = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fb;
@@ -26,12 +31,19 @@ function fmtTvl(tvl) {
 }
 
 async function fetchProtocols() {
+  // Round 16: serve from cache if fresh
+  if (_protocolsCache && Date.now() - _protocolsCacheAt < PROTOCOLS_CACHE_TTL_MS) {
+    return _protocolsCache;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const resp = await fetch(DEFILLAMA_PROTOCOLS_URL, { signal: controller.signal });
     if (!resp.ok) throw new Error(`DeFiLlama returned ${resp.status}`);
-    return await resp.json();
+    const data = await resp.json();
+    _protocolsCache = data;
+    _protocolsCacheAt = Date.now();
+    return data;
   } finally {
     clearTimeout(timeout);
   }

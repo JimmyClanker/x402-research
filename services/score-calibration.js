@@ -62,5 +62,21 @@ export function calibrateScores(db, rawScores) {
     };
   }
 
-  return { scores: rawScores, calibrated };
+  // Round 17 (AutoResearch nightly): Add calibration summary — overall z-score and outlier detection
+  const calibratedDims = Object.values(calibrated).filter((c) => c.calibrated && c.z_score != null);
+  const avgZScore = calibratedDims.length > 0
+    ? calibratedDims.reduce((s, c) => s + c.z_score, 0) / calibratedDims.length
+    : null;
+  const outliers = calibratedDims.filter((c) => Math.abs(c.z_score) > 2).length;
+
+  return {
+    scores: rawScores,
+    calibrated,
+    summary: {
+      avg_z_score: avgZScore != null ? parseFloat(avgZScore.toFixed(3)) : null,
+      outlier_dimensions: outliers,
+      calibration_coverage: `${calibratedDims.length}/${DIMENSIONS.length}`,
+      has_full_calibration: calibratedDims.length === DIMENSIONS.length,
+    },
+  };
 }

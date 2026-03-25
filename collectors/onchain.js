@@ -337,6 +337,16 @@ export async function collectOnchain(projectName) {
       tvl_stickiness: tvlStickiness,
       tvl_data_quality: tvlDataQuality,
       protocol_maturity: protocolMaturity,
+      // Round 6 (AutoResearch nightly): governance signals — placeholder populated from DeFiLlama if available
+      governance_proposals_30d: protocol?.governanceProposals ?? null,
+      governance_participation_pct: protocol?.governanceParticipation ?? null,
+      // Per-chain TVL dominance — largest single chain as % of total TVL (concentration risk)
+      chain_tvl_dominance_pct: (() => {
+        const vals = Object.values(chainTvl ?? {}).map(Number).filter(Number.isFinite);
+        if (!vals.length || currentTvl <= 0) return null;
+        const maxChainTvl = Math.max(...vals);
+        return parseFloat(((maxChainTvl / currentTvl) * 100).toFixed(1));
+      })(),
       error: null,
     };
   } catch (error) {

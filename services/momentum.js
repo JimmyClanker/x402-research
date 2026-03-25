@@ -131,6 +131,25 @@ export function calculateMomentum(rawData = {}, previousScanData = null) {
       ? 'declining'
       : 'stable';
 
+  // Round 25 (AutoResearch nightly): Price-volume divergence signal
+  // High volume + neutral/down price = potential accumulation (bullish divergence)
+  // Low volume + up price = potential fake rally (bearish divergence)
+  const m = rawData.market ?? {};
+  const mcap = safeN(m.market_cap);
+  const vol24h = safeN(m.total_volume);
+  const c24h = safeN(m.price_change_pct_24h);
+  let priceVolDivergence = 'none';
+  if (mcap > 0 && vol24h > 0 && c24h !== null) {
+    const volMcapRatio = vol24h / mcap;
+    if (volMcapRatio > 0.25 && Math.abs(c24h) < 3) {
+      priceVolDivergence = 'bullish_accumulation'; // High vol, flat price = silent accumulation
+    } else if (volMcapRatio < 0.02 && c24h > 5) {
+      priceVolDivergence = 'bearish_low_vol_rally'; // Low vol rally = fragile, not conviction
+    } else if (volMcapRatio > 0.3 && c24h < -5) {
+      priceVolDivergence = 'panic_selling'; // High vol dump
+    }
+  }
+
   return {
     market:     { direction: marketMomentum },
     onchain:    { direction: onchainMomentum },
@@ -139,5 +158,6 @@ export function calculateMomentum(rawData = {}, previousScanData = null) {
     tokenomics: { direction: tokenomicsMomentum },
     dex:        { direction: dexMomentum },
     overall:    { direction: overallMomentum },
+    price_vol_divergence: priceVolDivergence,
   };
 }

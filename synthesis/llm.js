@@ -111,6 +111,211 @@ function buildFactRegistry(rawData = {}) {
   return facts;
 }
 
+/**
+ * Formats a number into human-readable form (e.g. $1.2M, $68.2B).
+ */
+function formatNumber(value) {
+  if (value == null || !Number.isFinite(value)) return 'n/a';
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `$${(value / 1e3).toFixed(1)}K`;
+  return `$${value.toFixed(2)}`;
+}
+
+/**
+ * Builds a compact, human-readable summary of rawData (replaces JSON dump).
+ * Exported so tests can import it.
+ */
+export function buildDataSummary(rawData = {}) {
+  const lines = ['=== VERIFIED DATA (from collectors) ===\n'];
+  const gaps = [];
+
+  // Helper to add a data point
+  const add = (label, value, formatter = (v) => v) => {
+    if (value != null && value !== '') {
+      return `- ${label}: ${formatter(value)}`;
+    }
+    return null;
+  };
+
+  // MARKET [CoinGecko]
+  const market = rawData.market || {};
+  if (!market.error && rawData.market) {
+    const marketLines = [];
+    marketLines.push(add('Price', market.current_price ?? market.price, formatNumber));
+    marketLines.push(add('Market Cap', market.market_cap, (v) => `${formatNumber(v)} (rank #${market.market_cap_rank ?? 'n/a'})`));
+    marketLines.push(add('24h Volume', market.total_volume, formatNumber));
+    marketLines.push(add('24h Change', market.price_change_percentage_24h, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`));
+    marketLines.push(add('7d Change', market.price_change_percentage_7d_in_currency, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`));
+    marketLines.push(add('30d Change', market.price_change_percentage_30d_in_currency, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`));
+    marketLines.push(add('ATH Distance', market.ath_distance_pct, (v) => `${v.toFixed(1)}%`));
+    marketLines.push(add('FDV', market.fully_diluted_valuation ?? market.fdv, formatNumber));
+
+    const validMarket = marketLines.filter(Boolean);
+    if (validMarket.length) {
+      lines.push('MARKET [CoinGecko]:');
+      lines.push(...validMarket);
+      const missing = [];
+      if (market.price_change_percentage_30d_in_currency == null) missing.push('30d change');
+      if (missing.length) lines.push(`(missing: ${missing.join(', ')})`);
+      lines.push('');
+    } else {
+      gaps.push('market (no data)');
+    }
+  } else {
+    gaps.push('market (no data)');
+  }
+
+  // ONCHAIN [DeFiLlama]
+  const onchain = rawData.onchain || {};
+  if (!onchain.error && rawData.onchain) {
+    const onchainLines = [];
+    onchainLines.push(add('TVL', onchain.tvl, formatNumber));
+    onchainLines.push(add('TVL 7d Change', onchain.tvl_change_7d, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`));
+    onchainLines.push(add('TVL 30d Change', onchain.tvl_change_30d, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`));
+    onchainLines.push(add('Fees 7d', onchain.fees_7d, formatNumber));
+    onchainLines.push(add('Revenue 7d', onchain.revenue_7d, formatNumber));
+    onchainLines.push(add('Treasury', onchain.treasury_balance, formatNumber));
+
+    const validOnchain = onchainLines.filter(Boolean);
+    if (validOnchain.length) {
+      lines.push('ONCHAIN [DeFiLlama]:');
+      lines.push(...validOnchain);
+      const missing = [];
+      if (onchain.treasury_balance == null) missing.push('treasury');
+      if (missing.length) lines.push(`(missing: ${missing.join(', ')})`);
+      lines.push('');
+    } else {
+      gaps.push('onchain (no data)');
+    }
+  } else {
+    gaps.push('onchain (no data)');
+  }
+
+  // SOCIAL [Exa/X]
+  const social = rawData.social || {};
+  if (!social.error && rawData.social) {
+    const socialLines = [];
+    const mentions = social.filtered_mentions ?? social.mentions;
+    if (mentions != null) {
+      socialLines.push(`- Mentions: ${mentions}${social.filtered_mentions != null && social.mentions != null ? ` (filtered: ${social.filtered_mentions})` : ''}`);
+    }
+    socialLines.push(add('Sentiment Score', social.sentiment_score, (v) => {
+      const label = v > 0.2 ? 'bullish-leaning' : v < -0.2 ? 'bearish-leaning' : 'neutral';
+      return `${v.toFixed(1)} (${label})`;
+    }));
+    socialLines.push(add('Bot Ratio', social.bot_ratio, (v) => `${(v * 100).toFixed(0)}%`));
+
+    const validSocial = socialLines.filter(Boolean);
+    if (validSocial.length) {
+      lines.push('SOCIAL [Exa/X]:');
+      lines.push(...validSocial);
+      lines.push('');
+    } else {
+      gaps.push('social (no data)');
+    }
+  } else {
+    gaps.push('social (no data)');
+  }
+
+  // GITHUB [GitHub API]
+  const github = rawData.github || {};
+  if (!github.error && rawData.github) {
+    const githubLines = [];
+    githubLines.push(add('Commits 90d', github.commits_90d));
+    githubLines.push(add('Contributors', github.contributors));
+    githubLines.push(add('Stars', github.stars));
+    githubLines.push(add('Commit Trend', github.commit_trend));
+
+    const validGithub = githubLines.filter(Boolean);
+    if (validGithub.length) {
+      lines.push('GITHUB [GitHub API]:');
+      lines.push(...validGithub);
+      const missing = [];
+      if (github.languages == null) missing.push('languages');
+      if (missing.length) lines.push(`(missing: ${missing.join(', ')})`);
+      lines.push('');
+    } else {
+      gaps.push('github (no data)');
+    }
+  } else {
+    gaps.push('github (no data)');
+  }
+
+  // DEX [DexScreener]
+  const dex = rawData.dex || {};
+  if (!dex.error && rawData.dex) {
+    const dexLines = [];
+    dexLines.push(add('DEX Price', dex.dex_price_usd, formatNumber));
+    dexLines.push(add('Liquidity', dex.dex_liquidity_usd, formatNumber));
+    dexLines.push(add('Pair Count', dex.dex_pair_count));
+    dexLines.push(add('Buy/Sell Ratio', dex.buy_sell_ratio, (v) => v.toFixed(1)));
+
+    const validDex = dexLines.filter(Boolean);
+    if (validDex.length) {
+      lines.push('DEX [DexScreener]:');
+      lines.push(...validDex);
+      lines.push('');
+    } else {
+      gaps.push('dex (no data)');
+    }
+  } else {
+    gaps.push('dex (no data)');
+  }
+
+  // REDDIT
+  const reddit = rawData.reddit || {};
+  if (!reddit.error && (reddit.post_count != null || reddit.sentiment != null)) {
+    const redditLines = [];
+    redditLines.push(add('Post Count', reddit.post_count));
+    redditLines.push(add('Sentiment', reddit.sentiment));
+    const validReddit = redditLines.filter(Boolean);
+    if (validReddit.length) {
+      lines.push('REDDIT:');
+      lines.push(...validReddit);
+      lines.push('');
+    }
+  } else {
+    gaps.push('reddit (no data)');
+  }
+
+  // HOLDERS
+  const holders = rawData.holders || {};
+  if (!holders.error && holders.top10_concentration_pct != null) {
+    lines.push('HOLDERS:');
+    lines.push(add('Top 10 Concentration', holders.top10_concentration_pct, (v) => `${v.toFixed(1)}%`));
+    lines.push('');
+  } else {
+    gaps.push('holders (no data)');
+  }
+
+  // TOKENOMICS
+  const tokenomics = rawData.tokenomics || {};
+  if (!tokenomics.error && tokenomics.pct_circulating != null) {
+    lines.push('TOKENOMICS:');
+    lines.push(add('% Circulating', tokenomics.pct_circulating, (v) => `${v.toFixed(1)}%`));
+    lines.push('');
+  }
+
+  // CONTRACT
+  const contract = rawData.contract || {};
+  if (!contract.error && contract.verified != null) {
+    lines.push('CONTRACT:');
+    lines.push(add('Verified', contract.verified, (v) => v ? 'Yes' : 'No'));
+    lines.push('');
+  } else {
+    gaps.push('contract (no data)');
+  }
+
+  // Data gaps summary
+  if (gaps.length) {
+    lines.push(`DATA GAPS: ${gaps.join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
 function buildPrompt(projectName, rawData, scores) {
   const overallScore = scores?.overall?.score ?? 0;
   const factRegistry = buildFactRegistry(rawData);
@@ -298,7 +503,7 @@ function buildPrompt(projectName, rawData, scores) {
     `PROJECT: ${projectName}`,
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
     `FACT_REGISTRY: ${JSON.stringify(factRegistry, null, 2)}`,
-    `RAW_DATA: ${JSON.stringify(rawData, null, 2)}`,
+    `RAW_DATA_SUMMARY:\n${buildDataSummary(rawData)}`,
   ].join('\n\n');
 }
 
@@ -363,7 +568,26 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
 
   return {
     verdict,
-    analysis_text: `${projectName}: overall score ${overallScore}/10. Market ${scores?.market_strength?.score}/10, onchain ${scores?.onchain_health?.score}/10, social ${scores?.social_momentum?.score}/10, dev ${scores?.development?.score}/10, tokenomics ${scores?.tokenomics_health?.score}/10.${error ? ` Fallback used: ${error}.` : ''}`,
+    // Round 5 (AutoResearch nightly): richer fallback analysis_text with more data points
+    analysis_text: (() => {
+      const m = rawData?.market ?? {};
+      const o = rawData?.onchain ?? {};
+      const price = m.current_price ?? m.price;
+      const mcap = m.market_cap;
+      const vol = m.total_volume;
+      const tvl = o.tvl;
+      const c24h = m.price_change_pct_24h;
+      const c7d = m.price_change_pct_7d;
+      const lines = [
+        `${projectName}: algorithmic score ${overallScore}/10 (${verdict}).`,
+        price != null ? `Price $${Number(price).toLocaleString('en-US', { maximumSignificantDigits: 6 })}${c24h != null ? `, ${Number(c24h) >= 0 ? '+' : ''}${Number(c24h).toFixed(1)}% 24h${c7d != null ? `, ${Number(c7d) >= 0 ? '+' : ''}${Number(c7d).toFixed(1)}% 7d` : ''}` : ''}.` : null,
+        mcap != null ? `Market cap $${(Number(mcap) / 1e6).toFixed(1)}M${vol != null ? `, 24h vol $${(Number(vol) / 1e6).toFixed(1)}M` : ''}.` : null,
+        tvl != null ? `TVL $${(Number(tvl) / 1e6).toFixed(1)}M${o.tvl_change_7d != null ? ` (${Number(o.tvl_change_7d) >= 0 ? '+' : ''}${Number(o.tvl_change_7d).toFixed(1)}%/7d)` : ''}.` : null,
+        `Dimension scores — Market ${scores?.market_strength?.score ?? 'n/a'}/10, Onchain ${scores?.onchain_health?.score ?? 'n/a'}/10, Social ${scores?.social_momentum?.score ?? 'n/a'}/10, Dev ${scores?.development?.score ?? 'n/a'}/10, Tokenomics ${scores?.tokenomics_health?.score ?? 'n/a'}/10, Distribution ${scores?.distribution?.score ?? 'n/a'}/10, Risk ${scores?.risk?.score ?? 'n/a'}/10.`,
+        error ? `[Fallback: ${error}]` : null,
+      ].filter(Boolean).join(' ');
+      return lines;
+    })(),
     moat:
       'Requires external qualitative validation; competitive advantage depends on network effects, liquidity, brand, and execution.',
     risks: risks.length ? risks : ['Data coverage is incomplete: further qualitative validation is required.'],
@@ -375,6 +599,8 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
     key_findings: keyFindings.length
       ? keyFindings
       : ['Analysis is based only on local collectors and algorithmic scoring.'],
+    // Round 5 (AutoResearch nightly): mark as fallback so report-quality.js can flag it
+    is_fallback: true,
   };
 }
 
@@ -425,7 +651,7 @@ function clampPct(value, fallback = 50) {
  * Post-LLM validation: cross-check report claims against raw collector data.
  * Flags or sanitizes hallucinated content.
  */
-function validateReport(report, rawData) {
+export function validateReport(report, rawData) {
   const warnings = [];
 
   // 0. Normalize section confidence and enforce provenance fields
@@ -666,7 +892,7 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
 
     `PROJECT: ${projectName}`,
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
-    `RAW_DATA: ${JSON.stringify(rawData, null, 2)}`,
+    `RAW_DATA_SUMMARY:\n${buildDataSummary(rawData)}`,
   ].filter(Boolean).join('\n\n');
 
   // Round 26: retry chain — fast model first, then longer timeout, then fallback

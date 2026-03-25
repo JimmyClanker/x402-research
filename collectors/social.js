@@ -263,6 +263,14 @@ export async function collectSocial(projectName, exaService) {
       ? Math.max(sentimentCounts.bullish, sentimentCounts.bearish, sentimentCounts.neutral) / totalSentiment
       : null;
 
+    // Round 12 (AutoResearch nightly): recent news momentum — more news in last 3 days vs full window
+    const now = Date.now();
+    const recentCutoff3d = now - 3 * 24 * 60 * 60 * 1000;
+    const veryRecentCount = uniqueNews.filter((item) => new Date(item.date || 0).getTime() > recentCutoff3d).length;
+    const newsMomentum = uniqueNews.length > 0
+      ? (veryRecentCount / uniqueNews.length > 0.5 ? 'accelerating' : veryRecentCount > 0 ? 'steady' : 'declining')
+      : 'no_data';
+
     return {
       ...fallback,
       mentions: rawItems.length,
@@ -280,6 +288,9 @@ export async function collectSocial(projectName, exaService) {
       regulatory_mentions: regulatoryMentions,
       partnership_mentions: partnershipMentions,
       upgrade_mentions: upgradeMentions,
+      // Round 12 (AutoResearch nightly): news recency signals
+      very_recent_news_count: veryRecentCount,
+      news_momentum: newsMomentum,
       error: settled.every((entry) => entry.status === 'rejected') ? 'All Exa queries failed' : null,
     };
   } catch (error) {
