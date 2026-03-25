@@ -51,15 +51,44 @@ export async function collectDexScreener(projectName) {
       (a, b) => Number(b?.volume?.h24 || 0) - Number(a?.volume?.h24 || 0)
     );
 
-    const topPair = sorted[0];
+    // === CRITICAL: Filter out fake/scam pairs with inflated liquidity ===
+    // DexScreener returns pairs where liquidity is fake (billions of $ but $4 volume).
+    // Heuristic: if a pair has >$1M liquidity but <$100 24h volume, it's likely fake.
+    // Also cap liquidity/volume ratio: legitimate pairs rarely exceed 1000:1.
+    const validPairs = sorted.filter((pair) => {
+      const vol = Number(pair?.volume?.h24 || 0);
+      const liq = Number(pair?.liquidity?.usd || 0);
 
-    // Aggregate totals across all pairs
+      // Filter 1: Pairs with huge liquidity but near-zero volume are fake
+      if (liq > 1_000_000 && vol < 100) return false;
+
+      // Filter 2: Liquidity/volume ratio sanity check
+      // Real trading pairs rarely have liq > 1000x daily volume
+      if (vol > 0 && liq / vol > 5000) return false;
+
+      // Filter 3: Pairs with zero volume AND >$10K liquidity are suspicious
+      if (vol === 0 && liq > 10_000) return false;
+
+      return true;
+    });
+
+    // Use filtered pairs for aggregation, but keep original sorted for topPair fallback
+    const effectivePairs = validPairs.length > 0 ? validPairs : sorted.slice(0, 1);
+    const topPair = effectivePairs[0] || sorted[0];
+
+    // Log filtering stats if significant
+    if (validPairs.length < pairs.length) {
+      const removed = pairs.length - validPairs.length;
+      console.log(`[dexscreener] Filtered ${removed}/${pairs.length} suspicious pairs for ${projectName} (fake liquidity)`);
+    }
+
+    // Aggregate totals across FILTERED pairs only
     let totalVolume24h = 0;
     let totalLiquidity = 0;
     const dexNames = new Map(); // dexId → total volume
     const chains = new Set();
 
-    for (const pair of pairs) {
+    for (const pair of effectivePairs) {
       const vol = Number(pair?.volume?.h24 || 0);
       const liq = Number(pair?.liquidity?.usd || 0);
       totalVolume24h += vol;
@@ -93,10 +122,10 @@ export async function collectDexScreener(projectName) {
     const topPairLiq = Number(topPair?.liquidity?.usd || 0);
     const topPairLiqPct = totalLiquidity > 0 ? (topPairLiq / totalLiquidity) * 100 : null;
 
-    // Round 2: aggregate buy/sell pressure from txns across all pairs
+    // Round 2: aggregate buy/sell pressure from txns across FILTERED pairs
     let totalBuys24h = 0;
     let totalSells24h = 0;
-    for (const pair of pairs) {
+    for (const pair of effectivePairs) {
       totalBuys24h += Number(pair?.txns?.h24?.buys || 0);
       totalSells24h += Number(pair?.txns?.h24?.sells || 0);
     }
@@ -124,13 +153,13 @@ export async function collectDexScreener(projectName) {
       }
     }
 
-    // Round 39: average liquidity per pair (quality indicator)
-    const avgLiquidityPerPair = pairs.length > 0 && totalLiquidity > 0
-      ? Math.round(totalLiquidity / pairs.length)
+    // Round 39: average liquidity per pair (quality indicator) — use filtered pairs
+    const avgLiquidityPerPair = effectivePairs.length > 0 && totalLiquidity > 0
+      ? Math.round(totalLiquidity / effectivePairs.length)
       : null;
 
-    // Round 39: count pairs with meaningful liquidity (>$50K)
-    const decentPairsCount = pairs.filter((p) => Number(p?.liquidity?.usd ?? 0) >= 50_000).length;
+    // Round 39: count pairs with meaningful liquidity (>$50K) — among filtered pairs
+    const decentPairsCount = effectivePairs.filter((p) => Number(p?.liquidity?.usd ?? 0) >= 50_000).length;
 
     // Round 11 (AutoResearch batch): DEX diversity score — how spread across DEXs?
     const dexDiversityScore = dexNames.size >= 5 ? 'high' : dexNames.size >= 3 ? 'moderate' : dexNames.size >= 2 ? 'low' : 'concentrated';
@@ -166,7 +195,8 @@ export async function collectDexScreener(projectName) {
       ...fallback,
       dex_volume_24h: totalVolume24h > 0 ? totalVolume24h : null,
       dex_liquidity_usd: totalLiquidity > 0 ? totalLiquidity : null,
-      dex_pair_count: pairs.length,
+      dex_pair_count: effectivePairs.length,
+      dex_pairs_filtered: pairs.length - effectivePairs.length,
       top_dex_name: topDexName || topPair?.dexId || null,
       dex_price_usd: Number(topPair?.priceUsd || 0) || null,
       dex_chains: [...chains],
