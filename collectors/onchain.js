@@ -55,7 +55,7 @@ function similarityScore(projectName, protocol) {
   if (name.includes(target)) score += 60;
   if (target.includes(name) && name) score += 50;
   if (slug.includes(target)) score += 45;
-  if (symbol && target.includes(symbol)) score += 35;
+  if (symbol && symbol.length >= 3 && target.includes(symbol)) score += 35;
   if (protocol?.category) score += 3;
   if (protocol?.chains?.length) score += 2;
   return score;
@@ -207,7 +207,7 @@ export async function collectOnchain(projectName) {
     }
 
     // Protocol path (DeFi protocols like Aave, Uniswap, etc.)
-    if (!match?.protocol?.slug || match.score < 20) {
+    if (!match?.protocol?.slug || match.score < 45) {
       return { ...fallback, error: 'DeFiLlama protocol not found' };
     }
 
