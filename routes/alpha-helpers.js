@@ -249,7 +249,15 @@ export function buildResponse({ projectName, rawData, scores, analysis, mode }) 
   };
 }
 
+import { runPipeline } from '../analysis/pipeline.js';
+
 export async function runAnalysis({ projectName, exaService, mode, config, collectAllFn, collectorCache, db }) {
+  // Delegate to the structured 3-phase pipeline
+  return runPipeline({ projectName, exaService, mode, config, collectAllFn, collectorCache, db });
+}
+
+// Legacy implementation kept for reference — the pipeline calls the same services
+export async function _runAnalysisLegacy({ projectName, exaService, mode, config, collectAllFn, collectorCache, db }) {
   const rawData = await collectAllFn(projectName, exaService, collectorCache);
   const scores = calculateScores(rawData);
 

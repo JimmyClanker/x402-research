@@ -654,6 +654,28 @@ export function calculateScores(data) {
   distribution.confidence      = confidence.tokenomics; // shares tokenomics data source
   risk.confidence              = Math.round((confidence.market + confidence.onchain + confidence.tokenomics) / 3);
 
+  // Round (Pipeline): Confidence-weighted scoring — low confidence pulls toward neutral (5.0)
+  // adjusted = score * (confidence/100) + 5.0 * (1 - confidence/100)
+  const NEUTRAL = 5.0;
+  const applyConfidenceWeight = (dim) => {
+    if (dim.confidence == null || dim.score == null) return;
+    const conf = dim.confidence / 100; // 0-1
+    dim.raw_score = dim.score;
+    dim.score = clampScore(dim.score * conf + NEUTRAL * (1 - conf));
+    dim.confidence_label = dim.confidence < 30 ? 'Unreliable'
+      : dim.confidence < 60 ? 'Low'
+      : dim.confidence < 80 ? 'Moderate'
+      : 'High';
+  };
+
+  applyConfidenceWeight(market_strength);
+  applyConfidenceWeight(onchain_health);
+  applyConfidenceWeight(social_momentum);
+  applyConfidenceWeight(development);
+  applyConfidenceWeight(tokenomics_health);
+  applyConfidenceWeight(distribution);
+  applyConfidenceWeight(risk);
+
   // 7-dimension weights (Round 11): original 6 each reduced ~1.5%, new risk at 10%
   const WEIGHTS = {
     market:      0.19,

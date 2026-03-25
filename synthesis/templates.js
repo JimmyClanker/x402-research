@@ -273,3 +273,208 @@ export function formatReport(projectName, rawData, scores, llmAnalysis) {
 
   return { json, text, html };
 }
+
+/**
+ * Generate a Markdown report.
+ * Clean, portable, linkable format.
+ */
+export function formatMarkdown(projectName, rawData, scores, llmAnalysis) {
+  const keyMetrics = extractKeyMetrics(rawData, scores);
+  const conviction = rawData?.conviction;
+  const crossDim = rawData?.cross_dimensional;
+  const riskMatrix = rawData?.risk_matrix;
+
+  const lines = [
+    `# 🧠 Alpha Scanner — ${projectName}`,
+    '',
+    `**Verdict:** ${llmAnalysis?.verdict || 'HOLD'}`,
+    `**Overall Score:** ${keyMetrics.overall_score_fmt}`,
+    `**Generated:** ${new Date().toISOString()}`,
+    ...(conviction ? [`**Conviction:** ${conviction.score}/100 (${conviction.label})`] : []),
+    '',
+    '## 💎 Key Metrics',
+    '',
+    `| Metric | Value |`,
+    `|--------|-------|`,
+    `| Price | ${keyMetrics.price_fmt} |`,
+    `| Market Cap | ${keyMetrics.market_cap_fmt} |`,
+    `| TVL | ${keyMetrics.tvl_fmt} |`,
+    `| 24h Volume | ${keyMetrics.volume_24h_fmt} |`,
+    '',
+    '## 📊 Scores',
+    '',
+    `| Dimension | Score | Confidence |`,
+    `|-----------|-------|------------|`,
+    ...['market_strength', 'onchain_health', 'social_momentum', 'development', 'tokenomics_health', 'distribution', 'risk'].map(dim => {
+      const s = scores?.[dim];
+      return `| ${dim.replace(/_/g, ' ')} | ${s?.score ?? 'n/a'}/10 | ${s?.confidence_label ?? s?.confidence ?? 'n/a'} |`;
+    }),
+    `| **Overall** | ${scores?.overall?.score ?? 'n/a'}/10 | ${scores?.overall?.overall_confidence ?? 'n/a'}% |`,
+    '',
+    '## 🛡️ Moat',
+    '',
+    llmAnalysis?.moat || 'n/a',
+    '',
+    '## ⚠️ Risks',
+    '',
+    ...(llmAnalysis?.risks?.length ? llmAnalysis.risks.map(r => `- ${r}`) : ['- n/a']),
+    '',
+    '## 🚀 Catalysts',
+    '',
+    ...(llmAnalysis?.catalysts?.length ? llmAnalysis.catalysts.map(c => `- ${c}`) : ['- n/a']),
+    '',
+    ...(crossDim?.divergences?.length ? [
+      '## 🔀 Cross-Dimensional Insights',
+      '',
+      ...crossDim.divergences.map(d => `- **${d.type}**: ${d.detail}`),
+      ...crossDim.convergences.map(c => `- **${c.type}**: ${c.detail}`),
+      '',
+    ] : []),
+    ...(riskMatrix ? [
+      '## 🛑 Risk Matrix',
+      '',
+      `**Overall Risk:** ${riskMatrix.risk_level} (${riskMatrix.overall_risk_score}/10)`,
+      '',
+      ...riskMatrix.heatmap.filter(h => h.flag_count > 0).map(h => `- **${h.label}**: ${h.flag_count} flag(s), impact ${(h.impact * 100).toFixed(0)}%`),
+      '',
+    ] : []),
+    '## 📝 Analysis',
+    '',
+    llmAnalysis?.analysis_text || 'n/a',
+    '',
+    '## 🔎 Key Findings',
+    '',
+    ...(llmAnalysis?.key_findings?.length ? llmAnalysis.key_findings.map(f => `- ${f}`) : ['- n/a']),
+  ];
+
+  return lines.join('\n');
+}
+
+/**
+ * Generate a plain text report for Discord/Telegram.
+ * Target: <1500 chars.
+ */
+export function formatPlainText(projectName, rawData, scores, llmAnalysis) {
+  const keyMetrics = extractKeyMetrics(rawData, scores);
+  const conviction = rawData?.conviction;
+  const riskMatrix = rawData?.risk_matrix;
+
+  const parts = [
+    `🧠 ${projectName} — ${llmAnalysis?.verdict || 'HOLD'} (${keyMetrics.overall_score_fmt})`,
+  ];
+
+  if (conviction) {
+    parts.push(`📊 Conviction: ${conviction.score}/100 (${conviction.label})`);
+  }
+
+  parts.push(`💰 Price ${keyMetrics.price_fmt} | MCap ${keyMetrics.market_cap_fmt} | TVL ${keyMetrics.tvl_fmt}`);
+
+  // Top 2 risks
+  const risks = (llmAnalysis?.risks ?? []).slice(0, 2);
+  if (risks.length) parts.push(`⚠️ ${risks.join(' | ')}`);
+
+  // Top 2 catalysts
+  const catalysts = (llmAnalysis?.catalysts ?? []).slice(0, 2);
+  if (catalysts.length) parts.push(`🚀 ${catalysts.join(' | ')}`);
+
+  // Risk level
+  if (riskMatrix) parts.push(`🛑 Risk: ${riskMatrix.risk_level} (${riskMatrix.total_flags} flags)`);
+
+  // First sentence of analysis
+  const firstSentence = (llmAnalysis?.analysis_text ?? '').match(/^[^.!?]+[.!?]/)?.[0];
+  if (firstSentence) parts.push(`📝 ${firstSentence}`);
+
+  // Elevator pitch if available
+  const pitch = rawData?.elevator_pitch ?? rawData?.thesis?.one_liner;
+  if (pitch && parts.join('\n').length < 1200) parts.push(`💡 ${pitch}`);
+
+  // Truncate to 1500 chars
+  let result = parts.join('\n');
+  if (result.length > 1500) result = result.slice(0, 1497) + '...';
+  return result;
+}
+
+/**
+ * Generate a JSON report optimized for agent consumption.
+ * Includes conviction, cross-dimensional, and risk matrix.
+ */
+export function formatAgentJSON(projectName, rawData, scores, llmAnalysis) {
+  const keyMetrics = extractKeyMetrics(rawData, scores);
+
+  return {
+    project_name: projectName,
+    generated_at: new Date().toISOString(),
+    verdict: llmAnalysis?.verdict || 'HOLD',
+    headline: llmAnalysis?.headline ?? null,
+    overall_score: scores?.overall?.score ?? null,
+    conviction: rawData?.conviction ?? null,
+    key_metrics: keyMetrics,
+    scores: Object.fromEntries(
+      ['market_strength', 'onchain_health', 'social_momentum', 'development', 'tokenomics_health', 'distribution', 'risk'].map(dim => [
+        dim,
+        {
+          score: scores?.[dim]?.score ?? null,
+          confidence: scores?.[dim]?.confidence ?? null,
+          confidence_label: scores?.[dim]?.confidence_label ?? null,
+        },
+      ])
+    ),
+    cross_dimensional: rawData?.cross_dimensional ?? null,
+    risk_matrix: rawData?.risk_matrix ? {
+      overall_risk_score: rawData.risk_matrix.overall_risk_score,
+      risk_level: rawData.risk_matrix.risk_level,
+      verdict_modifier: rawData.risk_matrix.verdict_modifier,
+      active_categories: rawData.risk_matrix.active_categories,
+    } : null,
+    sector_context: rawData?.sector_context ?? null,
+    temporal_delta: rawData?.temporal_delta ? {
+      has_history: rawData.temporal_delta.has_history,
+      narrative: rawData.temporal_delta.narrative,
+    } : null,
+    thesis: rawData?.thesis ?? null,
+    moat: llmAnalysis?.moat ?? null,
+    risks: llmAnalysis?.risks ?? [],
+    catalysts: llmAnalysis?.catalysts ?? [],
+    key_findings: llmAnalysis?.key_findings ?? [],
+  };
+}
+
+/**
+ * Format report in the requested format.
+ *
+ * @param {string} format - 'html' | 'md' | 'json' | 'text'
+ * @param {string} projectName
+ * @param {object} rawData
+ * @param {object} scores
+ * @param {object} llmAnalysis
+ * @returns {object} { content, contentType }
+ */
+export function formatReportMulti(format, projectName, rawData, scores, llmAnalysis) {
+  switch (format) {
+    case 'md':
+    case 'markdown':
+      return {
+        content: formatMarkdown(projectName, rawData, scores, llmAnalysis),
+        contentType: 'text/markdown',
+      };
+    case 'text':
+    case 'plain':
+      return {
+        content: formatPlainText(projectName, rawData, scores, llmAnalysis),
+        contentType: 'text/plain',
+      };
+    case 'json':
+      return {
+        content: formatAgentJSON(projectName, rawData, scores, llmAnalysis),
+        contentType: 'application/json',
+      };
+    case 'html':
+    default: {
+      const result = formatReport(projectName, rawData, scores, llmAnalysis);
+      return {
+        content: result.html,
+        contentType: 'text/html',
+      };
+    }
+  }
+}

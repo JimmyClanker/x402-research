@@ -146,5 +146,68 @@ export function generateThesis(projectName, rawData = {}, scores = {}, redFlags 
     c7d != null ? `7d ${Number(c7d) >= 0 ? '+' : ''}${Number(c7d).toFixed(1)}%` : null,
   ].filter(Boolean).join(' | ');
 
-  return { bull_case, bear_case, neutral_case, one_liner: oneLiner, metrics_snapshot: metricsSnap || null };
+  // ── Round (Pipeline R8): Evidence, invalidation, time horizons, probabilities ──
+
+  // Evidence for each case
+  const bullEvidence = [];
+  const bearEvidence = [];
+  if (strongSignals.length > 0) bullEvidence.push(`Alpha signals: ${strongSignals.join(', ')}`);
+  if (strongest.length > 0) bullEvidence.push(`Strongest dimensions: ${strongest.join(', ')} (scores 7+)`);
+  if (safeN(o.tvl_change_7d) > 10) bullEvidence.push(`TVL growing ${safeN(o.tvl_change_7d).toFixed(1)}%/7d`);
+  if (safeN(m.price_change_pct_7d) > 10) bullEvidence.push(`Price +${safeN(m.price_change_pct_7d).toFixed(1)}%/7d`);
+
+  if (critFlags.length > 0) bearEvidence.push(`Critical red flags: ${critFlags.join(', ')}`);
+  if (weakest.length > 0) bearEvidence.push(`Weakest dimensions: ${weakest.join(', ')}`);
+  if (safeN(o.tvl_change_7d) < -10) bearEvidence.push(`TVL declining ${safeN(o.tvl_change_7d).toFixed(1)}%/7d`);
+  if (safeN(m.price_change_pct_30d) < -30) bearEvidence.push(`Price ${safeN(m.price_change_pct_30d).toFixed(1)}%/30d`);
+
+  // Invalidation triggers
+  const bullInvalidation = [];
+  const bearInvalidation = [];
+  if (safeN(o.tvl) > 0) bullInvalidation.push('TVL drops >30% in 7 days');
+  bullInvalidation.push('New critical red flags emerge (exploits, regulatory)');
+  bullInvalidation.push('Overall score drops below 4.0');
+  bearInvalidation.push('Major partnership or listing announcement');
+  bearInvalidation.push('TVL doubles within 30 days');
+  bearInvalidation.push('Overall score improves above 7.0');
+
+  // Time horizons
+  const timeHorizons = {
+    '1_week': overallScore >= 7 ? 'Favorable setup — momentum supports entry' : overallScore >= 5 ? 'Neutral — wait for clearer signal' : 'Unfavorable — risk outweighs reward',
+    '1_month': overallScore >= 7 ? 'Strong fundamentals suggest continued strength' : overallScore >= 5 ? 'Mixed signals — monitor for catalyst' : 'Weak fundamentals likely persist',
+    '3_months': overallScore >= 7 ? 'Well-positioned for medium-term gains if thesis holds' : overallScore >= 5 ? 'Needs improvement in weak dimensions to justify position' : 'Avoid unless fundamentals materially improve',
+  };
+
+  // Probability estimates
+  const bullProbability = Math.min(85, Math.max(10, Math.round(overallScore * 8 + (strongSignals.length * 5) - (critFlags.length * 10))));
+  const bearProbability = Math.min(85, Math.max(10, 100 - bullProbability));
+  const baseProbability = Math.min(60, Math.max(20, 100 - Math.abs(bullProbability - bearProbability)));
+
+  return {
+    bull_case,
+    bear_case,
+    neutral_case,
+    one_liner: oneLiner,
+    metrics_snapshot: metricsSnap || null,
+    // New fields (Round Pipeline R8)
+    evidence: {
+      bull: bullEvidence.length > 0 ? bullEvidence : ['Limited positive evidence available'],
+      bear: bearEvidence.length > 0 ? bearEvidence : ['No critical concerns identified'],
+    },
+    invalidation: {
+      bull: bullInvalidation,
+      bear: bearInvalidation,
+    },
+    time_horizons: timeHorizons,
+    probabilities: {
+      bull: bullProbability,
+      bear: bearProbability,
+      base: baseProbability,
+    },
+  };
+}
+
+function safeN(v, fb = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fb;
 }

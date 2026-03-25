@@ -1,0 +1,300 @@
+/**
+ * pipeline.js — Analysis Pipeline Architecture (Round 1)
+ *
+ * Orchestrates the 3-phase analysis pipeline:
+ *   Phase 1: Data Collection (collectors → rawData)
+ *   Phase 2: Enrichment (red flags, alpha signals, volatility, momentum, narrative, trend reversal)
+ *   Phase 3: Synthesis (scoring, LLM report, thesis, trade setup, R:R, quality, competitors, elevator pitch)
+ *
+ * Each phase has clear input/output contracts and is independently testable.
+ */
+
+import { calculateScores } from '../synthesis/scoring.js';
+import { generateReport, generateQuickReport } from '../synthesis/llm.js';
+import { getBenchmarkForCategory, compareToSector } from '../services/sector-benchmarks.js';
+import { detectRedFlags } from '../services/red-flags.js';
+import { detectAlphaSignals } from '../services/alpha-signals.js';
+import { generateTradeSetup } from '../services/trade-setup.js';
+import { assessRiskReward } from '../services/risk-reward.js';
+import { scoreReportQuality } from '../services/report-quality.js';
+import { detectCompetitors } from '../services/competitor-detection.js';
+import { generateElevatorPitch } from '../services/elevator-pitch.js';
+import { detectChanges } from '../services/change-detector.js';
+import { generateThesis } from '../services/thesis-generator.js';
+import { assessVolatility } from '../services/volatility-guard.js';
+import { computeScoreVelocity } from '../services/score-velocity.js';
+import { detectTrendReversal } from '../services/trend-reversal.js';
+import { detectNarrativeMomentum } from '../services/narrative-momentum.js';
+import { calculateMomentum } from '../services/momentum.js';
+
+import { analyzeCrossDimensional } from './cross-dimensional.js';
+import { calculateConviction } from './conviction.js';
+import { analyzeTemporalDelta } from './temporal.js';
+import { buildRiskMatrix } from './risk-matrix.js';
+import { classifySector, getSectorWeights } from './sector-context.js';
+import { buildPriceAlerts, getScanVersion, storeScanHistory, buildResponse } from '../routes/alpha-helpers.js';
+
+/**
+ * Phase 1: Data Collection
+ * Runs all collectors and returns rawData.
+ *
+ * @param {string} projectName
+ * @param {object} exaService
+ * @param {object|null} collectorCache
+ * @param {Function} collectAllFn
+ * @returns {Promise<object>} rawData from all collectors
+ */
+export async function phaseCollect({ projectName, exaService, collectorCache, collectAllFn }) {
+  const rawData = await collectAllFn(projectName, exaService, collectorCache);
+  return rawData;
+}
+
+/**
+ * Phase 2: Enrichment
+ * Takes rawData + scores, enriches with derived signals and context.
+ * Mutates rawData by injecting enrichment fields.
+ *
+ * @param {object} rawData - raw collector output
+ * @param {object} scores - calculateScores() result
+ * @returns {object} enrichment - structured enrichment results
+ */
+export function phaseEnrich(rawData, scores) {
+  // Sector comparison
+  const category = rawData?.onchain?.category || null;
+  let sectorComparison = null;
+  if (category) {
+    try {
+      // Note: getBenchmarkForCategory is async but we handle it in the pipeline runner
+    } catch (_) { /* non-critical */ }
+  }
+
+  // Core enrichment — all sync
+  const redFlags = detectRedFlags(rawData, scores);
+  const alphaSignals = detectAlphaSignals(rawData, scores);
+  const volatilityAssessment = assessVolatility(rawData);
+  const priceAlerts = buildPriceAlerts(redFlags, alphaSignals);
+  const trendReversal = detectTrendReversal(rawData);
+  const narrativeMomentum = detectNarrativeMomentum(rawData);
+  const momentumData = calculateMomentum(rawData);
+
+  // Cross-dimensional analysis (Round 3)
+  const crossDimensional = analyzeCrossDimensional(scores, rawData);
+
+  // Risk matrix (Round 7)
+  const riskMatrix = buildRiskMatrix(rawData, scores, redFlags);
+
+  // Inject into rawData for LLM context
+  rawData.red_flags = redFlags;
+  rawData.alpha_signals = alphaSignals;
+  rawData.volatility = volatilityAssessment;
+  rawData.price_alerts = priceAlerts;
+  rawData.trend_reversal = trendReversal;
+  rawData.narrative_momentum = narrativeMomentum;
+  rawData.momentum = momentumData;
+  rawData.cross_dimensional = crossDimensional;
+  rawData.risk_matrix = riskMatrix;
+
+  return {
+    redFlags,
+    alphaSignals,
+    volatilityAssessment,
+    priceAlerts,
+    trendReversal,
+    narrativeMomentum,
+    momentumData,
+    crossDimensional,
+    riskMatrix,
+    sectorComparison,
+  };
+}
+
+/**
+ * Phase 2b: Async enrichment (sector comparison, temporal analysis)
+ * Handles async operations that couldn't run in sync phaseEnrich.
+ *
+ * @param {object} rawData
+ * @param {object} scores
+ * @param {object} enrichment - from phaseEnrich
+ * @param {object|null} db
+ * @param {string} projectName
+ * @returns {Promise<object>} asyncEnrichment
+ */
+export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectName) {
+  const category = rawData?.onchain?.category || null;
+  let sectorComparison = null;
+
+  if (category) {
+    try {
+      const benchmark = await getBenchmarkForCategory(category);
+      if (benchmark) {
+        sectorComparison = compareToSector(
+          { tvl: rawData?.onchain?.tvl, market_cap: rawData?.market?.market_cap },
+          benchmark,
+        );
+        if (sectorComparison) {
+          rawData.sector_comparison = sectorComparison;
+          rawData.sector_comparison._volume_24h = rawData?.market?.total_volume ?? null;
+          rawData.sector_comparison._tvl = rawData?.onchain?.tvl ?? null;
+        }
+      }
+    } catch (_) { /* non-critical */ }
+  }
+
+  // Sector context engine (Round 6)
+  const sectorContext = classifySector(rawData);
+  rawData.sector_context = sectorContext;
+
+  // Temporal analysis (Round 4)
+  let temporalDelta = null;
+  if (db) {
+    try {
+      temporalDelta = analyzeTemporalDelta(db, projectName, rawData, scores);
+      rawData.temporal_delta = temporalDelta;
+    } catch (_) { /* non-critical */ }
+  }
+
+  // Conviction score (Round 5)
+  const conviction = calculateConviction(rawData, scores, enrichment);
+  rawData.conviction = conviction;
+
+  enrichment.sectorComparison = sectorComparison;
+  enrichment.sectorContext = sectorContext;
+  enrichment.temporalDelta = temporalDelta;
+  enrichment.conviction = conviction;
+
+  return enrichment;
+}
+
+/**
+ * Phase 3: Synthesis
+ * Takes rawData + scores + enrichment, produces the final report.
+ *
+ * @param {object} params
+ * @returns {Promise<object>} response
+ */
+export async function phaseSynthesize({
+  projectName, rawData, scores, enrichment, mode, config, db,
+}) {
+  const {
+    redFlags, alphaSignals, volatilityAssessment, priceAlerts,
+    trendReversal, narrativeMomentum, momentumData, sectorComparison,
+    crossDimensional, riskMatrix, conviction, temporalDelta, sectorContext,
+  } = enrichment;
+
+  // LLM report generation
+  const analysis =
+    mode === 'quick'
+      ? await generateQuickReport(projectName, rawData, scores, { apiKey: config?.xaiApiKey })
+      : await generateReport(projectName, rawData, scores, { apiKey: config?.xaiApiKey });
+
+  // Sync synthesis services
+  const tradeSetup = generateTradeSetup(rawData, scores);
+  const riskReward = assessRiskReward(rawData, scores, tradeSetup);
+  const reportQuality = scoreReportQuality(rawData, scores, analysis);
+  const elevatorPitch = generateElevatorPitch(projectName, rawData, scores, analysis);
+  const thesis = generateThesis(projectName, rawData, scores, redFlags, alphaSignals);
+
+  // Async: competitor detection
+  let competitors;
+  try {
+    competitors = await detectCompetitors(projectName, rawData)
+      .catch(() => ({ competitors: [], comparison_summary: 'Skipped.' }));
+  } catch (_) {
+    competitors = { competitors: [], comparison_summary: 'Skipped.' };
+  }
+
+  // Change detection
+  let changes = { has_previous: false, changes: [] };
+  if (db) {
+    try {
+      changes = detectChanges(db, projectName, { rawData, scores, verdict: analysis?.verdict });
+    } catch (_) { /* non-critical */ }
+  }
+
+  // TVL leadership signal
+  if (competitors?.competitors?.length > 0 && rawData?.onchain?.tvl != null) {
+    const projectTvl = rawData.onchain.tvl;
+    const allCompetitorsTvl = competitors.competitors.map((c) => c.tvl ?? 0);
+    const isTvlLeader = allCompetitorsTvl.every((t) => projectTvl > t);
+    if (isTvlLeader) {
+      rawData.alpha_signals = rawData.alpha_signals || [];
+      if (!rawData.alpha_signals.some((s) => s.signal === 'tvl_sector_leader')) {
+        rawData.alpha_signals.push({
+          signal: 'tvl_sector_leader',
+          strength: 'strong',
+          detail: `${projectName} has the highest TVL in its sector among detected peers — category dominance.`,
+        });
+      }
+    }
+  }
+
+  const scanVersion = db ? getScanVersion(db, projectName) : null;
+
+  // Build base response
+  const response = buildResponse({ projectName, rawData, scores, analysis, mode });
+
+  // Attach all enrichment + synthesis outputs
+  response.volatility = volatilityAssessment;
+  response.price_alerts = priceAlerts;
+  response.trend_reversal = trendReversal;
+  response.narrative_momentum = narrativeMomentum;
+  response.red_flags = redFlags;
+  response.alpha_signals = rawData.alpha_signals; // includes TVL leader if added
+  response.trade_setup = tradeSetup;
+  response.risk_reward = riskReward;
+  response.report_quality = reportQuality;
+  response.competitors = competitors;
+  response.elevator_pitch = elevatorPitch.pitch;
+  response.thesis = thesis;
+  response.changes = changes;
+  response.momentum = momentumData;
+
+  // New structured analysis outputs
+  response.cross_dimensional = crossDimensional;
+  response.risk_matrix = riskMatrix;
+  response.conviction = conviction;
+  response.sector_context = sectorContext;
+  if (temporalDelta) response.temporal_delta = temporalDelta;
+
+  if (sectorComparison) response.sector_comparison = sectorComparison;
+  if (scanVersion !== null) response.scan_version = scanVersion;
+
+  // Score velocity
+  if (db) {
+    try {
+      response.score_velocity = computeScoreVelocity(db, projectName);
+    } catch (_) { /* non-critical */ }
+  }
+
+  // Store in scan history
+  if (db) {
+    storeScanHistory(db, projectName, scores, response);
+  }
+
+  return response;
+}
+
+/**
+ * Full pipeline runner — orchestrates all 3 phases.
+ * Drop-in replacement for runAnalysis().
+ */
+export async function runPipeline({ projectName, exaService, mode, config, collectAllFn, collectorCache, db }) {
+  // Phase 1: Collect
+  const rawData = await phaseCollect({ projectName, exaService, collectorCache, collectAllFn });
+
+  // Score (between Phase 1 and Phase 2)
+  const scores = calculateScores(rawData);
+
+  // Phase 2: Enrich (sync)
+  const enrichment = phaseEnrich(rawData, scores);
+
+  // Phase 2b: Enrich (async)
+  await phaseEnrichAsync(rawData, scores, enrichment, db, projectName);
+
+  // Phase 3: Synthesize
+  const response = await phaseSynthesize({
+    projectName, rawData, scores, enrichment, mode, config, db,
+  });
+
+  return response;
+}
