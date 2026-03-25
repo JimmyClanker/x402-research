@@ -379,6 +379,131 @@
       </div>`;
     }
 
+    // ── Trade Chart SVG (TradingView-style) ──────────────────────────
+    function renderTradeChart(sparkline, tradeSetup, riskReward) {
+      const prices = Array.isArray(sparkline) ? sparkline.filter(p => typeof p === 'number' && isFinite(p)) : [];
+      if (!prices.length || !tradeSetup?.entry_zone?.low) return '';
+
+      const W = 600, H = 300;
+      const padL = 10, padR = 72, padT = 20, padB = 32;
+      const chartW = W - padL - padR;
+      const chartH = H - padT - padB;
+
+      const entryLow  = Number(tradeSetup.entry_zone.low);
+      const entryHigh = Number(tradeSetup.entry_zone.high);
+      const sl        = Number(tradeSetup.stop_loss || 0);
+      const tps       = tradeSetup.take_profit_targets || [];
+      const tp1Price  = tps[0] ? Number(tps[0].price) : null;
+      const tp2Price  = tps[1] ? Number(tps[1].price) : null;
+      const rrRatio   = tradeSetup.risk_reward_ratio ?? riskReward?.risk_reward_ratio ?? null;
+
+      const sparkMin = Math.min(...prices);
+      const sparkMax = Math.max(...prices);
+      const upperBound = tp2Price ? tp2Price * 1.03 : (tp1Price ? tp1Price * 1.1 : sparkMax);
+      const lowerBound = sl > 0 ? Math.min(sparkMin, sl * 0.97) : sparkMin * 0.97;
+      const minPrice = Math.min(sparkMin, lowerBound);
+      const maxPrice = Math.max(sparkMax, upperBound);
+      const priceRange = maxPrice - minPrice || 1;
+
+      function py(price) {
+        return padT + (1 - (price - minPrice) / priceRange) * chartH;
+      }
+      function px(i, total) {
+        return padL + (i / (total - 1)) * chartW;
+      }
+
+      // Grid lines (5 levels)
+      const gridLines = [];
+      for (let i = 0; i <= 4; i++) {
+        const price = minPrice + (priceRange * i / 4);
+        const y = py(price);
+        const label = price >= 1 ? `$${price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : `$${price.toFixed(price < 0.001 ? 6 : 4)}`;
+        gridLines.push(`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#333" stroke-width="1"/>`);
+        gridLines.push(`<text x="${W - padR + 5}" y="${(y + 4).toFixed(1)}" fill="#7e7e7e" font-size="10" font-family="Inter,sans-serif">${escapeHtml(label)}</text>`);
+      }
+
+      // X-axis labels
+      const xLabels = ['7d ago','5d','3d','1d','Now'];
+      const xAxisY = H - 8;
+      const xAxisItems = xLabels.map((lbl, i) => {
+        const x = padL + (i / (xLabels.length - 1)) * chartW;
+        return `<text x="${x.toFixed(1)}" y="${xAxisY}" fill="#7e7e7e" font-size="10" font-family="Inter,sans-serif" text-anchor="middle">${lbl}</text>`;
+      }).join('');
+
+      // Price polyline
+      const pts = prices.map((p, i) => `${px(i, prices.length).toFixed(1)},${py(p).toFixed(1)}`).join(' ');
+      const lastX = px(prices.length - 1, prices.length);
+      const lastY = py(prices[prices.length - 1]);
+      // Area fill path
+      const firstX = px(0, prices.length);
+      const baseY = padT + chartH;
+      const areaPath = `M${firstX.toFixed(1)},${baseY} L${prices.map((p, i) => `${px(i, prices.length).toFixed(1)},${py(p).toFixed(1)}`).join(' L')} L${lastX.toFixed(1)},${baseY} Z`;
+
+      // SL zone (from entryLow down to SL)
+      const slZone = sl > 0 ? (() => {
+        const y1 = Math.min(py(entryLow), py(sl));
+        const y2 = Math.max(py(entryLow), py(sl));
+        const slPct = entryLow > 0 ? (((sl - entryLow) / entryLow) * 100).toFixed(1) : '?';
+        const labelY = ((y1 + y2) / 2 + 4).toFixed(1);
+        return `<rect x="${padL}" y="${y1.toFixed(1)}" width="${chartW}" height="${(y2 - y1).toFixed(1)}" fill="rgba(239,68,68,0.1)"/>
+        <text x="${(W - padR + 5).toFixed(1)}" y="${labelY}" fill="#f87171" font-size="10" font-family="Inter,sans-serif">SL ${slPct}%</text>`;
+      })() : '';
+
+      // Entry zone
+      const entryY1 = Math.min(py(entryLow), py(entryHigh));
+      const entryY2 = Math.max(py(entryLow), py(entryHigh));
+      const entryMidY = ((entryY1 + entryY2) / 2).toFixed(1);
+      const entryZoneSvg = `<rect x="${padL}" y="${entryY1.toFixed(1)}" width="${chartW}" height="${(entryY2 - entryY1 + 0.5).toFixed(1)}" fill="rgba(45,212,191,0.08)" stroke="rgba(45,212,191,0.4)" stroke-width="1" stroke-dasharray="4 3"/>`;
+      const entryLabel = `<text x="${(padL + chartW / 2).toFixed(1)}" y="${(Number(entryMidY) - 3).toFixed(1)}" fill="rgba(45,212,191,0.9)" font-size="10" font-family="Inter,sans-serif" text-anchor="middle">Entry $${escapeHtml(String(tradeSetup.entry_zone.low))}–$${escapeHtml(String(tradeSetup.entry_zone.high))}${rrRatio ? ` · R/R ${rrRatio}x` : ''}</text>`;
+
+      // TP1 zone (entryHigh → TP1)
+      const tp1Zone = tp1Price ? (() => {
+        const y1 = Math.min(py(entryHigh), py(tp1Price));
+        const y2 = Math.max(py(entryHigh), py(tp1Price));
+        const tp1Pct = entryHigh > 0 ? `+${(((tp1Price - entryHigh) / entryHigh) * 100).toFixed(1)}%` : '';
+        const labelY = (y1 + 12).toFixed(1);
+        return `<rect x="${padL}" y="${y1.toFixed(1)}" width="${chartW}" height="${(y2 - y1).toFixed(1)}" fill="rgba(34,197,94,0.1)"/>
+        <text x="${(W - padR + 5).toFixed(1)}" y="${labelY}" fill="#86efac" font-size="10" font-family="Inter,sans-serif">TP1 ${escapeHtml(tp1Pct)}</text>`;
+      })() : '';
+
+      // TP2 dashed line
+      const tp2Line = tp2Price ? (() => {
+        const y = py(tp2Price).toFixed(1);
+        const tp2Pct = entryHigh > 0 ? `+${(((tp2Price - entryHigh) / entryHigh) * 100).toFixed(1)}%` : '';
+        return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(134,239,172,0.5)" stroke-width="1" stroke-dasharray="5 4"/>
+        <text x="${(W - padR + 5).toFixed(1)}" y="${(Number(y) + 4).toFixed(1)}" fill="#86efac" font-size="10" font-family="Inter,sans-serif">TP2 ${escapeHtml(tp2Pct)}</text>`;
+      })() : '';
+
+      return `<div class="trade-chart">
+        <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Trade setup chart" role="img">
+          ${gridLines.join('')}
+          ${slZone}
+          ${tp1Zone}
+          ${tp2Line}
+          ${entryZoneSvg}
+          ${entryLabel}
+          <defs>
+            <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            </linearGradient>
+          </defs>
+          <path d="${areaPath}" fill="url(#areaGrad)"/>
+          <polyline points="${pts}" fill="none" stroke="#e8e8e8" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+          <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4" fill="#D4580A" stroke="#0a0a0a" stroke-width="1.5"/>
+          ${xAxisItems}
+        </svg>
+      </div>`;
+    }
+
+    // ── Probability badge helper ─────────────────────────────────────
+    function probBadge(probability) {
+      if (!probability) return '';
+      const p = String(probability).toLowerCase();
+      const cls = p.includes('low') ? 'prob-low' : p.includes('high') ? 'prob-high' : 'prob-medium';
+      return `<span class="probability-badge ${cls}">${escapeHtml(probability)}</span>`;
+    }
+
     function renderReport(payload) {
       const verdict   = payload?.verdict || 'HOLD';
       const raw       = payload?.raw_data || {};
@@ -394,115 +519,200 @@
       // Trigger smooth reveal animation (Round 2)
       reportBox.classList.add('results-reveal');
 
-      reportBox.innerHTML = `
-        <div class="grid">
-          <section class="panel">
-            <div class="header-row">
-              <div>
-                <div class="footnote">${escapeHtml(payload?.mode||'full')} scan</div>
-                <h1 class="project-name">${escapeHtml(payload?.project_name||'Unknown')}</h1>
-              </div>
-              <div class="verdict-wrap">
-                <div class="verdict-meta">Research verdict</div>
-                <div class="verdict ${verdictClass(verdict)}">${escapeHtml(verdict)}</div>
-                <div class="overall-score ${verdictClass(verdict)}">${avgScore!==null?`${avgScore.toFixed(1)}/10`:'n/a'}</div>
-                ${(()=>{const v=payload?.volatility;if(!v||v.regime==='calm')return'';const c={elevated:'#fbbf24',high:'#f97316',extreme:'#ef4444'}[v.regime]||'#fbbf24';const pct=v.volatility_pct_24h!=null?` (${v.volatility_pct_24h.toFixed(1)}% 24h)`:'';return`<div style="margin-top:6px;padding:4px 12px;background:${c};color:#000;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;display:inline-block;">⚡ ${v.regime}${pct}</div>`})()}
-                ${(()=>{const sa=scores?.overall?.score_anomaly;if(!sa||sa==='normal')return'';return`<div style="margin-top:4px;padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:999px;font-size:10px;font-weight:600;display:inline-block;">⚠ ${sa==='high_variance'?'uneven scores':'mixed signals'}</div>`})()}
-              </div>
-            </div>
-            ${renderProjectIntro(payload, analysis, raw)}
-            <div class="analysis ${hasAnalysis ? '' : 'analysis-error-state'}">${hasAnalysis ? formatAnalysisText(analysis.analysis_text) : '<p style="margin:0;line-height:1.8;">Oops, something went wrong — we couldn\'t generate the analysis for this project. Try again.</p>'}</div>
-            <div class="mini-grid">
-              <div class="card moat"><h3>🛡 Moat</h3><div>${escapeHtml(analysis.moat||'n/a')}</div></div>
-              <div class="card risks"><h3>⚠ Risks</h3><ul>${renderList(analysis.risks)}</ul></div>
-              <div class="card catalysts"><h3>🚀 Catalysts</h3><ul>${renderList(analysis.catalysts)}</ul></div>
-            </div>
-          </section>
-          <section class="panel radar-panel">
+      // ── Panel 1: Header + Verdict + Analysis ─────────────────────
+      const panel1 = `<section class="panel">
+        <div class="header-row">
+          <div>
+            <div class="footnote">${escapeHtml(payload?.mode||'full')} scan</div>
+            <h1 class="project-name">${escapeHtml(payload?.project_name||'Unknown')}</h1>
+          </div>
+          <div class="verdict-wrap">
+            <div class="verdict-meta">Research verdict</div>
+            <div class="verdict ${verdictClass(verdict)}">${escapeHtml(verdict)}</div>
+            <div class="overall-score ${verdictClass(verdict)}">${avgScore!==null?`${avgScore.toFixed(1)}/10`:'n/a'}</div>
+            ${(()=>{const v=payload?.volatility;if(!v||v.regime==='calm')return'';const c={elevated:'#fbbf24',high:'#f97316',extreme:'#ef4444'}[v.regime]||'#fbbf24';const pct=v.volatility_pct_24h!=null?` (${v.volatility_pct_24h.toFixed(1)}% 24h)`:'';return`<div style="margin-top:6px;padding:4px 12px;background:${c};color:#000;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;display:inline-block;">⚡ ${v.regime}${pct}</div>`})()}
+            ${(()=>{const sa=scores?.overall?.score_anomaly;if(!sa||sa==='normal')return'';return`<div style="margin-top:4px;padding:3px 10px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:999px;font-size:10px;font-weight:600;display:inline-block;">⚠ ${sa==='high_variance'?'uneven scores':'mixed signals'}</div>`})()}
+          </div>
+        </div>
+        ${renderProjectIntro(payload, analysis, raw)}
+        <div class="analysis ${hasAnalysis ? '' : 'analysis-error-state'}">${hasAnalysis ? formatAnalysisText(analysis.analysis_text) : '<p style="margin:0;line-height:1.8;">Oops, something went wrong — we couldn\'t generate the analysis for this project. Try again.</p>'}</div>
+      </section>`;
+
+      // ── Panel 2: Score Radar + Market Board (2-col grid) ─────────
+      const mr = metricRows(raw);
+      const gc = renderGithubCard(raw?.github);
+      const panel2 = `<section class="panel" style="margin-top:18px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="radar-market-grid">
+          <div>
             <div class="section-label">Score Radar</div>
             ${renderRadar(scores)}
             <div class="score-list">${renderScoreBars(scores)}</div>
-          </section>
-        </div>
-
-        ${(()=>{const mr=metricRows(raw);const gc=renderGithubCard(raw?.github);return(mr||gc)?`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">Market Board</div>
-          ${mr?`<table class="table"><tbody>${mr}</tbody></table>`:''}
-          ${gc}
-        </section>`:''})()}
-
-        ${analysis.x_sentiment_summary&&analysis.x_sentiment_summary!=='n/a'?`<section class="panel" style="margin-top:18px;">
-          <div class="section-label" style="display:flex;align-items:center;gap:8px;">X Sentiment${(()=>{const nm=payload?.raw_data?.social?.news_momentum;const vc=payload?.raw_data?.social?.very_recent_news_count;if(!nm||nm==='no_data')return'';const col=nm==='accelerating'?'#22c55e':nm==='declining'?'#f87171':'#fbbf24';return`<span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;background:${col}22;color:${col};font-weight:600;">${nm==='accelerating'?'📈':nm==='declining'?'📉':'➡️'} ${nm}${vc?` (${vc} recent)`:''}`;})()}</div>
-          <div class="analysis">${formatAnalysisText(analysis.x_sentiment_summary)}</div>
-        </section>`:''}
-
-        ${analysis.competitor_comparison&&analysis.competitor_comparison!=='n/a'?`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">Competitor Comparison</div>
-          <div class="analysis">${formatAnalysisText(analysis.competitor_comparison)}</div>
-        </section>`:''}
-
-        ${analysis.key_findings&&analysis.key_findings.length?`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">Key Findings</div>
-          <ul>${renderList(analysis.key_findings)}</ul>
-        </section>`:''}
-
-        ${(()=>{const t=payload?.thesis;if(!t)return'';return`<section class="panel" style="margin-top:18px;">
-          <div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">Investment Thesis${t.metrics_snapshot?`<span style="font-size:0.72rem;color:#94a3b8;font-weight:400;">${escapeHtml(t.metrics_snapshot)}</span>`:''}${t.one_liner?`<span style="font-size:0.75rem;padding:2px 10px;background:rgba(212,88,10,0.12);border:1px solid rgba(212,88,10,0.3);border-radius:999px;color:#ffd3b6;margin-left:auto;">${escapeHtml(t.one_liner)}</span>`:''}</div>
-          <div class="mini-grid">
-            <div class="card" style="border-color:rgba(34,197,94,0.3)"><h3>🐂 Bull Case</h3><div>${escapeHtml(t.bull_case||'n/a')}</div></div>
-            <div class="card" style="border-color:rgba(239,68,68,0.3)"><h3>🐻 Bear Case</h3><div>${escapeHtml(t.bear_case||'n/a')}</div></div>
-            <div class="card" style="border-color:rgba(251,191,36,0.3)"><h3>🔄 Neutral</h3><div>${escapeHtml(t.neutral_case||'n/a')}</div></div>
           </div>
-        </section>`;})()}
+          <div>
+            ${mr||gc ? `<div class="section-label">Market Board</div>
+            ${mr?`<table class="table"><tbody>${mr}</tbody></table>`:''}
+            ${gc}` : '<div class="section-label" style="color:var(--muted);">No market data</div>'}
+          </div>
+        </div>
+      </section>`;
 
-        ${(()=>{const rf=payload?.red_flags;if(!rf||!rf.length)return'';const crit=rf.filter(f=>f.severity==='critical');const warn=rf.filter(f=>f.severity==='warning');if(!crit.length&&!warn.length)return'';return`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">⚠ Risk Flags (${rf.length})</div>
-          ${crit.length?`<div style="margin-bottom:8px;font-size:0.78rem;color:#ef4444;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Critical (${crit.length})</div><ul>${crit.map(f=>`<li style="color:#fca5a5;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
-          ${warn.length?`<div style="margin:8px 0 6px;font-size:0.78rem;color:#f97316;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Warnings (${warn.length})</div><ul>${warn.map(f=>`<li style="color:#fdba74;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
-        </section>`;})()}
+      // ── Panel 3: Bull Case / Bear Case ───────────────────────────
+      const llmBull = analysis?.bull_case;
+      const llmBear = analysis?.bear_case;
+      const thesis  = payload?.thesis;
+      let panel3 = '';
+      if (llmBull || llmBear) {
+        const bullCol = `<div class="bull-col">
+          <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐂 Bull Case${probBadge(llmBull?.probability)}</h3>
+          ${llmBull?.thesis ? `<p class="thesis">${escapeHtml(llmBull.thesis)}</p>` : ''}
+          ${llmBull?.catalysts?.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#86efac;margin:12px 0 6px;">Catalysts</h4><ul>${llmBull.catalysts.map(c=>`<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+          ${llmBull?.target_conditions ? `<div class="conditions"><strong>Target conditions:</strong> ${escapeHtml(llmBull.target_conditions)}</div>` : ''}
+        </div>`;
+        const bearCol = `<div class="bear-col">
+          <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐻 Bear Case${probBadge(llmBear?.probability)}</h3>
+          ${llmBear?.thesis ? `<p class="thesis">${escapeHtml(llmBear.thesis)}</p>` : ''}
+          ${llmBear?.risks?.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#f87171;margin:12px 0 6px;">Risks</h4><ul>${llmBear.risks.map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ul>` : ''}
+          ${llmBear?.failure_conditions ? `<div class="conditions"><strong>Failure conditions:</strong> ${escapeHtml(llmBear.failure_conditions)}</div>` : ''}
+        </div>`;
+        panel3 = `<section class="panel" style="margin-top:18px;">
+          <div class="section-label">📊 Bull / Bear Analysis</div>
+          <div class="bull-bear-grid">${bullCol}${bearCol}</div>
+        </section>`;
+      } else if (thesis) {
+        // Fallback: old thesis format
+        const bullText = thesis.bull_case || analysis.moat || 'n/a';
+        const bearText = thesis.bear_case || (Array.isArray(analysis.risks) ? analysis.risks.join('. ') : 'n/a');
+        const catalysts = Array.isArray(analysis.catalysts) ? analysis.catalysts : [];
+        const risks = Array.isArray(analysis.risks) ? analysis.risks : [];
+        panel3 = `<section class="panel" style="margin-top:18px;">
+          <div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">📊 Bull / Bear Analysis${thesis.one_liner?`<span style="font-size:0.75rem;padding:2px 10px;background:rgba(212,88,10,0.12);border:1px solid rgba(212,88,10,0.3);border-radius:999px;color:#ffd3b6;margin-left:auto;">${escapeHtml(thesis.one_liner)}</span>`:''}</div>
+          <div class="bull-bear-grid">
+            <div class="bull-col">
+              <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐂 Bull Case</h3>
+              <p class="thesis">${escapeHtml(bullText)}</p>
+              ${catalysts.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#86efac;margin:12px 0 6px;">Catalysts</h4><ul>${catalysts.map(c=>`<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+            </div>
+            <div class="bear-col">
+              <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐻 Bear Case</h3>
+              <p class="thesis">${escapeHtml(bearText)}</p>
+              ${risks.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#f87171;margin:12px 0 6px;">Risks</h4><ul>${risks.map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ul>` : ''}
+            </div>
+          </div>
+        </section>`;
+      } else if (analysis.moat || Array.isArray(analysis.risks) || Array.isArray(analysis.catalysts)) {
+        // Minimal fallback: just moat/risks/catalysts
+        const catalysts = Array.isArray(analysis.catalysts) ? analysis.catalysts : [];
+        const risks = Array.isArray(analysis.risks) ? analysis.risks : [];
+        panel3 = `<section class="panel" style="margin-top:18px;">
+          <div class="section-label">📊 Bull / Bear Analysis</div>
+          <div class="bull-bear-grid">
+            <div class="bull-col">
+              <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐂 Bull Case</h3>
+              ${analysis.moat ? `<p class="thesis"><strong>Moat:</strong> ${escapeHtml(analysis.moat)}</p>` : ''}
+              ${catalysts.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#86efac;margin:12px 0 6px;">Catalysts</h4><ul>${catalysts.map(c=>`<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+            </div>
+            <div class="bear-col">
+              <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 10px;">🐻 Bear Case</h3>
+              ${risks.length ? `<h4 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#f87171;margin:12px 0 6px;">Risks</h4><ul>${risks.map(r=>`<li>${escapeHtml(r)}</li>`).join('')}</ul>` : '<p class="thesis" style="color:var(--muted);">No risk data available.</p>'}
+            </div>
+          </div>
+        </section>`;
+      }
 
-        ${(()=>{const as_=payload?.alpha_signals;if(!as_||!as_.length)return'';return`<section class="panel" style="margin-top:18px;">
-          <div class="section-label">🚀 Alpha Signals (${as_.length})</div>
-          <ul>${as_.map(s=>`<li style="margin-bottom:6px;"><span style="background:rgba(34,197,94,0.15);padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;color:#86efac;margin-right:8px;">${escapeHtml(s.strength||'?')}</span><strong>${escapeHtml(humanizeLabel(s.signal))}</strong>: ${escapeHtml(s.detail)}</li>`).join('')}</ul>
-        </section>`;})()}
-
-        ${(()=>{const ts=payload?.trade_setup;const rr=payload?.risk_reward;if(!ts||!ts.entry_zone?.low)return'';const qualColor={strong:'#22c55e',moderate:'#fbbf24',weak:'#ef4444'}[ts.setup_quality]||'#e8e8e8';return`<section class="panel" style="margin-top:18px;">
+      // ── Panel 4: Trade Setup + TradingView Chart ─────────────────
+      const ts = payload?.trade_setup;
+      const rr = payload?.risk_reward;
+      let panel4 = '';
+      if (ts && ts.entry_zone?.low) {
+        const qualColor = {strong:'#22c55e',moderate:'#fbbf24',weak:'#ef4444'}[ts.setup_quality]||'#e8e8e8';
+        const sparkline = raw?.market?.sparkline_7d || [];
+        const chartSvg = renderTradeChart(sparkline, ts, rr);
+        panel4 = `<section class="panel" style="margin-top:18px;">
           <div class="section-label">📐 Trade Setup</div>
+          ${chartSvg}
           <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
             <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Entry Zone</div><div style="font-weight:700;">$${escapeHtml(String(ts.entry_zone.low))} – $${escapeHtml(String(ts.entry_zone.high))}</div></div>
             <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Stop Loss</div><div style="font-weight:700;color:#ef4444;">$${escapeHtml(String(ts.stop_loss??'n/a'))}</div></div>
-            ${(ts.take_profit_targets||[]).slice(0,2).map(tp=>`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">${escapeHtml(tp.label)}</div><div style="font-weight:700;color:#86efac;">$${escapeHtml(String(tp.price))} <span style="font-size:11px;color:#7e7e7e;">(+${escapeHtml(String(tp.pct_gain))}%)</span></div></div>`).join('')}
+            ${(ts.take_profit_targets||[]).slice(0,3).map(tp=>`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">${escapeHtml(tp.label)}</div><div style="font-weight:700;color:#86efac;">$${escapeHtml(String(tp.price))} <span style="font-size:11px;color:#7e7e7e;">(+${escapeHtml(String(tp.pct_gain))}%)</span></div></div>`).join('')}
             ${ts.risk_reward_ratio!=null?`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">R/R Ratio</div><div style="font-weight:700;">${escapeHtml(String(ts.risk_reward_ratio))}x</div></div>`:''}
             <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Setup Quality</div><div style="font-weight:700;color:${qualColor};">${escapeHtml(ts.setup_quality||'?')}</div></div>
             ${rr?.position_size_suggestion?`<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 16px;min-width:110px;text-align:center;"><div style="color:#7e7e7e;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px;">Position Size</div><div style="font-weight:700;color:#fbbf24;">${escapeHtml(rr.position_size_suggestion)}</div></div>`:''}
           </div>
           ${rr?.expected_value!=null?`<div style="font-size:0.82rem;color:#7e7e7e;">Kelly: ${rr.kelly_fraction!=null?(rr.kelly_fraction*100).toFixed(1)+'%':'n/a'} · EV: <span style="color:${rr.expected_value>0?'#86efac':rr.expected_value<0?'#f87171':'#7e7e7e'}">${escapeHtml(String(rr.expected_value))}</span>${rr.vol_adjusted_ev!=null&&rr.vol_adjusted_ev!==rr.expected_value?` · vol-adj EV: <span style="color:${rr.vol_adjusted_ev>0?'#86efac':'#f87171'}">${escapeHtml(String(rr.vol_adjusted_ev))}</span>`:''}${rr.ev_label?` <span style="font-size:0.75rem;color:#94a3b8;">(${escapeHtml(rr.ev_label)})</span>`:''} · TP1 prob: ${rr.probability_tp1!=null?(rr.probability_tp1*100).toFixed(0)+'%':'n/a'}</div>`:''}
-        </section>`;})()}
+        </section>`;
+      }
 
-        ${(()=>{
-          const dg = analysis?.data_gaps || payload?.data_gaps || [];
-          const vw = payload?._validation?.warnings || [];
-          const ds = payload?._validation?.data_sources_available || [];
-          const rq = payload?.report_quality;
-          if (!dg.length && !vw.length && !rq) return '';
-          return `<section class="panel" style="margin-top:18px;border-color:rgba(251,191,36,0.2);">
-            <div class="section-label">📋 Data Reliability</div>
-            ${rq ? `<div style="margin-bottom:8px;font-size:0.85rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Report quality: <strong style="color:${rq.grade==='A'?'#22c55e':rq.grade==='B'?'#86efac':rq.grade==='C'?'#fbbf24':rq.grade==='D'?'#f97316':'#ef4444'}">${escapeHtml(rq.grade)}</strong> (${rq.quality_score ?? rq.score}/100)${rq.verdict_confidence ? `<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${rq.verdict_confidence==='high'?'rgba(34,197,94,0.15)':rq.verdict_confidence==='medium'?'rgba(251,191,36,0.15)':'rgba(248,113,113,0.15)'};color:${rq.verdict_confidence==='high'?'#22c55e':rq.verdict_confidence==='medium'?'#fbbf24':'#f87171'}">verdict confidence: ${escapeHtml(rq.verdict_confidence)}</span>` : ''}${rq.dimension_coverage_pct != null ? `<span style="font-size:0.75rem;color:#94a3b8;">${rq.dimension_coverage_pct}% dim coverage</span>` : ''}</div>` : ''}
-            ${ds.length ? `<div style="font-size:0.78rem;color:#86efac;margin-bottom:4px;">✅ Data sources: ${ds.map(s=>escapeHtml(s)).join(', ')}</div>` : ''}
-            ${dg.length ? `<div style="font-size:0.78rem;color:#fbbf24;margin-bottom:4px;">⚠ Data gaps: ${dg.map(g=>escapeHtml(g)).join(', ')}</div>` : ''}
-            ${vw.length ? `<div style="font-size:0.78rem;color:#f97316;margin-top:4px;">🔍 Validation notes: ${vw.map(w=>escapeHtml(w)).join('; ')}</div>` : ''}
-          </section>`;
-        })()}
+      // ── Panel 5: Signals & Intelligence ─────────────────────────
+      const xSentiment = analysis.x_sentiment_summary && analysis.x_sentiment_summary !== 'n/a';
+      const alphaSignals = payload?.alpha_signals || [];
+      const keyFindings = analysis.key_findings || [];
+      const redFlags = payload?.red_flags || [];
+      const critFlags = redFlags.filter(f=>f.severity==='critical');
+      const warnFlags = redFlags.filter(f=>f.severity==='warning');
+      const hasSignals = xSentiment || alphaSignals.length || keyFindings.length || critFlags.length || warnFlags.length;
 
-        <section class="panel" style="margin-top:18px;">
-          <div class="footer-row">
-            <div class="footnote">Generated: ${escapeHtml(payload?.generated_at||'n/a')}</div>
-            <div class="footnote">Cache: ${cache.hit?'HIT':'MISS'} · age ${escapeHtml(formatDuration(cache.age_ms))} · ttl ${escapeHtml(formatDuration(cache.ttl_ms))}</div>
-          </div>
-          <div class="footnote" style="margin-top:8px;">Powered by Grok 4.20 MultiAgent + CoinGecko + DeFiLlama</div>
-        </section>
-      `;
+      let panel5 = '';
+      if (hasSignals) {
+        let subSections = '';
+        if (xSentiment) {
+          const nm = raw?.social?.news_momentum;
+          const vc = raw?.social?.very_recent_news_count;
+          const momBadge = (nm && nm !== 'no_data') ? (() => {
+            const col = nm==='accelerating'?'#22c55e':nm==='declining'?'#f87171':'#fbbf24';
+            return `<span style="font-size:0.72rem;padding:2px 8px;border-radius:999px;background:${col}22;color:${col};font-weight:600;margin-left:6px;">${nm==='accelerating'?'📈':nm==='declining'?'📉':'➡️'} ${nm}${vc?` (${vc} recent)`:''}</span>`;
+          })() : '';
+          subSections += `<div class="sub-section">
+            <div class="sub-label">𝕏 Sentiment${momBadge}</div>
+            <div class="analysis">${formatAnalysisText(analysis.x_sentiment_summary)}</div>
+          </div>`;
+        }
+        if (alphaSignals.length) {
+          subSections += `<div class="sub-section">
+            <div class="sub-label">🚀 Alpha Signals (${alphaSignals.length})</div>
+            <ul>${alphaSignals.map(s=>`<li style="margin-bottom:6px;"><span style="background:rgba(34,197,94,0.15);padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;color:#86efac;margin-right:8px;">${escapeHtml(s.strength||'?')}</span><strong>${escapeHtml(humanizeLabel(s.signal))}</strong>: ${escapeHtml(s.detail)}</li>`).join('')}</ul>
+          </div>`;
+        }
+        if (keyFindings.length) {
+          subSections += `<div class="sub-section">
+            <div class="sub-label">🔍 Key Findings (${keyFindings.length})</div>
+            <ul>${renderList(keyFindings)}</ul>
+          </div>`;
+        }
+        if (critFlags.length || warnFlags.length) {
+          const total = critFlags.length + warnFlags.length;
+          subSections += `<div class="sub-section">
+            <div class="sub-label">⚠ Risk Flags (${total})</div>
+            ${critFlags.length?`<div style="margin-bottom:6px;font-size:0.78rem;color:#ef4444;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Critical (${critFlags.length})</div><ul>${critFlags.map(f=>`<li style="color:#fca5a5;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
+            ${warnFlags.length?`<div style="margin:8px 0 6px;font-size:0.78rem;color:#f97316;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Warnings (${warnFlags.length})</div><ul>${warnFlags.map(f=>`<li style="color:#fdba74;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
+          </div>`;
+        }
+        panel5 = `<section class="panel" style="margin-top:18px;">
+          <div class="section-label">📡 Signals &amp; Intelligence</div>
+          ${subSections}
+        </section>`;
+      }
 
+      // ── Panel 6: Footer / Data Reliability ───────────────────────
+      const dg = analysis?.data_gaps || payload?.data_gaps || [];
+      const vw = payload?._validation?.warnings || [];
+      const ds = payload?._validation?.data_sources_available || [];
+      const rq = payload?.report_quality;
+      // Also include competitor comparison in footer if present
+      const compComp = analysis.competitor_comparison && analysis.competitor_comparison !== 'n/a' ? `<div style="margin-bottom:8px;font-size:0.82rem;color:#94a3b8;"><strong style="color:#c5c5c5;">Competitors:</strong> ${escapeHtml(analysis.competitor_comparison)}</div>` : '';
+      const panel6 = `<section class="panel" style="margin-top:18px;border-color:rgba(251,191,36,0.2);">
+        ${rq ? `<div style="margin-bottom:8px;font-size:0.85rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Report quality: <strong style="color:${rq.grade==='A'?'#22c55e':rq.grade==='B'?'#86efac':rq.grade==='C'?'#fbbf24':rq.grade==='D'?'#f97316':'#ef4444'}">${escapeHtml(rq.grade)}</strong> (${rq.quality_score ?? rq.score}/100)${rq.verdict_confidence ? `<span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${rq.verdict_confidence==='high'?'rgba(34,197,94,0.15)':rq.verdict_confidence==='medium'?'rgba(251,191,36,0.15)':'rgba(248,113,113,0.15)'};color:${rq.verdict_confidence==='high'?'#22c55e':rq.verdict_confidence==='medium'?'#fbbf24':'#f87171'}">verdict confidence: ${escapeHtml(rq.verdict_confidence)}</span>` : ''}${rq.dimension_coverage_pct != null ? `<span style="font-size:0.75rem;color:#94a3b8;">${rq.dimension_coverage_pct}% dim coverage</span>` : ''}</div>` : ''}
+        ${compComp}
+        ${ds.length ? `<div style="font-size:0.78rem;color:#86efac;margin-bottom:4px;">✅ Data sources: ${ds.map(s=>escapeHtml(s)).join(', ')}</div>` : ''}
+        ${dg.length ? `<div style="font-size:0.78rem;color:#fbbf24;margin-bottom:4px;">⚠ Data gaps: ${dg.map(g=>escapeHtml(g)).join(', ')}</div>` : ''}
+        ${vw.length ? `<div style="font-size:0.78rem;color:#f97316;margin-top:4px;">🔍 Validation notes: ${vw.map(w=>escapeHtml(w)).join('; ')}</div>` : ''}
+        <div class="footer-row" style="margin-top:10px;">
+          <div class="footnote">Generated: ${escapeHtml(payload?.generated_at||'n/a')}</div>
+          <div class="footnote">Cache: ${cache.hit?'HIT':'MISS'} · age ${escapeHtml(formatDuration(cache.age_ms))} · ttl ${escapeHtml(formatDuration(cache.ttl_ms))}</div>
+        </div>
+        <div class="footnote" style="margin-top:6px;">Powered by Grok 4.20 MultiAgent + CoinGecko + DeFiLlama</div>
+      </section>`;
+
+      reportBox.innerHTML = panel1 + panel2 + panel3 + panel4 + panel5 + panel6;
       resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 

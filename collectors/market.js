@@ -73,7 +73,7 @@ export async function collectMarket(projectName) {
       };
     }
 
-    const coinUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}?localization=false&tickers=false&community_data=true&developer_data=false&sparkline=false&price_change_percentage=1h%2C24h%2C7d%2C14d%2C30d%2C60d%2C200d%2C1y`;
+    const coinUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}?localization=false&tickers=false&community_data=true&developer_data=false&sparkline=true&price_change_percentage=1h%2C24h%2C7d%2C14d%2C30d%2C60d%2C200d%2C1y`;
     const [coinData, trendingData, tickersData] = await Promise.allSettled([
       fetchJson(coinUrl),
       fetchJson(COINGECKO_TRENDING_URL),
@@ -229,6 +229,7 @@ export async function collectMarket(projectName) {
       dex_count: dexCount,
       cex_volume_pct: cexVolumePct != null ? Math.round(cexVolumePct * 100) / 100 : null,
       top_exchanges: topExchanges,
+      sparkline_7d: coinData?.market_data?.sparkline_7d?.price || [],
       error: null,
     };
   } catch (error) {
