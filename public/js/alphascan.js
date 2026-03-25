@@ -696,10 +696,7 @@
         ${ds.length ? `<div style="font-size:0.78rem;color:#86efac;margin-bottom:4px;">✅ Data sources: ${ds.map(s=>escapeHtml(s)).join(', ')}</div>` : ''}
         ${dg.length ? `<div style="font-size:0.78rem;color:#fbbf24;margin-bottom:4px;">⚠ Data gaps: ${dg.map(g=>escapeHtml(g)).join(', ')}</div>` : ''}
         ${vw.length ? `<div style="font-size:0.78rem;color:#f97316;margin-top:4px;">🔍 Validation notes: ${vw.map(w=>escapeHtml(w)).join('; ')}</div>` : ''}
-        <div class="footer-row" style="margin-top:10px;">
-          <div class="footnote">Generated: ${escapeHtml(payload?.generated_at||'n/a')}</div>
-          <div class="footnote">Cache: ${cache.hit?'HIT':'MISS'} · age ${escapeHtml(formatDuration(cache.age_ms))} · ttl ${escapeHtml(formatDuration(cache.ttl_ms))}</div>
-        </div>
+
         <div class="footnote" style="margin-top:6px;">Powered by Claude Opus 4.6 + Grok Fast + CoinGecko + DeFiLlama</div>
       </section>`;
 
