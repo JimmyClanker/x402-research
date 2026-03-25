@@ -451,6 +451,14 @@ function buildPrompt(projectName, rawData, scores) {
         ]
       : []),
 
+    // Phase 3: category-adaptive weighting context
+    ...(scores?.overall?.category
+      ? [
+          `## TOKEN CATEGORY: ${scores.overall.category} (detected via ${scores.overall.category_source}, confidence ${(scores.overall.category_confidence * 100).toFixed(0)}%)`,
+          'Adjust your analysis register for this category. For meme tokens, focus heavily on social dynamics and whale behavior. For DeFi, focus on TVL/fees/revenue fundamentals. For L1/L2, focus on development and ecosystem growth.',
+        ]
+      : []),
+
     // Round 16: DEX-specific price context
     ...(rawData?.dex && !rawData.dex.error
       ? [
@@ -1084,6 +1092,14 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
           scores.overall.circuit_breakers.breakers.map((b) => `- [${b.severity.toUpperCase()}] Cap at ${b.cap}: ${b.reason}`).join('\n'),
           `Your verdict MUST NOT exceed ${scores.overall.circuit_breakers.applied_cap}/10.`,
           'If circuit breakers are active, explain WHY they are justified, do not argue against them.',
+        ]
+      : []),
+
+    // Phase 3: category-adaptive weighting context
+    ...(scores?.overall?.category
+      ? [
+          `## TOKEN CATEGORY: ${scores.overall.category} (detected via ${scores.overall.category_source}, confidence ${(scores.overall.category_confidence * 100).toFixed(0)}%)`,
+          'Adjust your analysis register for this category. For meme tokens, focus heavily on social dynamics and whale behavior. For DeFi, focus on TVL/fees/revenue fundamentals. For L1/L2, focus on development and ecosystem growth.',
         ]
       : []),
 

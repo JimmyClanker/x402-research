@@ -1,5 +1,6 @@
 import { applyCircuitBreakers } from '../scoring/circuit-breakers.js';
 import { detectRedFlags } from '../services/red-flags.js';
+import { getCategoryWeights } from '../scoring/category-weights.js';
 
 function clampScore(value) {
   return Math.min(10, Math.max(1, Number(value.toFixed(1))));
@@ -689,6 +690,7 @@ export function calculateScores(data) {
   applyConfidenceWeight(risk);
 
   // 7-dimension weights (Round 11): original 6 each reduced ~1.5%, new risk at 10%
+  // Kept as documentation/backward-compat reference — actual calculation uses category-adaptive weights.
   const WEIGHTS = {
     market:      0.19, // Price/liquidity is a primary reality check, so market structure gets top billing.
     onchain:     0.19, // For onchain projects, sustained usage/capital retention deserves equal weight to market action.
@@ -699,14 +701,18 @@ export function calculateScores(data) {
     risk:        0.10, // Explicit risk check tempers bullish dimensions without overwhelming the composite score.
   };
 
+  // Phase 3: Category-adaptive weighting
+  const categoryResult = getCategoryWeights(data);
+  const W = categoryResult.weights;
+
   let overallValue =
-    market_strength.score   * WEIGHTS.market +
-    onchain_health.score    * WEIGHTS.onchain +
-    social_momentum.score   * WEIGHTS.social +
-    development.score       * WEIGHTS.development +
-    tokenomics_health.score * WEIGHTS.tokenomics +
-    distribution.score      * WEIGHTS.distribution +
-    risk.score              * WEIGHTS.risk;
+    market_strength.score   * W.market +
+    onchain_health.score    * W.onchain +
+    social_momentum.score   * W.social +
+    development.score       * W.development +
+    tokenomics_health.score * W.tokenomics +
+    distribution.score      * W.distribution +
+    risk.score              * W.risk;
 
   // Penalize when data is incomplete — max -2 points when all collectors fail
   if (completeness < 1) {
@@ -723,7 +729,7 @@ export function calculateScores(data) {
     overallValue = overallValue + (NEUTRAL - overallValue) * regressionStrength * 0.4; // max 40% pull toward neutral
   }
 
-  const weightStr = Object.entries(WEIGHTS)
+  const weightStr = Object.entries(W)
     .map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`)
     .join(', ');
 
@@ -779,6 +785,11 @@ export function calculateScores(data) {
       dim_stddev: parseFloat(dimStddev.toFixed(2)),
       reasoning: `Weighted blend: ${weightStr}. Data completeness: ${Math.round(completeness * 100)}%. Overall confidence: ${confidence.overall_confidence}%. Score spread: ${scoreAnomaly} (stddev ${dimStddev.toFixed(2)}).`,
       circuit_breakers: breakerResult.capped ? breakerResult : null,
+      // Phase 3: category-adaptive weighting metadata
+      category: categoryResult.category,
+      category_confidence: categoryResult.confidence,
+      category_source: categoryResult.source,
+      weights_used: categoryResult.weights,
     },
   };
 }
