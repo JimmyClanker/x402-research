@@ -431,6 +431,8 @@ function buildPrompt(projectName, rawData, scores) {
     '- x_sentiment_summary: Summarize ONLY what X Search actually returned. If nothing relevant found, write "Limited X/Twitter data available."',
     '- key_findings: array of 3-5 key findings. Each MUST reference a specific data point from RAW_DATA or a search result.',
     '- liquidity_assessment: Based on RAW_DATA volume, market cap, and DEX liquidity. Do not invent slippage estimates.',
+    '- bull_case: object with { thesis: string (2-3 sentences — the strongest argument FOR investing, with specific numbers from RAW_DATA), catalysts: array of 2-3 specific upcoming catalysts that could drive price up, target_conditions: string (what needs to happen for the bull case to play out), probability: string ("high"/"medium"/"low" — how likely based on current data) }. Base this ONLY on verified data.',
+    '- bear_case: object with { thesis: string (2-3 sentences — the strongest argument AGAINST investing, with specific numbers), risks: array of 2-3 specific risks that could drive price down, failure_conditions: string (what would confirm the bear case), probability: string ("high"/"medium"/"low" — how likely based on current data) }. Be brutally honest.',
     '- data_gaps: array of strings listing what data was missing or could not be verified. This helps the reader assess report reliability.',
     '- facts_verified: array of 4-8 strings. ONLY hard facts, each with a [source: ...] tag.',
     '- opinions: array of 2-5 strings. Analytical interpretations; if not directly proven, prefix with [Opinion].',
@@ -693,6 +695,9 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
     key_findings: keyFindings.length
       ? keyFindings
       : ['Analysis is based only on local collectors and algorithmic scoring.'],
+    // Bull/Bear case (algorithmic fallback)
+    bull_case: null, // Requires AI analysis — not available in fallback mode
+    bear_case: null, // Requires AI analysis — not available in fallback mode
     // Round 5 (AutoResearch nightly): mark as fallback so report-quality.js can flag it
     is_fallback: true,
   };
@@ -806,6 +811,19 @@ function normalizeReport(payload, projectName, rawData, scores) {
     },
     // Round 7: liquidity assessment
     liquidity_assessment: String(payload?.liquidity_assessment || '').trim() || null,
+    // Bull/Bear case analysis
+    bull_case: payload?.bull_case ? {
+      thesis: cleanReportText(String(payload.bull_case.thesis || '').trim()) || null,
+      catalysts: normalizeList(payload.bull_case.catalysts, []).map(c => cleanReportText(c)),
+      target_conditions: cleanReportText(String(payload.bull_case.target_conditions || '').trim()) || null,
+      probability: String(payload.bull_case.probability || 'medium').toLowerCase(),
+    } : null,
+    bear_case: payload?.bear_case ? {
+      thesis: cleanReportText(String(payload.bear_case.thesis || '').trim()) || null,
+      risks: normalizeList(payload.bear_case.risks, []).map(r => cleanReportText(r)),
+      failure_conditions: cleanReportText(String(payload.bear_case.failure_conditions || '').trim()) || null,
+      probability: String(payload.bear_case.probability || 'medium').toLowerCase(),
+    } : null,
     // Round 60: short headline (first sentence of analysis_text) for feed/preview use
     headline: (() => {
       const text = cleanReportText(String(payload?.analysis_text || '').trim());
@@ -1173,6 +1191,8 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '- x_sentiment_summary: Summarize the X_SOCIAL data provided below. If X_SOCIAL is empty or has errors, write "No X/Twitter data available."',
     '- key_findings: array of 3-5 key findings. Each MUST reference a specific data point from RAW_DATA or X_SOCIAL.',
     '- liquidity_assessment: Based on RAW_DATA volume, market cap, and DEX liquidity. Do not invent slippage estimates.',
+    '- bull_case: object with { thesis: string (2-3 sentences — the strongest argument FOR investing, with specific numbers from RAW_DATA), catalysts: array of 2-3 specific upcoming catalysts that could drive price up, target_conditions: string (what needs to happen for the bull case to play out), probability: string ("high"/"medium"/"low" — how likely based on current data) }. Base this ONLY on verified data.',
+    '- bear_case: object with { thesis: string (2-3 sentences — the strongest argument AGAINST investing, with specific numbers), risks: array of 2-3 specific risks that could drive price down, failure_conditions: string (what would confirm the bear case), probability: string ("high"/"medium"/"low" — how likely based on current data) }. Be brutally honest.',
     '- data_gaps: array of strings listing what data was missing or could not be verified. This helps the reader assess report reliability.',
     '- facts_verified: array of 4-8 strings. ONLY hard facts, each with a [source: ...] tag.',
     '- opinions: array of 2-5 strings. Analytical interpretations; if not directly proven, prefix with [Opinion].',
