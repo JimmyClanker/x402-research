@@ -11,6 +11,7 @@ import {
   runAnalysis,
 } from './alpha-helpers.js';
 import { createHistoryRouter } from './alpha-history.js';
+import { storeScanSnapshot } from '../calibration/snapshot-store.js';
 
 
 function extractAlphaErrorDetails(error) {
@@ -48,6 +49,12 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
         const report = await runAnalysis({ projectName, exaService, mode, config, collectAllFn, collectorCache: cc, db: signalsService.db });
         cache.write(cacheKey, report);
         try { signalsService.db.exec("CREATE TABLE IF NOT EXISTS scan_counter (id INTEGER PRIMARY KEY, count INTEGER DEFAULT 0)"); signalsService.db.exec("INSERT OR IGNORE INTO scan_counter (id, count) VALUES (1, 0)"); signalsService.db.prepare("UPDATE scan_counter SET count = count + 1 WHERE id = 1").run(); } catch {}
+        try {
+          const snapshotId = await storeScanSnapshot(projectName, report?.raw_data, report?.scores);
+          console.log(`[alpha] Snapshot saved: #${snapshotId}`);
+        } catch (err) {
+          console.error('[alpha] Snapshot save failed:', err.message);
+        }
         return {
           ...report,
           cache: {
