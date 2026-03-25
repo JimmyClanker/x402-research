@@ -1119,7 +1119,7 @@
           const timeoutId = setTimeout(() => controller.abort(), 30000);
           let res;
           try {
-            res = await fetch(`/alpha/quick?project=${encodeURIComponent(project)}`, { signal: controller.signal });
+            res = await fetch(`/alpha/quick?project=${encodeURIComponent(project)}&force_refresh=true`, { signal: controller.signal });
           } finally {
             clearTimeout(timeoutId);
           }
@@ -1145,7 +1145,7 @@
             var tid2 = setTimeout(function() { controller2.abort(); }, 90000);
             var res2;
             try {
-              res2 = await fetch('/alpha?project=' + encodeURIComponent(project) + '&key=' + encodeURIComponent(urlKey), { signal: controller2.signal });
+              res2 = await fetch('/alpha?project=' + encodeURIComponent(project) + '&key=' + encodeURIComponent(urlKey) + '&force_refresh=true', { signal: controller2.signal });
             } finally { clearTimeout(tid2); }
             var payload2 = await res2.json();
             if (!res2.ok) throw new Error(payload2?.error || 'Server error (' + res2.status + ')');
