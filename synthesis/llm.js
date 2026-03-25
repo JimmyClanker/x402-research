@@ -514,6 +514,18 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
   const risks = [];
   const catalysts = [];
   const keyFindings = [];
+  const market = rawData?.market ?? {};
+  const onchain = rawData?.onchain ?? {};
+  const social = rawData?.social ?? {};
+  const github = rawData?.github ?? {};
+
+  const price = market.current_price ?? market.price;
+  const change24h = market.price_change_pct_24h ?? market.price_change_percentage_24h ?? market.change_24h;
+  const change7d = market.price_change_pct_7d ?? market.price_change_percentage_7d_in_currency;
+  const mcap = market.market_cap;
+  const vol24h = market.total_volume;
+  const tvl = onchain.tvl;
+  const tvlChange7d = onchain.tvl_change_7d;
 
   if ((rawData?.tokenomics?.pct_circulating || 0) < 50) {
     risks.push('Circulating supply is still limited: unlock/dilution risk remains.');
@@ -521,74 +533,69 @@ export function fallbackReport(projectName, rawData, scores, error = null) {
   if ((rawData?.onchain?.tvl_change_30d || 0) < 0) {
     risks.push('TVL is contracting on a monthly basis.');
   }
-  if ((rawData?.social?.sentiment || 'neutral') === 'bullish') {
+  if ((social.sentiment || 'neutral') === 'bullish') {
     catalysts.push('Social sentiment is constructive and the narrative is active.');
   }
-  if ((rawData?.github?.commits_90d || 0) > 30) {
+  if ((github.commits_90d || 0) > 30) {
     catalysts.push('Visible software development over the last 90 days.');
   }
-  if ((rawData?.market?.price_change_percentage_24h || rawData?.market?.change_24h || 0) > 5) {
+  if ((change24h || 0) > 5) {
     catalysts.push('Strong short-term price momentum (+5% in 24h).');
   }
-  if ((rawData?.social?.mentions || 0) > 100) {
+  if ((social.mentions || 0) > 100) {
     catalysts.push('High social mention volume detected.');
   }
-  if ((rawData?.onchain?.tvl_change_7d || 0) > 10) {
+  if ((tvlChange7d || 0) > 10) {
     catalysts.push('TVL growing rapidly on a weekly basis (+10%+).');
   }
-  if ((rawData?.market?.total_volume || 0) > (rawData?.market?.market_cap || Infinity) * 0.15) {
+  if ((vol24h || 0) > (mcap || Infinity) * 0.15) {
     catalysts.push('Volume/market-cap ratio elevated — active trading interest.');
   }
-  if ((rawData?.onchain?.fees_7d || 0) > 0 && (rawData?.onchain?.revenue_7d || 0) > 0) {
+  if ((onchain.fees_7d || 0) > 0 && (onchain.revenue_7d || 0) > 0) {
     catalysts.push('Protocol is generating fees and revenue.');
   }
-  if ((rawData?.market?.price_change_percentage_24h || rawData?.market?.change_24h || 0) < -10) {
+  if ((change24h || 0) < -10) {
     risks.push('Sharp price decline in 24h — possible negative catalyst.');
   }
-  if ((rawData?.social?.sentiment || 'neutral') === 'bearish') {
+  if ((social.sentiment || 'neutral') === 'bearish') {
     risks.push('Social sentiment is bearish.');
   }
-  if ((rawData?.market?.total_volume || 0) < 50000) {
+  if ((vol24h || 0) < 50000) {
     risks.push('Extremely low trading volume — liquidity risk.');
   }
-  if ((rawData?.market?.market_cap || 0) > 0) {
-    keyFindings.push(`Observed market cap: ${Number(rawData.market.market_cap).toLocaleString('en-US')}.`);
+  if ((mcap || 0) > 0) {
+    keyFindings.push(`Observed market cap: ${formatNumber(mcap)}.`);
   }
-  if ((rawData?.onchain?.tvl || 0) > 0) {
-    keyFindings.push(`Observed TVL: ${Number(rawData.onchain.tvl).toLocaleString('en-US')}.`);
+  if ((tvl || 0) > 0) {
+    keyFindings.push(`Observed TVL: ${formatNumber(tvl)}.`);
   }
-  if ((rawData?.social?.mentions || 0) > 0) {
-    keyFindings.push(`Social mentions: ${rawData.social.mentions}.`);
+  if ((social.mentions || 0) > 0) {
+    keyFindings.push(`Social mentions: ${social.mentions}.`);
   }
-  if (rawData?.github?.commits_90d > 0) {
-    keyFindings.push(`GitHub activity: ${rawData.github.commits_90d} commits in 90 days, ${rawData.github.contributors || 'n/a'} contributors.`);
+  if (github.commits_90d > 0) {
+    keyFindings.push(`GitHub activity: ${github.commits_90d} commits in 90 days, ${github.contributors || 'n/a'} contributors.`);
   }
   if (rawData?.tokenomics?.pct_circulating) {
     keyFindings.push(`Circulating supply: ${rawData.tokenomics.pct_circulating.toFixed(1)}%.`);
   }
 
+  const analysisText = (() => {
+    const lines = [
+      `${projectName} scores ${overallScore}/10 with a ${verdict} stance in fallback mode.`,
+      price != null ? `Price is ${formatNumber(price)}${change24h != null ? `, ${Number(change24h) >= 0 ? '+' : ''}${Number(change24h).toFixed(1)}% over 24h` : ''}${change7d != null ? ` and ${Number(change7d) >= 0 ? '+' : ''}${Number(change7d).toFixed(1)}% over 7d` : ''}.` : null,
+      mcap != null ? `Market cap sits at ${formatNumber(mcap)}${vol24h != null ? ` with ${formatNumber(vol24h)} in 24h volume` : ''}.` : null,
+      tvl != null ? `TVL is ${formatNumber(tvl)}${tvlChange7d != null ? ` (${Number(tvlChange7d) >= 0 ? '+' : ''}${Number(tvlChange7d).toFixed(1)}% over 7d)` : ''}.` : null,
+      `Dimension scores — Market ${scores?.market_strength?.score ?? 'n/a'}/10, Onchain ${scores?.onchain_health?.score ?? 'n/a'}/10, Social ${scores?.social_momentum?.score ?? 'n/a'}/10, Dev ${scores?.development?.score ?? 'n/a'}/10, Tokenomics ${scores?.tokenomics_health?.score ?? 'n/a'}/10, Distribution ${scores?.distribution?.score ?? 'n/a'}/10, Risk ${scores?.risk?.score ?? 'n/a'}/10.`,
+      error ? `[Fallback: ${error}]` : null,
+    ].filter(Boolean).join(' ');
+    return lines;
+  })();
+
   return {
     verdict,
+    headline: price != null ? `${projectName} trades at ${formatNumber(price)}.` : `${projectName} scores ${overallScore}/10 (${verdict}).`,
     // Round 5 (AutoResearch nightly): richer fallback analysis_text with more data points
-    analysis_text: (() => {
-      const m = rawData?.market ?? {};
-      const o = rawData?.onchain ?? {};
-      const price = m.current_price ?? m.price;
-      const mcap = m.market_cap;
-      const vol = m.total_volume;
-      const tvl = o.tvl;
-      const c24h = m.price_change_pct_24h;
-      const c7d = m.price_change_pct_7d;
-      const lines = [
-        `${projectName}: algorithmic score ${overallScore}/10 (${verdict}).`,
-        price != null ? `Price $${Number(price).toLocaleString('en-US', { maximumSignificantDigits: 6 })}${c24h != null ? `, ${Number(c24h) >= 0 ? '+' : ''}${Number(c24h).toFixed(1)}% 24h${c7d != null ? `, ${Number(c7d) >= 0 ? '+' : ''}${Number(c7d).toFixed(1)}% 7d` : ''}` : ''}.` : null,
-        mcap != null ? `Market cap $${(Number(mcap) / 1e6).toFixed(1)}M${vol != null ? `, 24h vol $${(Number(vol) / 1e6).toFixed(1)}M` : ''}.` : null,
-        tvl != null ? `TVL $${(Number(tvl) / 1e6).toFixed(1)}M${o.tvl_change_7d != null ? ` (${Number(o.tvl_change_7d) >= 0 ? '+' : ''}${Number(o.tvl_change_7d).toFixed(1)}%/7d)` : ''}.` : null,
-        `Dimension scores — Market ${scores?.market_strength?.score ?? 'n/a'}/10, Onchain ${scores?.onchain_health?.score ?? 'n/a'}/10, Social ${scores?.social_momentum?.score ?? 'n/a'}/10, Dev ${scores?.development?.score ?? 'n/a'}/10, Tokenomics ${scores?.tokenomics_health?.score ?? 'n/a'}/10, Distribution ${scores?.distribution?.score ?? 'n/a'}/10, Risk ${scores?.risk?.score ?? 'n/a'}/10.`,
-        error ? `[Fallback: ${error}]` : null,
-      ].filter(Boolean).join(' ');
-      return lines;
-    })(),
+    analysis_text: analysisText,
     moat:
       'Requires external qualitative validation; competitive advantage depends on network effects, liquidity, brand, and execution.',
     risks: risks.length ? risks : ['Data coverage is incomplete: further qualitative validation is required.'],
@@ -624,16 +631,11 @@ function cleanReportText(text) {
     return `${num.toFixed(2)}%`;
   });
 
-  // 3. Format raw large numbers with $ — match patterns like "292636115" or "414828652.77889"
-  // Only match numbers NOT followed by % (those were already handled)
-  cleaned = cleaned.replace(/\$?(\d{7,}(?:\.\d+)?)(?!%)/g, (match, numStr) => {
-    const num = parseFloat(numStr);
-    if (isNaN(num)) return match;
-    if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
-    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-    if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
-    if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
-    return `$${num.toFixed(2)}`;
+  // 3. Format raw large numbers (7+ digits) with separators; preserve explicit $ if present.
+  // Avoid forcing currency on non-USD metrics (e.g., user counts, commits).
+  cleaned = cleaned.replace(/\b(\$?)(\d{7,})(?![\d%])/g, (match, dollar, intPart) => {
+    const formatted = Number(intPart).toLocaleString('en-US');
+    return `${dollar}${formatted}`;
   });
 
   // 4. Replace snake_case field names with human labels
@@ -680,6 +682,14 @@ function cleanReportText(text) {
   // 6. Remove "FACT_REGISTRY" references
   cleaned = cleaned.replace(/\bFACT_REGISTRY\b\s*/gi, '');
 
+  // 7. Clean dangling provenance fragments after source-tag stripping.
+  cleaned = cleaned
+    .replace(/\bfrom\s*\.(?=[\s,.;:]|$)/gi, '')
+    .replace(/\bfrom\s+(RAW_DATA|FACT_REGISTRY|DEX MARKET DATA|VERIFIED DATA)\b[:\s]*/gi, '')
+    .replace(/\bfrom\s+(?=[,.;]|$)/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1');
+
   return cleaned.trim();
 }
 
@@ -708,11 +718,11 @@ function normalizeReport(payload, projectName, rawData, scores) {
     liquidity_assessment: String(payload?.liquidity_assessment || '').trim() || null,
     // Round 60: short headline (first sentence of analysis_text) for feed/preview use
     headline: (() => {
-      const text = String(payload?.analysis_text || '').trim();
+      const text = cleanReportText(String(payload?.analysis_text || '').trim());
       if (!text) return null;
-      // Match sentence end: a period/!/? that is NOT followed by a digit (to avoid cutting $92.36 → $92.)
-      const firstSentence = text.match(/^.+?[!?]|^.+?\.(?!\d)/)?.[0];
-      return firstSentence ? firstSentence.trim() : text.slice(0, 120) + (text.length > 120 ? '...' : '');
+      // End headline at a real sentence boundary without cutting decimal prices like $92.48.
+      const firstSentence = text.match(/^.*?[.!?](?=\s+[A-Z\[]|$)/)?.[0];
+      return firstSentence ? firstSentence.trim() : text.slice(0, 140) + (text.length > 140 ? '...' : '');
     })(),
   };
 }
@@ -851,6 +861,29 @@ export function validateReport(report, rawData) {
         report.data_gaps.push(`${col}: data not available`);
       }
     }
+  }
+
+  // 6. User-facing text hygiene: remove source tags/snake_case/raw unformatted numbers.
+  const userFacingFields = ['analysis_text', 'moat', 'competitor_comparison', 'x_sentiment_summary', 'liquidity_assessment'];
+  for (const field of userFacingFields) {
+    if (report[field]) report[field] = cleanReportText(report[field]);
+    if (hasSourceTag(report[field])) warnings.push(`${field} contains source tag(s)`);
+    if (/\b[a-z]+_[a-z0-9_]+\b/.test(String(report[field] || ''))) {
+      warnings.push(`${field} contains snake_case field name(s)`);
+    }
+    if (/\b\d{7,}(?:\.\d+)?\b/.test(String(report[field] || ''))) {
+      warnings.push(`${field} may contain unformatted large number(s)`);
+    }
+  }
+  report.risks = (report.risks || []).map((r) => cleanReportText(r));
+  report.catalysts = (report.catalysts || []).map((c) => cleanReportText(c));
+  report.key_findings = (report.key_findings || []).map((k) => cleanReportText(k));
+
+  // 7. Data sanity: DEX liquidity should not be implausibly above market cap.
+  const mcap = Number(rawData?.market?.market_cap || 0);
+  const dexLiquidity = Number(rawData?.dex?.dex_liquidity_usd || 0);
+  if (mcap > 0 && dexLiquidity > mcap * 10) {
+    warnings.push(`DEX liquidity ($${dexLiquidity.toLocaleString('en-US')}) exceeds 10x market cap ($${mcap.toLocaleString('en-US')}) — likely bad data`);
   }
 
   // Attach validation metadata

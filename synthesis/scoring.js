@@ -227,7 +227,7 @@ function scoreOnchainHealth(onchain = {}) {
 
   return {
     score: clampScore(raw),
-    reasoning: `TVL trend 7d ${trend7d.toFixed(2)}%, 30d ${trend30d.toFixed(2)}%, fees_7d ${fees.toFixed(0)}, chains ${chainCount}${multichainBonus > 0 ? ` (+${multichainBonus} multichain bonus)` : ''}${tvlStickiness ? `, TVL ${tvlStickiness}` : ''}${activeAddresses7d > 0 ? `, active_addr_7d ${activeAddresses7d}` : ''}${revenueToFees !== null ? `, rev/fees ${(revenueToFees * 100).toFixed(0)}%` : ''}${maturity ? `, maturity: ${maturity}` : ''}.`,
+    reasoning: `7-day TVL change ${trend7d.toFixed(2)}%, 30-day TVL change ${trend30d.toFixed(2)}%, 7-day fees $${fees.toLocaleString('en-US', { maximumFractionDigits: 0 })}, chains ${chainCount}${multichainBonus > 0 ? ` (+${multichainBonus} multichain bonus)` : ''}${tvlStickiness ? `, capital stickiness ${tvlStickiness}` : ''}${activeAddresses7d > 0 ? `, active addresses (7d) ${activeAddresses7d.toLocaleString('en-US')}` : ''}${revenueToFees !== null ? `, revenue capture ${(revenueToFees * 100).toFixed(0)}%` : ''}${maturity ? `, maturity ${maturity}` : ''}.`,
   };
 }
 
@@ -255,7 +255,6 @@ function scoreSocialMomentum(social = {}) {
   const neutral = safeNumber(social?.sentiment_counts?.neutral);
   const narratives = Array.isArray(social.key_narratives) ? social.key_narratives.length : 0;
   const totalSignals = bullish + bearish + neutral;
-  const sentimentSpread = bullish - bearish;
   const confidence = totalSignals > 0 ? Math.min(totalSignals / 6, 1) : 0;
 
   // Use normalized sentiment score if available
@@ -357,7 +356,7 @@ function scoreDevelopment(github = {}) {
 
   return {
     score: clampScore(raw),
-    reasoning: `Contributors ${contributors}, commits_90d ${commits90d}, commits_30d ${commits30d}/${commits30dPrev} (trend: ${commitTrend || 'n/a'}), stars ${stars}, forks ${forks}, watchers ${watchers}, langs ${languageCount}, issue pressure ${issuePressure.toFixed(2)}, days since last commit ${daysSinceCommit == null ? 'n/a' : daysSinceCommit.toFixed(0)}${github.has_ci ? ', CI ✓' : ''}.`,
+    reasoning: `Contributors ${contributors}, commits (90d) ${commits90d.toLocaleString('en-US')}, commits (last 30d vs prior 30d) ${commits30d.toLocaleString('en-US')}/${commits30dPrev.toLocaleString('en-US')} (trend: ${commitTrend || 'n/a'}), stars ${stars.toLocaleString('en-US')}, forks ${forks.toLocaleString('en-US')}, watchers ${watchers.toLocaleString('en-US')}, languages ${languageCount}, issue pressure ${issuePressure.toFixed(2)}, days since last commit ${daysSinceCommit == null ? 'n/a' : daysSinceCommit.toFixed(0)}${github.has_ci ? ', CI ✓' : ''}.`,
   };
 }
 
@@ -392,7 +391,7 @@ function scoreTokenomicsRisk(tokenomics = {}) {
 
   return {
     score: clampScore(raw),
-    reasoning: `Pct circulating ${pctCirculating.toFixed(2)}%, unlock overhang ${unlockOverhangPct != null ? `${unlockOverhangPct.toFixed(1)}%` : 'n/a'} (${dilutionRisk || 'unknown'} dilution risk), inflation ${inflation.toFixed(2)}%, distribution ${hasDistribution ? 'available' : 'missing'}.`,
+    reasoning: `Circulating supply ${pctCirculating.toFixed(2)}%, unlock overhang ${unlockOverhangPct != null ? `${unlockOverhangPct.toFixed(1)}%` : 'n/a'} (${dilutionRisk || 'unknown'} dilution risk), inflation ${inflation.toFixed(2)}%, distribution ${hasDistribution ? 'available' : 'missing'}.`,
   };
 }
 
@@ -522,7 +521,7 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
 
   return {
     score: clampScore(raw),
-    reasoning: `Volatility ${volatility.toFixed(1)}%, liquidity ${dexLiquidity > 0 ? `$${dexLiquidity.toFixed(0)}` : `vol/mcap ${mcap > 0 ? (volume / mcap).toFixed(3) : 'n/a'}`}, concentration ${topConcentration > 0 ? `${topConcentration.toFixed(1)}%` : 'n/a'}, rev_efficiency ${revEfficiency > 0 ? `$${revEfficiency.toFixed(0)}/M TVL/wk` : 'n/a'}${pressureSignal ? `, DEX ${pressureSignal} (ratio: ${buySellRatio.toFixed(2)})` : ''}.`,
+    reasoning: `Volatility ${volatility.toFixed(1)}%, liquidity ${dexLiquidity > 0 ? `$${dexLiquidity.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : `volume/market cap ${mcap > 0 ? (volume / mcap).toFixed(3) : 'n/a'}`}, concentration ${topConcentration > 0 ? `${topConcentration.toFixed(1)}%` : 'n/a'}, revenue efficiency ${revEfficiency > 0 ? `$${revEfficiency.toFixed(0)}/$1M TVL/week` : 'n/a'}${pressureSignal ? `, DEX ${pressureSignal} (buy/sell ratio: ${buySellRatio.toFixed(2)})` : ''}.`,
   };
 }
 
@@ -586,11 +585,21 @@ function collectorCompleteness(data = {}) {
   return ok / sections.length;
 }
 
-// Use empty object for collectors that errored — prevents phantom scores from
-// error fields leaking into downstream scoring functions.
+// Use empty object only when a collector truly has no usable data.
+// Some collectors return partial data plus an `error` string (e.g. tokenomics
+// fallback values when Messari is unavailable). We should still score those.
 function safeCollector(raw) {
-  if (!raw || typeof raw !== 'object' || raw.error) return {};
-  return raw;
+  if (!raw || typeof raw !== 'object') return {};
+
+  const hasUsableData = Object.entries(raw).some(([key, value]) => {
+    if (key === 'error' || key === 'project_name') return false;
+    if (value == null) return false;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+  });
+
+  return hasUsableData ? raw : {};
 }
 
 // ─── Round 9: Reddit sentiment supplement ────────────────────────────────────

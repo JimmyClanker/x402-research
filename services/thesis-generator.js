@@ -183,10 +183,21 @@ export function generateThesis(projectName, rawData = {}, scores = {}, redFlags 
   }
 
   // Round 67: One-liner thesis for feeds/cards
-  const verdict = overallScore >= 7.5 ? 'STRONG BUY' : overallScore >= 6 ? 'BUY' : overallScore >= 4.5 ? 'HOLD' : 'AVOID';
-  const oneLiner = overallScore >= 6
-    ? `${projectName} — ${verdict}: ${bullSignalText || strongest[0] || 'fundamentals'} justify entry${priceRangeNote}.`
-    : `${projectName} — ${verdict}: ${bearFlagText || weakest[0] || 'weak fundamentals'} — avoid until conditions improve.`;
+  const verdict = overallScore >= 8.5
+    ? 'STRONG BUY'
+    : overallScore >= 7
+      ? 'BUY'
+      : overallScore >= 5.5
+        ? 'HOLD'
+        : overallScore >= 3.5
+          ? 'AVOID'
+          : 'STRONG AVOID';
+
+  const oneLiner = verdict.includes('BUY')
+    ? `${projectName} — ${verdict}: ${bullSignalText || strongest[0] || 'fundamentals'} support a constructive setup${priceRangeNote}.`
+    : verdict === 'HOLD'
+      ? `${projectName} — HOLD: ${bullSignalText || strongest[0] || 'mixed fundamentals'} worth monitoring, but ${bearFlagText || weakest[0] || 'current risks'} cap conviction.`
+      : `${projectName} — ${verdict}: ${bearFlagText || weakest[0] || 'weak fundamentals'} keep the setup unattractive for now.`;
 
   // Round 11 (AutoResearch nightly): Add key metrics snapshot to thesis for quick context
   const m = rawData?.market ?? {};

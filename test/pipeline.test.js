@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 
 import { calculateScores, calculateConfidence } from '../synthesis/scoring.js';
-import { formatReport, formatMarkdown, formatPlainText, formatAgentJSON, formatReportMulti } from '../synthesis/templates.js';
+import { formatMarkdown, formatPlainText, formatAgentJSON, formatReportMulti } from '../synthesis/templates.js';
 import { analyzeCrossDimensional } from '../analysis/cross-dimensional.js';
 import { calculateConviction } from '../analysis/conviction.js';
 import { analyzeTemporalDelta } from '../analysis/temporal.js';
@@ -144,7 +144,7 @@ function createTestDb() {
 // ── Test 1: Phase 1 → Phase 2 → Phase 3 data flow ───────────────
 
 test('Pipeline: Phase 1 collect returns structured rawData', async () => {
-  const mockCollect = async (name) => createMockRawData();
+  const mockCollect = async () => createMockRawData();
   const rawData = await phaseCollect({
     projectName: 'TestProject',
     exaService: null,
@@ -493,6 +493,35 @@ test('Thesis: includes evidence, invalidation, time horizons, probabilities', ()
   assert.ok(thesis.probabilities);
   assert.ok(thesis.probabilities.bull >= 10 && thesis.probabilities.bull <= 85);
   assert.ok(thesis.probabilities.bear >= 10 && thesis.probabilities.bear <= 85);
+});
+
+test('Scores: tokenomics fallback data remains usable even when collector reports partial error', () => {
+  const rawData = createMockRawData({
+    tokenomics: {
+      pct_circulating: 99.9999,
+      unlock_overhang_pct: 0.0001,
+      dilution_risk: 'low',
+      inflation_rate: 1,
+      token_distribution: null,
+      error: 'Messari tokenomics unavailable',
+    },
+  });
+
+  const scores = calculateScores(rawData);
+  assert.match(scores.tokenomics_health.reasoning, /Circulating supply 100\.00%/);
+  assert.match(scores.tokenomics_health.reasoning, /inflation 1\.00%/);
+});
+
+test('Thesis: one_liner stays aligned with HOLD verdict band', () => {
+  const rawData = createMockRawData();
+  const scores = createMockScores(rawData);
+  scores.overall.score = 6.1;
+  const redFlags = detectRedFlags(rawData, scores);
+  const alphaSignals = detectAlphaSignals(rawData, scores);
+
+  const thesis = generateThesis('TestProject', rawData, scores, redFlags, alphaSignals);
+  assert.match(thesis.one_liner, /^TestProject — HOLD:/);
+  assert.doesNotMatch(thesis.one_liner, /justify entry/i);
 });
 
 // ── Test 10: Full pipeline data flow ─────────────────────────────
