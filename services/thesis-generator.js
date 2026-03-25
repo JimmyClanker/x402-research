@@ -20,6 +20,21 @@ const SIGNAL_PHRASES = {
   tvl_growth_spike:           'strong TVL inflow',
   strong_positive_sentiment:  'high community conviction',
   improving_sector_position:  'improving sector standing',
+  recent_release:             'recent code release',
+  coingecko_trending:         'CoinGecko trending status',
+  strong_dex_presence:        'strong DEX presence',
+  dex_buy_pressure:           'DEX buy pressure',
+  institutional_interest:     'institutional interest signals',
+  partnership_news:           'partnership announcements',
+  high_cex_volume_share:      'high CEX volume share',
+  strong_dex_liquidity_health: 'robust DEX liquidity',
+  flash_pump:                 'flash pump detected',
+  ath_breakout:               'ATH breakout',
+  recovery_from_low:          'recovery from recent low',
+  volume_surge:               'volume surge',
+  price_volume_divergence:    'price-volume divergence',
+  multi_chain_presence:       'multi-chain presence',
+  ecosystem_growth:           'ecosystem growth',
 };
 
 const FLAG_PHRASES = {
@@ -33,6 +48,17 @@ const FLAG_PHRASES = {
   bearish_sentiment:   'overwhelmingly bearish community sentiment',
   no_license:          'unlicensed codebase',
   extreme_fdv_ratio:   'extreme token unlock overhang',
+  exploit_mentions_social: 'exploit mentions in social media',
+  low_revenue_capture: 'low revenue capture',
+  zero_revenue_capture: 'zero revenue capture',
+  very_low_revenue_efficiency: 'very low revenue efficiency',
+  token_unlock_news:   'upcoming token unlock events',
+  regulatory_risk_mentions: 'regulatory risk mentions',
+  near_all_time_low:   'near all-time low price',
+  atl_proximity:       'ATL proximity risk',
+  flash_crash:         'flash crash detected',
+  high_concentration:  'high holder concentration',
+  unverified_contract: 'unverified contract',
 };
 
 function sortedDims(scores) {

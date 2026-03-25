@@ -931,7 +931,7 @@
   <header>
     <div class="container">
       <div class="header-inner">
-        <a href="/" class="logo" aria-label="Clawnkers — Home"><img src="/claw-logo.png?v=3" alt="" width="28" height="28">Clawnkers<span>.</span></a>
+        <a href="/" class="logo" aria-label="Clawnkers — Home"><img src="/claw-logo.png?v=3" alt="" width="28" height="28"><span class="brand-text">Clawnkers<span>.</span></span></a>
         <nav aria-label="Main navigation">
           <a href="/#products">Products</a>
           <a href="/#about">About</a>
@@ -1036,7 +1036,7 @@
   <footer>
     <div class="container">
       <div class="footer-inner">
-        <div class="footer-logo"><img src="/claw-logo.png?v=3" alt="" width="24" height="24">Clawnkers<span>.</span></div>
+        <div class="footer-logo"><img src="/claw-logo.png?v=3" alt="" width="24" height="24"><span class="brand-text">Clawnkers<span>.</span></span></div>
         <div class="footer-links">
           <a href="/alphascan">Alpha Scanner</a>
           <a href="/#api">API Docs</a>
@@ -1103,7 +1103,7 @@
       const num = Number(value);
       if (!Number.isFinite(num)) return 'n/a';
       const abs = Math.abs(num);
-      if (abs >= 1000) return formatCompactNumber(num);
+      // Prices should always show full number with commas, never abbreviate to K/M
       if (abs >= 1)    return `$${num.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2})}`;
       if (abs > 0)     { const d = abs < 0.0001 ? 6 : abs < 0.01 ? 5 : 4; return `$${num.toFixed(d)}`; }
       return '$0.00';
@@ -1311,6 +1311,42 @@
       return `<div class="github-card"><div class="github-card-header"><span class="github-icon">⌥</span><span class="github-title">Repository</span>${url}</div>${desc}<div class="github-badges">${lang}${lic}${github.stars!=null?`<span class="stat-badge">★ ${Number(github.stars).toLocaleString()}</span>`:''} ${github.watchers!=null?`<span class="stat-badge">👁 ${Number(github.watchers).toLocaleString()}</span>`:''}</div></div>`;
     }
 
+    function humanizeLabel(snakeCase) {
+      if (!snakeCase) return snakeCase;
+      const labels = {
+        'exploit_mentions_social': 'Exploit mentions in social media',
+        'low_revenue_capture': 'Low revenue capture',
+        'zero_revenue_capture': 'Zero revenue capture',
+        'very_low_revenue_efficiency': 'Very low revenue efficiency',
+        'token_unlock_news': 'Token unlock events',
+        'regulatory_risk_mentions': 'Regulatory risk mentions',
+        'near_all_time_low': 'Near all-time low',
+        'atl_proximity': 'ATL proximity',
+        'no_onchain_data': 'No on-chain data',
+        'flash_crash': 'Flash crash detected',
+        'high_concentration': 'High holder concentration',
+        'unverified_contract': 'Unverified contract',
+        'recent_release': 'Recent release',
+        'multi_exchange_listing': 'Broad exchange distribution',
+        'coingecko_trending': 'CoinGecko trending',
+        'strong_dex_presence': 'Strong DEX presence',
+        'dex_buy_pressure': 'DEX buy pressure',
+        'institutional_interest': 'Institutional interest',
+        'partnership_news': 'Partnership news',
+        'high_cex_volume_share': 'High CEX volume share',
+        'strong_dex_liquidity_health': 'Strong DEX liquidity health',
+        'flash_pump': 'Flash pump detected',
+        'ath_breakout': 'ATH breakout',
+        'recovery_from_low': 'Recovery from low',
+        'volume_surge': 'Volume surge',
+        'strong_positive_sentiment': 'Strong positive sentiment',
+        'price_volume_divergence': 'Price-volume divergence',
+        'multi_chain_presence': 'Multi-chain presence',
+        'ecosystem_growth': 'Ecosystem growth',
+      };
+      return labels[snakeCase] || snakeCase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
     function formatAnalysisText(text) {
       if (!text) return '<p>No analysis available.</p>';
       // Split into paragraphs on double newline or single newline
@@ -1410,13 +1446,13 @@
 
         ${(()=>{const rf=payload?.red_flags;if(!rf||!rf.length)return'';const crit=rf.filter(f=>f.severity==='critical');const warn=rf.filter(f=>f.severity==='warning');if(!crit.length&&!warn.length)return'';return`<section class="panel" style="margin-top:18px;">
           <div class="section-label">⚠ Risk Flags (${rf.length})</div>
-          ${crit.length?`<div style="margin-bottom:8px;font-size:0.78rem;color:#ef4444;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Critical (${crit.length})</div><ul>${crit.map(f=>`<li style="color:#fca5a5;margin-bottom:4px;"><strong>${escapeHtml(f.flag)}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
-          ${warn.length?`<div style="margin:8px 0 6px;font-size:0.78rem;color:#f97316;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Warnings (${warn.length})</div><ul>${warn.map(f=>`<li style="color:#fdba74;margin-bottom:4px;"><strong>${escapeHtml(f.flag)}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
+          ${crit.length?`<div style="margin-bottom:8px;font-size:0.78rem;color:#ef4444;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Critical (${crit.length})</div><ul>${crit.map(f=>`<li style="color:#fca5a5;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
+          ${warn.length?`<div style="margin:8px 0 6px;font-size:0.78rem;color:#f97316;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Warnings (${warn.length})</div><ul>${warn.map(f=>`<li style="color:#fdba74;margin-bottom:4px;"><strong>${escapeHtml(humanizeLabel(f.flag))}</strong>: ${escapeHtml(f.detail)}</li>`).join('')}</ul>`:''}
         </section>`;})()}
 
         ${(()=>{const as_=payload?.alpha_signals;if(!as_||!as_.length)return'';return`<section class="panel" style="margin-top:18px;">
           <div class="section-label">🚀 Alpha Signals (${as_.length})</div>
-          <ul>${as_.map(s=>`<li style="margin-bottom:6px;"><span style="background:rgba(34,197,94,0.15);padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;color:#86efac;margin-right:8px;">${escapeHtml(s.strength||'?')}</span><strong>${escapeHtml(s.signal)}</strong>: ${escapeHtml(s.detail)}</li>`).join('')}</ul>
+          <ul>${as_.map(s=>`<li style="margin-bottom:6px;"><span style="background:rgba(34,197,94,0.15);padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;color:#86efac;margin-right:8px;">${escapeHtml(s.strength||'?')}</span><strong>${escapeHtml(humanizeLabel(s.signal))}</strong>: ${escapeHtml(s.detail)}</li>`).join('')}</ul>
         </section>`;})()}
 
         ${(()=>{const ts=payload?.trade_setup;const rr=payload?.risk_reward;if(!ts||!ts.entry_zone?.low)return'';const qualColor={strong:'#22c55e',moderate:'#fbbf24',weak:'#ef4444'}[ts.setup_quality]||'#e8e8e8';return`<section class="panel" style="margin-top:18px;">
