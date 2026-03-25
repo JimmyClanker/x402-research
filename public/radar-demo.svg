@@ -54,5 +54,5 @@
 <circle cx="168.7" cy="185.2" r="5" fill="#0a0a0a" stroke="#ff8a80" stroke-width="2"/>
 <circle cx="168.7" cy="185.2" r="2" fill="#ff8a80"/>
 <circle cx="250.0" cy="250.0" r="2.5" fill="rgba(255,255,255,0.3)"/>
-<text x="250.0" y="484" fill="#555" font-family="IBM Plex Mono,monospace" font-size="10" text-anchor="middle">clawnkers.com · Grok 4.20 MultiAgent</text>
+<text x="250.0" y="484" fill="#555" font-family="IBM Plex Mono,monospace" font-size="10" text-anchor="middle">clawnkers.com · Claude Opus 4.6</text>
 </svg>

@@ -172,7 +172,7 @@
         const project   = escapeHtml(input.value.trim() || 'project');
         const modeLabel = mode === 'quick'
           ? 'Free quick scan — algorithmic scoring'
-          : 'Full deep scan — 5 sources + Grok 4.20 MultiAgent · ~10–20s';
+          : 'Full deep scan — 10 sources + Claude Opus 4.6 · ~10–20s';
 
         statusBox.innerHTML = `
           <div class="loading-wrap" role="status" aria-live="polite" aria-label="Scanning ${project}">
@@ -709,7 +709,7 @@
           <div class="footnote">Generated: ${escapeHtml(payload?.generated_at||'n/a')}</div>
           <div class="footnote">Cache: ${cache.hit?'HIT':'MISS'} · age ${escapeHtml(formatDuration(cache.age_ms))} · ttl ${escapeHtml(formatDuration(cache.ttl_ms))}</div>
         </div>
-        <div class="footnote" style="margin-top:6px;">Powered by Grok 4.20 MultiAgent + CoinGecko + DeFiLlama</div>
+        <div class="footnote" style="margin-top:6px;">Powered by Claude Opus 4.6 + Grok Fast + CoinGecko + DeFiLlama</div>
       </section>`;
 
       reportBox.innerHTML = panel1 + panel2 + panel3 + panel4 + panel5 + panel6;
@@ -1043,7 +1043,7 @@
           <div class="payment-row"><span>Project</span><span style="color:var(--text);font-weight:600;">${escapeHtml(project)}</span></div>
           <div class="payment-row"><span>Price</span><span style="color:#D4580A;font-weight:700;">$1.00 USDC</span></div>
           <div class="payment-row"><span>Network</span><span><span class="network-badge">Base Mainnet</span></span></div>
-          <div class="payment-row"><span>What you get</span><span style="font-size:0.8rem;">5 sources · Grok 4.20 MultiAgent · BUY/HOLD/AVOID</span></div>
+          <div class="payment-row"><span>What you get</span><span style="font-size:0.8rem;">10 sources · Claude Opus 4.6 + Grok Fast · BUY/HOLD/AVOID</span></div>
           <div class="payment-error" id="payError" style="display:none;"></div>
           <button class="pay-btn" id="payBtn">Connect Wallet &amp; Pay $1.00</button>
           <button class="pay-cancel" id="payCancelBtn">Cancel — use free quick scan instead</button>
