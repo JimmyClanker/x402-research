@@ -42,6 +42,8 @@ const SIGNAL_PHRASES = {
   active_governance:             'active governance participation',
   revenue_generating:            'fee/revenue generation confirmed',
   strong_revenue_capture:        'strong protocol revenue capture',
+  fee_switch_candidate:          'fee switch activation could create value accrual',
+  smart_accumulation_pattern:    'smart money accumulation pattern detected',
   high_fee_efficiency:           'high fee-to-TVL efficiency',
   low_price_to_tvl:              'undervalued relative to TVL',
   strong_treasury:               'strong protocol treasury',
@@ -89,6 +91,10 @@ const FLAG_PHRASES = {
   stablecoin_depeg:    'stablecoin depeg risk',
   uneven_dimension_scores: 'uneven score profile',
   zombie_protocol:     'zombie protocol (no users or activity)',
+  zombie_token_no_dex: 'established token with no DEX liquidity',
+  negative_real_yield: 'negative real yield — emissions exceed protocol fees',
+  unsupported_price_pump: 'price pump without fundamental backing',
+  suspicious_volume_spike: 'suspicious volume spike — possible wash trading',
 };
 
 

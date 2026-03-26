@@ -7,8 +7,12 @@ function emptyTokenomicsResult(projectName, coinGeckoId, marketData) {
   const totalSupply = marketData?.total_supply ?? null;
   const maxSupply = marketData?.max_supply ?? null;
   const effectiveMaxSupply = maxSupply || totalSupply || null;
-  const pctCirculating = (circulatingSupply != null && effectiveMaxSupply)
+  // Round 184 (AutoResearch): clamp to [0, 100] and guard NaN/Infinity
+  const rawPctCirculating = (circulatingSupply != null && effectiveMaxSupply && Number(effectiveMaxSupply) > 0)
     ? (circulatingSupply / Number(effectiveMaxSupply)) * 100
+    : null;
+  const pctCirculating = (rawPctCirculating != null && Number.isFinite(rawPctCirculating))
+    ? Math.max(0, Math.min(100, rawPctCirculating))
     : null;
 
   // Unlock overhang: percentage of supply not yet circulating
@@ -149,10 +153,25 @@ export async function collectTokenomics(projectName, coinGeckoId, marketData = n
       roi_data: metricsData?.data?.roi_data || metricsData?.data?.market_data?.roi_data || null,
       // Round 17: vesting info for unlock schedule context
       vesting_info: vestingInfo,
-      error:
-        !profileData && !metricsData
-          ? 'Messari tokenomics unavailable'
-          : null,
+      // Round 208 (AutoResearch): unlock_risk_label — combines overhang + team allocation for quick assessment
+      unlock_risk_label: (() => {
+        const overhang = fallback.unlock_overhang_pct;
+        const teamAlloc = vestingInfo?.team_allocation_pct != null ? Number(vestingInfo.team_allocation_pct) : null;
+        // Critical if team > 40% OR overhang > 60%
+        if ((teamAlloc != null && teamAlloc > 40) || (overhang != null && overhang > 60)) return 'critical';
+        // High if team > 25% OR overhang > 40%
+        if ((teamAlloc != null && teamAlloc > 25) || (overhang != null && overhang > 40)) return 'high';
+        // Moderate if overhang > 20%
+        if (overhang != null && overhang > 20) return 'moderate';
+        if (overhang != null) return 'low';
+        return null;
+      })(),
+      // Round 193 (AutoResearch): include which slugs were tried so debugging is easier
+      error: (() => {
+        if (profileData || metricsData) return null;
+        const triedSlugs = slugs.slice(0, 4).join(', ');
+        return `Messari tokenomics unavailable (tried: ${triedSlugs}${slugs.length > 4 ? '…' : ''})`;
+      })(),
     };
   } catch (error) {
     return {

@@ -43,7 +43,9 @@ export async function collectDexScreener(projectName) {
 
     const pairs = data?.pairs;
     if (!Array.isArray(pairs) || pairs.length === 0) {
-      return { ...fallback, error: 'No DEX pairs found' };
+      // Round 195 (AutoResearch): surface whether the API returned empty vs malformed response
+      const detail = !Array.isArray(pairs) ? 'unexpected API response format' : `0 pairs returned`;
+      return { ...fallback, error: `No DEX pairs found (${detail})` };
     }
 
     // Sort by 24h volume descending to find the most relevant pair
@@ -161,8 +163,40 @@ export async function collectDexScreener(projectName) {
     // Round 39: count pairs with meaningful liquidity (>$50K) — among filtered pairs
     const decentPairsCount = effectivePairs.filter((p) => Number(p?.liquidity?.usd ?? 0) >= 50_000).length;
 
+    // Round 154 (AutoResearch): per-chain liquidity breakdown — identifies chain concentration risk
+    const chainLiquidityMap = {};
+    for (const pair of effectivePairs) {
+      const chain = pair?.chainId || 'unknown';
+      const liq = Number(pair?.liquidity?.usd || 0);
+      chainLiquidityMap[chain] = (chainLiquidityMap[chain] || 0) + liq;
+    }
+    const chainLiquidityBreakdown = Object.entries(chainLiquidityMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .reduce((acc, [chain, liq]) => { acc[chain] = liq; return acc; }, {});
+
+    // Round 154 (AutoResearch): volume trend from h1/h6/h24 ratios — is volume accelerating?
+    // Use top pair's 1h volume annualized vs 24h volume to gauge intraday momentum
+    const h1Vol = Number(topPair?.volume?.h1 || 0);
+    const h6Vol = Number(topPair?.volume?.h6 || 0);
+    const h24Vol = Number(topPair?.volume?.h24 || 0);
+    let volumeMomentum = null;
+    if (h1Vol > 0 && h24Vol > 0) {
+      const h1Annualized = h1Vol * 24;
+      const ratio = h1Annualized / h24Vol;
+      if (ratio >= 1.5) volumeMomentum = 'accelerating';
+      else if (ratio <= 0.5) volumeMomentum = 'decelerating';
+      else volumeMomentum = 'stable';
+    }
+
     // Round 11 (AutoResearch batch): DEX diversity score — how spread across DEXs?
     const dexDiversityScore = dexNames.size >= 5 ? 'high' : dexNames.size >= 3 ? 'moderate' : dexNames.size >= 2 ? 'low' : 'concentrated';
+
+    // Round 185 (AutoResearch): volume-to-liquidity ratio — high ratio = capital-efficient pair
+    // > 1.0 means the pair turns over its full liquidity daily (high efficiency)
+    const volumeToLiquidityRatio = (totalLiquidity > 0 && totalVolume24h > 0)
+      ? parseFloat((totalVolume24h / totalLiquidity).toFixed(4))
+      : null;
 
     // Round 11 (AutoResearch batch): Liquidity depth category for risk assessment
     let liquidityCategory = null;
@@ -200,6 +234,13 @@ export async function collectDexScreener(projectName) {
       top_dex_name: topDexName || topPair?.dexId || null,
       dex_price_usd: Number(topPair?.priceUsd || 0) || null,
       dex_chains: [...chains],
+      // Round 198 (AutoResearch): top pair identifiers for direct DexScreener linking
+      top_pair_address: topPair?.pairAddress || null,
+      top_pair_chain: topPair?.chainId || null,
+      // Round 207 (AutoResearch): h6 volume as % of 24h — high pct = activity concentrated in last 6h
+      h6_volume_pct_of_24h: (h6Vol > 0 && h24Vol > 0)
+        ? parseFloat(((h6Vol / h24Vol) * 100).toFixed(1))
+        : null,
       dex_price_change_h1: dexPriceChangeH1,
       dex_price_change_h24: dexPriceChangeH24,
       dex_price_change_h6: dexPriceChangeH6,
@@ -212,8 +253,11 @@ export async function collectDexScreener(projectName) {
       avg_liquidity_per_pair: avgLiquidityPerPair,
       decent_pairs_count: decentPairsCount,
       dex_diversity_score: dexDiversityScore,
+      volume_to_liquidity_ratio: volumeToLiquidityRatio,
       liquidity_category: liquidityCategory,
       liquidity_health_score: liquidityHealthScore,
+      chain_liquidity_breakdown: chainLiquidityBreakdown,
+      volume_momentum: volumeMomentum,
       error: null,
     };
   } catch (error) {

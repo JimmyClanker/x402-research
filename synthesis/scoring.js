@@ -123,6 +123,31 @@ export function calculateConfidence(rawData = {}) {
   };
 }
 
+// ─── Round 150 (AutoResearch): Sparkline momentum quality — reward smooth uptrends ──
+/**
+ * Compute sparkline trend quality from 7d price array.
+ * Returns: { trend_quality: 'smooth_up'|'smooth_down'|'erratic'|'flat'|null, consistency: 0-1 }
+ */
+export function computeSparklineTrend(sparkline = []) {
+  if (!Array.isArray(sparkline) || sparkline.length < 4) return { trend_quality: null, consistency: null };
+  const prices = sparkline.map(Number).filter(Number.isFinite);
+  if (prices.length < 4) return { trend_quality: null, consistency: null };
+  let ups = 0; let downs = 0;
+  for (let i = 1; i < prices.length; i++) {
+    if (prices[i] > prices[i - 1]) ups++;
+    else if (prices[i] < prices[i - 1]) downs++;
+  }
+  const total = prices.length - 1;
+  const consistency = Math.max(ups, downs) / total;
+  const netChange = (prices[prices.length - 1] - prices[0]) / prices[0];
+  let trend_quality;
+  if (consistency >= 0.75 && netChange > 0.05) trend_quality = 'smooth_up';
+  else if (consistency >= 0.75 && netChange < -0.05) trend_quality = 'smooth_down';
+  else if (consistency < 0.55) trend_quality = 'erratic';
+  else trend_quality = 'flat';
+  return { trend_quality, consistency: parseFloat(consistency.toFixed(3)) };
+}
+
 // Round 50 (AutoResearch): Stablecoin detection — skip momentum penalties for stable assets
 const STABLECOIN_SYMBOLS = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'USDD', 'FDUSD', 'PYUSD', 'USDE', 'USDX', 'SUSD', 'EURS', 'TUSD', 'GUSD', 'USDP', 'CRVUSD', 'GHO', 'MATIC_USDT', 'USDN']);
 
@@ -209,6 +234,12 @@ function scoreMarketStrength(market = {}) {
   else if (momentumTier === 'uptrend') raw += 0.2;
   else if (momentumTier === 'strong_downtrend') raw -= 0.4;
   else if (momentumTier === 'downtrend') raw -= 0.2;
+
+  // Round 150 (AutoResearch): Sparkline trend quality bonus — smooth uptrend = sustained momentum
+  const sparklineTrend = computeSparklineTrend(market.sparkline_7d);
+  if (sparklineTrend.trend_quality === 'smooth_up') raw += 0.35;
+  else if (sparklineTrend.trend_quality === 'smooth_down') raw -= 0.35;
+  else if (sparklineTrend.trend_quality === 'erratic') raw -= 0.15; // erratic = lower predictability
 
   // Round 10: Price range position — where in ATL-ATH range is the price?
   const priceRangePos = market.price_range_position != null ? safeNumber(market.price_range_position) : null;
@@ -581,6 +612,14 @@ function scoreDevelopment(github = {}) {
   else if (issueHealthSignal === 'critical') raw -= 0.25; // too many issues relative to stars = backlog problem
   // No adjustment for 'moderate' or null
 
+  // Round 157 (AutoResearch): Issue resolution rate — high close rate = responsive team
+  const issueResolutionRate = safeNumber(github.issue_resolution_rate ?? null);
+  if (issueResolutionRate > 0) {
+    if (issueResolutionRate >= 80) raw += 0.25;      // 80%+ resolved = excellent team responsiveness
+    else if (issueResolutionRate >= 60) raw += 0.1;  // 60-80% = decent
+    else if (issueResolutionRate < 30) raw -= 0.15;  // <30% = backlog crisis
+  }
+
   // Round 25 (AutoResearch batch): repo health tier bonus
   const repoHealthTier = github.repo_health_tier;
   if (repoHealthTier === 'excellent') raw += 0.4;
@@ -779,6 +818,15 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
   else if (volatility > 15) raw -= 1.5;
   else if (volatility > 7)  raw -= 0.7;
   else if (volatility < 3)  raw += 0.5; // Very stable = lower risk
+
+  // Round 156 (AutoResearch): 90-day realized annualized volatility supplement
+  // High realized vol = structural risk; low realized vol = mature, stable asset
+  const realizedVol90d = safeNumber(market.realized_vol_90d ?? null);
+  if (realizedVol90d > 0) {
+    if (realizedVol90d > 300) raw -= 0.8;       // annualized >300% = extreme structural volatility
+    else if (realizedVol90d > 150) raw -= 0.4;  // annualized >150% = high
+    else if (realizedVol90d < 40) raw += 0.3;   // annualized <40% = mature/stable
+  }
 
   // 2. Liquidity depth: use DEX data if available, otherwise volume/mcap proxy
   const dexLiquidity = safeNumber(dexData.liquidity ?? dexData.total_liquidity);

@@ -54,12 +54,17 @@ function computeCategoryBenchmarks(protocols) {
     const category = normalizeCategory(p?.category);
     if (!category) continue;
     if (!byCategory.has(category)) {
-      byCategory.set(category, { tvls: [], mcaps: [], volumes: [] });
+      byCategory.set(category, { tvls: [], mcaps: [], volumes: [], feesPerTvl: [] });
     }
     const bucket = byCategory.get(category);
     if (Number.isFinite(p.tvl) && p.tvl > 0) bucket.tvls.push(p.tvl);
     if (Number.isFinite(p.mcap) && p.mcap > 0) bucket.mcaps.push(p.mcap);
     if (Number.isFinite(p.volume24h) && p.volume24h > 0) bucket.volumes.push(p.volume24h);
+    // Round 155 (AutoResearch): compute fees_7d / TVL efficiency ratio for sector benchmarking
+    const fees7d = Number(p.fees7d ?? p.totalFees7d ?? 0);
+    if (Number.isFinite(fees7d) && fees7d > 0 && Number.isFinite(p.tvl) && p.tvl > 1_000_000) {
+      bucket.feesPerTvl.push(fees7d / (p.tvl / 1_000_000)); // $ fees per $1M TVL per 7d
+    }
   }
 
   const benchmarks = {};
@@ -86,6 +91,7 @@ function computeCategoryBenchmarks(protocols) {
       mcap_median: median(mcaps),
       mcap_avg: avg(mcaps),
       volume_median: median(volumes),
+      fees_per_tvl_median: median(byCategory.get(category).feesPerTvl),
     };
   }
 

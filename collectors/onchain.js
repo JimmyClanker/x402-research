@@ -63,7 +63,9 @@ function similarityScore(projectName, protocol) {
 
 function computePctChange(current, previous) {
   if (current == null || previous == null || previous === 0) return null;
-  return ((current - previous) / Math.abs(previous)) * 100;
+  const result = ((current - previous) / Math.abs(previous)) * 100;
+  // Round 183 (AutoResearch): guard against NaN/Infinity from extreme values
+  return Number.isFinite(result) ? result : null;
 }
 
 function getClosestHistoricalTvl(tvlHistory, daysBack) {
@@ -85,7 +87,9 @@ function getClosestHistoricalTvl(tvlHistory, daysBack) {
   return closest;
 }
 
-function sumLastNDays(values, days) {
+// Round 153 (AutoResearch): support optional startOffset to sum a window ending N days ago
+// e.g. sumLastNDays(data, 14, 7) → days 8–14 ago (prior week)
+function sumLastNDays(values, days, startOffset = 0) {
   if (!Array.isArray(values) || values.length === 0) return null;
   const sorted = [...values]
     .filter((item) => Number.isFinite(item?.dailyFees) || Number.isFinite(item?.dailyRevenue))
@@ -93,7 +97,12 @@ function sumLastNDays(values, days) {
 
   if (!sorted.length) return null;
 
-  const tail = sorted.slice(-days);
+  // slice(-days) up to slice(-startOffset) (or end if startOffset=0)
+  const end = startOffset > 0 ? sorted.length - startOffset : sorted.length;
+  const start = Math.max(0, end - days);
+  const tail = sorted.slice(start, end);
+  if (!tail.length) return null;
+
   const totals = tail.reduce(
     (acc, item) => {
       acc.fees += Number(item?.dailyFees || 0);
@@ -181,9 +190,19 @@ export async function collectOnchain(projectName) {
       let revenue7d = null;
       try {
         const feesData = await fetchJson(`${LLAMA_FEES_URL}/${encodeURIComponent(chainResult.slug)}`);
-        const feeTotals = sumLastNDays(feesData?.totalDataChart || feesData?.data || [], 7);
-        fees7d = feeTotals?.fees ?? (feesData?.total24h ? Number(feesData.total24h) * 7 : null);
-        revenue7d = feeTotals?.revenue ?? null;
+        // Round 188 (AutoResearch): DeFiLlama fees API can return various shapes;
+        // try all known array fields, fall back to total24h scalar, or leave null.
+        const feeArray = feesData?.totalDataChart || feesData?.totalDataChartBreakdown || feesData?.data || [];
+        const feeTotals = sumLastNDays(Array.isArray(feeArray) ? feeArray : [], 7);
+        fees7d = feeTotals?.fees != null
+          ? feeTotals.fees
+          : (feesData?.total7d ? Number(feesData.total7d) : feesData?.total24h ? Number(feesData.total24h) * 7 : null);
+        revenue7d = feeTotals?.revenue != null
+          ? feeTotals.revenue
+          : (feesData?.totalRevenue7d ? Number(feesData.totalRevenue7d) : null);
+        // Sanitize
+        if (!Number.isFinite(fees7d)) fees7d = null;
+        if (!Number.isFinite(revenue7d)) revenue7d = null;
       } catch {}
 
       const chainRevenueToFees = (revenue7d != null && fees7d != null && fees7d > 0)
@@ -208,7 +227,10 @@ export async function collectOnchain(projectName) {
 
     // Protocol path (DeFi protocols like Aave, Uniswap, etc.)
     if (!match?.protocol?.slug || match.score < 45) {
-      return { ...fallback, error: 'DeFiLlama protocol not found' };
+      // Round 194 (AutoResearch): include best-candidate info for debug
+      const bestName = match?.protocol?.name || 'none';
+      const bestScore = match?.score ?? 0;
+      return { ...fallback, error: `DeFiLlama protocol not found (best match: "${bestName}" score=${bestScore})` };
     }
 
     const slug = match.protocol.slug;
@@ -237,9 +259,12 @@ export async function collectOnchain(projectName) {
     const tvl7dAgo = getClosestHistoricalTvl(tvlHistory, 7);
     const tvl30dAgo = getClosestHistoricalTvl(tvlHistory, 30);
     const feeTotals = sumLastNDays(fees?.totalDataChart || fees?.data || [], 7);
+    // Round 153 (AutoResearch): also compute fees for prior 7d window (days 8-14) to detect trend
+    const feeTotalsPrev = sumLastNDays(fees?.totalDataChart || fees?.data || [], 14, 7);
 
     const fees7d = feeTotals?.fees ?? (fees?.total24h ? Number(fees.total24h) * 7 : null);
     const revenue7d = feeTotals?.revenue ?? null;
+    const revenue7dPrev = feeTotalsPrev?.revenue ?? null;
     const revenueToFeesRatio = (revenue7d != null && fees7d != null && fees7d > 0)
       ? revenue7d / fees7d
       : null;
@@ -279,6 +304,12 @@ export async function collectOnchain(projectName) {
     // Round 21: revenue efficiency = weekly fees per $1M TVL
     const revenueEfficiency = (fees7d != null && currentTvl != null && currentTvl > 0)
       ? (fees7d / (currentTvl / 1_000_000))
+      : null;
+
+    // Round 199 (AutoResearch): fees_per_tvl_7d — another form of capital efficiency
+    // Ratio of weekly fees to total TVL; high ratio = TVL working hard
+    const feesPerTvl7d = (fees7d != null && currentTvl != null && currentTvl > 0)
+      ? parseFloat((fees7d / currentTvl).toFixed(6))
       : null;
 
     // Round 6: TVL stickiness — TVL stability signal: if 30d change > -10% and 7d > -5%, capital is sticky
@@ -330,10 +361,28 @@ export async function collectOnchain(projectName) {
       revenue_7d: revenue7d,
       revenue_30d: revenue30dDerived,
       revenue_to_fees_ratio: revenueToFeesRatio,
+      revenue_7d_prev: revenue7dPrev,
       treasury_balance: treasuryBalance,
       chain_tvl: chainTvl,
       active_users_24h: activeUsers24h,
       revenue_efficiency: revenueEfficiency != null ? Math.round(revenueEfficiency * 100) / 100 : null,
+      fees_per_tvl_7d: feesPerTvl7d,
+      // Round 200 (AutoResearch): protocol age from DeFiLlama listedAt timestamp
+      // Round 206 (AutoResearch): revenue trend — compare current 7d vs prior 7d revenue
+      revenue_trend: (() => {
+        if (revenue7d == null || revenue7dPrev == null) return null;
+        if (revenue7dPrev === 0) return revenue7d > 0 ? 'improving' : null;
+        const change = (revenue7d - revenue7dPrev) / Math.abs(revenue7dPrev);
+        if (change > 0.15) return 'improving';
+        if (change < -0.15) return 'declining';
+        return 'flat';
+      })(),
+      protocol_age_days: (() => {
+        const listedAt = protocol?.listedAt || match?.protocol?.listedAt;
+        if (!listedAt) return null;
+        const days = Math.floor((Date.now() - listedAt * 1000) / 86400000);
+        return days >= 0 ? days : null;
+      })(),
       tvl_stickiness: tvlStickiness,
       tvl_data_quality: tvlDataQuality,
       protocol_maturity: protocolMaturity,

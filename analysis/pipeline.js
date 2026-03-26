@@ -9,7 +9,7 @@
  * Each phase has clear input/output contracts and is independently testable.
  */
 
-import { calculateScores } from '../synthesis/scoring.js';
+import { calculateScores, computeSparklineTrend } from '../synthesis/scoring.js';
 import { generateReport, generateQuickReport } from '../synthesis/llm.js';
 import { getBenchmarkForCategory, compareToSector } from '../services/sector-benchmarks.js';
 import { detectRedFlags } from '../services/red-flags.js';
@@ -98,6 +98,14 @@ export function phaseEnrich(rawData, scores) {
 
   // Risk matrix (Round 7)
   const riskMatrix = buildRiskMatrix(rawData, scores, redFlags);
+
+  // Round 155 (AutoResearch): compute sparkline trend quality and inject for LLM context
+  try {
+    const sparklineTrend = computeSparklineTrend(rawData?.market?.sparkline_7d);
+    if (sparklineTrend?.trend_quality) {
+      rawData.sparkline_trend = sparklineTrend;
+    }
+  } catch (_) { /* non-critical */ }
 
   // Inject into rawData for LLM context
   rawData.red_flags = redFlags;

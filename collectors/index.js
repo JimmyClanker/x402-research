@@ -199,21 +199,29 @@ export async function collectAll(projectName, exaService, collectorCache = null)
   const ecosystem = unwrapCache(ecosystemResult, 'ecosystem');
   const contract = unwrapCache(contractResult, 'contract');
 
+  // Round 189 (AutoResearch): record per-collector status with age_ms for cache diagnostics
   const collectorsInfo = {
-    market: { ok: market.ok, error: market.error, source: market.source },
-    onchain: { ok: onchain.ok, error: onchain.error, source: onchain.source },
-    social: { ok: social.ok, error: social.error, source: social.source },
-    github: { ok: github.ok, error: github.error, source: github.source },
-    tokenomics: { ok: tokenomics.ok, error: tokenomics.error, source: tokenomics.source },
-    dex: { ok: dex.ok, error: dex.error, source: dex.source },
-    reddit: { ok: reddit.ok, error: reddit.error, source: reddit.source },
-    holders: { ok: holders.ok, error: holders.error, source: holders.source },
-    ecosystem: { ok: ecosystem.ok, error: ecosystem.error, source: ecosystem.source },
-    contract: { ok: contract.ok, error: contract.error, source: contract.source },
-    x_social: { ok: xSocial.ok, error: xSocial.error, source: xSocial.source },
+    market:     { ok: market.ok,     error: market.error,     source: market.source,     age_ms: market.age_ms },
+    onchain:    { ok: onchain.ok,    error: onchain.error,    source: onchain.source,    age_ms: onchain.age_ms },
+    social:     { ok: social.ok,     error: social.error,     source: social.source,     age_ms: social.age_ms },
+    github:     { ok: github.ok,     error: github.error,     source: github.source,     age_ms: github.age_ms },
+    tokenomics: { ok: tokenomics.ok, error: tokenomics.error, source: tokenomics.source, age_ms: tokenomics.age_ms },
+    dex:        { ok: dex.ok,        error: dex.error,        source: dex.source,        age_ms: dex.age_ms },
+    reddit:     { ok: reddit.ok,     error: reddit.error,     source: reddit.source,     age_ms: reddit.age_ms },
+    holders:    { ok: holders.ok,    error: holders.error,    source: holders.source,    age_ms: holders.age_ms },
+    ecosystem:  { ok: ecosystem.ok,  error: ecosystem.error,  source: ecosystem.source,  age_ms: ecosystem.age_ms },
+    contract:   { ok: contract.ok,   error: contract.error,   source: contract.source,   age_ms: contract.age_ms },
+    x_social:   { ok: xSocial.ok,    error: xSocial.error,    source: xSocial.source,    age_ms: xSocial.age_ms },
   };
 
   const dataSourceSummary = buildDataSourceSummary(collectorsInfo);
+
+  // Round 202 (AutoResearch): log collector failures for observability
+  for (const [name, info] of Object.entries(collectorsInfo)) {
+    if (!info.ok && info.error) {
+      console.error(`[collectAll:${projectName}] collector "${name}" failed: ${info.error}`);
+    }
+  }
 
   return {
     project_name: projectName,

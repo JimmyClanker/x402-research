@@ -180,6 +180,8 @@ export async function collectSocial(projectName, exaService) {
       `${projectName} token unlock OR vesting OR hack OR exploit OR security`,
       // Round 41: institutional and on-chain whale activity
       `${projectName} whale wallet OR institutional OR fund OR investment 2026`,
+      // Round 154 (AutoResearch): governance and roadmap signals
+      `${projectName} governance proposal OR roadmap OR upgrade OR mainnet 2026`,
     ];
     const settled = await Promise.allSettled(queries.map((query) => exaService.exaSearch(query)));
     const items = settled
@@ -274,6 +276,12 @@ export async function collectSocial(projectName, exaService) {
       return /\bv[2-9]\b|v\d+\.\d+|mainnet|launch|upgrade|update|migration|live on|goes live|deployed/.test(text);
     }).length;
 
+    // Round 154 (AutoResearch): governance/proposal mentions — community activity signal
+    const governanceMentions = uniqueNews.filter((item) => {
+      const text = `${item.title} ${item.highlights.join(' ')}`.toLowerCase();
+      return /governance|proposal|vote|dao|snapshot|forum|improvement|onchain.*gov|protocol.*change/.test(text);
+    }).length;
+
     // Round 9 (AutoResearch batch): sentiment dominance — are bulls clearly in control?
     const sentimentDominance = totalSentiment > 0
       ? Math.max(sentimentCounts.bullish, sentimentCounts.bearish, sentimentCounts.neutral) / totalSentiment
@@ -304,10 +312,20 @@ export async function collectSocial(projectName, exaService) {
       regulatory_mentions: regulatoryMentions,
       partnership_mentions: partnershipMentions,
       upgrade_mentions: upgradeMentions,
+      governance_mentions: governanceMentions,
       // Round 12 (AutoResearch nightly): news recency signals
       very_recent_news_count: veryRecentCount,
       news_momentum: newsMomentum,
-      error: settled.every((entry) => entry.status === 'rejected') ? 'All Exa queries failed' : null,
+      // Round 192 (AutoResearch): more informative error — report failure count and first error message
+      error: (() => {
+        const failed = settled.filter((e) => e.status === 'rejected');
+        if (failed.length === 0) return null;
+        if (failed.length === settled.length) {
+          const firstMsg = failed[0]?.reason?.message || 'unknown';
+          return `All ${failed.length} Exa queries failed (e.g. ${firstMsg})`;
+        }
+        return `${failed.length}/${settled.length} Exa queries failed (partial data)`;
+      })(),
     };
   } catch (error) {
     return {

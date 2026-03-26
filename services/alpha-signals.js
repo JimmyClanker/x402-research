@@ -449,6 +449,32 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // Round 151 (AutoResearch): Fee switch candidate — protocol generates fees but captures zero revenue
+  // This is a bullish setup: a governance vote to enable fee switch → direct value accrual to token
+  const fees7dFS = safeN(onchain.fees_7d ?? 0);
+  const revenue7dFS = safeN(onchain.revenue_7d ?? 0);
+  const tvlFS = safeN(onchain.tvl ?? 0);
+  if (fees7dFS > 200_000 && revenue7dFS === 0 && tvlFS > 5_000_000) {
+    signals.push({
+      signal: 'fee_switch_candidate',
+      strength: fees7dFS > 1_000_000 ? 'strong' : 'moderate',
+      detail: `Protocol generates $${(fees7dFS / 1000).toFixed(0)}K/week in fees but retains $0 revenue — fee switch activation would immediately create token value accrual.`,
+    });
+  }
+
+  // Round 152 (AutoResearch): Smart accumulation — DEX buy pressure + low volume volatility + flat price
+  // Classic smart money accumulation: high buy/sell ratio + stable price = quiet hand-over-fist buying
+  const buySellSig = safeN(dex.buy_sell_ratio ?? 0);
+  const c24hSig = safeN(market.price_change_pct_24h ?? 0);
+  const c7dSig = safeN(market.price_change_pct_7d ?? 0);
+  if (buySellSig >= 1.2 && Math.abs(c24hSig) < 5 && Math.abs(c7dSig) < 10) {
+    signals.push({
+      signal: 'smart_accumulation_pattern',
+      strength: buySellSig >= 1.4 ? 'strong' : 'moderate',
+      detail: `Strong DEX buy pressure (${buySellSig.toFixed(2)} ratio) with only ${c24hSig.toFixed(1)}% 24h move — classic accumulation: buyers absorbing supply without moving price.`,
+    });
+  }
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {

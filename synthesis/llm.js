@@ -121,6 +121,12 @@ function buildFactRegistry(rawData = {}) {
   push('macro.market_cap_change_pct_24h_global', rawData?.market?.market_cap_change_pct_24h_global);
   // Round R6: Volume anomaly context
   push('market.volume_7d_avg', rawData?.market?.volume_7d_avg);
+  // Round 157 (AutoResearch): realized volatility and governance signals
+  push('market.realized_vol_90d', rawData?.market?.realized_vol_90d);
+  push('market.sparkline_7d_volatility', rawData?.market?.sparkline_7d_volatility);
+  push('social.governance_mentions', rawData?.social?.governance_mentions);
+  push('github.issue_resolution_rate', rawData?.github?.issue_resolution_rate);
+  push('dex.volume_momentum', rawData?.dex?.volume_momentum);
 
   return facts;
 }
@@ -330,6 +336,14 @@ export function buildDataSummary(rawData = {}) {
     }
     if (dex.top_dex_name) {
       dexLines.push(`- Primary venue: ${dex.top_dex_name}`);
+    }
+    if (dex.volume_momentum) {
+      const momentumLabel = dex.volume_momentum === 'accelerating' ? '📈 accelerating (1h annualized > 24h)' : dex.volume_momentum === 'decelerating' ? '📉 decelerating (1h annualized < 50% of 24h)' : 'stable';
+      dexLines.push(`- Volume momentum: ${momentumLabel}`);
+    }
+    if (dex.chain_liquidity_breakdown && Object.keys(dex.chain_liquidity_breakdown).length > 1) {
+      const topChains = Object.entries(dex.chain_liquidity_breakdown).slice(0, 3).map(([c, v]) => `${c}: $${(v / 1000).toFixed(0)}K`).join(', ');
+      dexLines.push(`- Liquidity by chain: ${topChains}`);
     }
 
     const validDex = dexLines.filter(Boolean);

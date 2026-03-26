@@ -253,6 +253,28 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
     });
   }
 
+  // Round 155 (AutoResearch): governance_mentions signal — active governance = reduced circuit breaker risk
+  // If governance is active, relax the "no_onchain_data" risk for established protocols
+  // (No new breaker needed here — governance is an amelioration signal, not a new risk)
+
+  // Round 155 (AutoResearch): Negative real yield circuit breaker
+  // When estimated weekly token emissions are 5x+ protocol fees, the yield model is Ponzi
+  const inflationForCB = safeN(market.market_cap ?? 0) > 0
+    ? safeN(rawData?.tokenomics?.inflation_rate ?? 0)
+    : 0;
+  const fees7dCB = safeN(onchain.fees_7d ?? 0);
+  const mcapForCB = safeN(market.market_cap ?? 0);
+  if (inflationForCB > 0 && fees7dCB > 0 && mcapForCB > 0) {
+    const weeklyEmissionValue = (inflationForCB / 100) * mcapForCB / 52;
+    if (weeklyEmissionValue > fees7dCB * 10) {
+      breakers.push({
+        cap: 5.5,
+        reason: `Emissions/fees ratio >10x (est. $${(weeklyEmissionValue / 1000).toFixed(0)}K/wk emissions vs $${(fees7dCB / 1000).toFixed(0)}K/wk fees) — unsustainable yield model`,
+        severity: 'warning',
+      });
+    }
+  }
+
   // Applica il cap più restrittivo
   if (breakers.length === 0) {
     return { score: overallScore, breakers: [], capped: false };

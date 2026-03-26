@@ -330,6 +330,8 @@
         ['Contributors','contributors',raw?.github?.contributors,null],
         ['Pct circulating','pct_circulating',raw?.tokenomics?.pct_circulating,null],
         ['Inflation rate','inflation_rate',raw?.tokenomics?.inflation_rate,null],
+        ['DEX liquidity','dex_liquidity_usd',raw?.dex?.dex_liquidity_usd,null],
+        ['DEX buy/sell','buy_sell_ratio',raw?.dex?.buy_sell_ratio,null],
       ];
       return rows.filter(([,,value])=> value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== 'n/a').map(([label,key,value,type])=>{
         const cls=type==='change'?` class="${changeClass(value)}"`:''
@@ -680,6 +682,18 @@
               return`<div style="margin-top:6px;padding:4px 12px;background:${cfg.bg};border:1px solid ${cfg.border};color:${cfg.color};border-radius:999px;font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;display:inline-block;">${cfg.icon} ${v.regime}${pct}</div>`;
             })()}
             ${(()=>{const sa=scores?.overall?.score_anomaly;if(!sa||sa==='normal')return'';return`<div style="margin-top:4px;padding:3px 10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;border-radius:999px;font-size:10px;font-weight:600;display:inline-flex;align-items:center;gap:4px;"><span>⚠</span><span>${sa==='high_variance'?'uneven scores':'mixed signals'}</span></div>`})()}
+            ${(()=>{
+              // Round 155 (AutoResearch): sparkline trend quality badge
+              const st=payload?.raw_data?.sparkline_trend;
+              if(!st?.trend_quality||st.trend_quality==='flat')return'';
+              const cfg={
+                smooth_up:{bg:'rgba(34,197,94,0.1)',border:'rgba(34,197,94,0.2)',color:'#86efac',icon:'📈',label:'smooth uptrend'},
+                smooth_down:{bg:'rgba(239,68,68,0.08)',border:'rgba(239,68,68,0.2)',color:'#fca5a5',icon:'📉',label:'smooth downtrend'},
+                erratic:{bg:'rgba(251,191,36,0.1)',border:'rgba(251,191,36,0.25)',color:'#fbbf24',icon:'〰️',label:'erratic'},
+              }[st.trend_quality]||null;
+              if(!cfg)return'';
+              return`<div style="margin-top:4px;padding:3px 10px;background:${cfg.bg};border:1px solid ${cfg.border};color:${cfg.color};border-radius:999px;font-size:10px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">${cfg.icon} ${cfg.label}</div>`;
+            })()}
           </div>
         </div>
         ${renderProjectIntro(payload, analysis, raw)}

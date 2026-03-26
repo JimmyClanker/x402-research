@@ -64,6 +64,21 @@ export function detectTrendReversal(rawData = {}) {
     bullishPoints += 2;
   }
 
+  // Round 156 (AutoResearch): Sparkline trend quality as reversal confirmation
+  // A 'smooth_up' sparkline at ATL region = high-confidence bullish reversal confirmation
+  // An 'erratic' sparkline at ATH region = distribution/confusion signal
+  const sparklineTrend = rawData?.sparkline_trend;
+  if (sparklineTrend?.trend_quality === 'smooth_up' && atlDist !== null && atlDist < 50) {
+    signals.push(`Smooth 7d uptrend (consistency ${((sparklineTrend.consistency || 0) * 100).toFixed(0)}%) from low base — sustained buying pressure`);
+    bullishPoints += 1;
+  } else if (sparklineTrend?.trend_quality === 'smooth_down' && athDist !== null && athDist > -20) {
+    signals.push(`Smooth 7d downtrend from near-ATH — orderly distribution pattern`);
+    bearishPoints += 1;
+  } else if (sparklineTrend?.trend_quality === 'erratic') {
+    signals.push('Erratic 7-day price action — trend unclear, conflicting signals');
+    // No point adjustment for erratic — just informational
+  }
+
   // 5. Volume spike near ATL (accumulation)
   if (volume !== null && mcap !== null && mcap > 0 && volume / mcap > 0.2 && atlDist !== null && atlDist < 30) {
     signals.push(`High volume (${((volume / mcap) * 100).toFixed(0)}% of MCap) near ATL — accumulation pattern`);

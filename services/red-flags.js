@@ -463,6 +463,38 @@ export function detectRedFlags(rawData = {}, scores = {}) {
     });
   }
 
+  // Round 151 (AutoResearch): Zombie token — established market cap but functionally untradeable DEX presence
+  // A token with >$5M mcap and zero DEX liquidity after 12+ months = possible exchange-only ghost token
+  const dexLiquidityForZombie = safeN(dex.dex_liquidity_usd ?? 0);
+  const mcapForZombie = safeN(market.market_cap ?? 0);
+  if (dexLiquidityForZombie === 0 && mcapForZombie > 5_000_000 && genesisDate) {
+    const ageMonthsZ = (Date.now() - new Date(genesisDate).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+    if (ageMonthsZ > 12) {
+      flags.push({
+        flag: 'zombie_token_no_dex',
+        severity: 'warning',
+        detail: `$${(mcapForZombie / 1e6).toFixed(1)}M market cap with zero DEX liquidity after ${ageMonthsZ.toFixed(0)} months — on-chain tradability unverified, possible illiquid token.`,
+      });
+    }
+  }
+
+  // Round 152 (AutoResearch): Negative real yield — emissions higher than fee revenue (Ponzi subsidy)
+  // Net token inflation exceeds protocol revenue → yield is artificial, not sustainable
+  const inflationForRY = safeN(tokenomics.inflation_rate ?? 0);
+  const fees7dForRY = safeN(onchain.fees_7d ?? 0);
+  const mcapForRY = safeN(market.market_cap ?? 0);
+  if (inflationForRY > 0 && fees7dForRY > 0 && mcapForRY > 0) {
+    // Estimate weekly emission value: annual inflation% * mcap / 52 weeks
+    const weeklyEmissionValue = (inflationForRY / 100) * mcapForRY / 52;
+    if (weeklyEmissionValue > fees7dForRY * 3) {
+      flags.push({
+        flag: 'negative_real_yield',
+        severity: 'warning',
+        detail: `Weekly token emissions (~$${(weeklyEmissionValue / 1000).toFixed(0)}K estimated) exceed protocol fees ($${(fees7dForRY / 1000).toFixed(0)}K) by 3x+ — yield is inflation-subsidized, not sustainable.`,
+      });
+    }
+  }
+
   // Deduplicate flags by flag key (keep highest severity)
   const severityOrder = { critical: 3, warning: 2, info: 1 };
   const flagMap = new Map();

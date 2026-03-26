@@ -71,6 +71,18 @@ export const CATEGORY_WEIGHTS = {
     market: 0.10, onchain: 0.30, social: 0.08, development: 0.18,
     tokenomics: 0.14, distribution: 0.12, risk: 0.08,
   },
+  // Round 153 (AutoResearch): Yield aggregators — compounding/APY strategy quality drives value
+  // TVL stickiness + revenue capture are key; dev slightly above average for strategy innovation
+  yield_aggregator: {
+    market: 0.10, onchain: 0.32, social: 0.07, development: 0.17,
+    tokenomics: 0.14, distribution: 0.10, risk: 0.10,
+  },
+  // Round 153 (AutoResearch): Prediction markets — onchain volume + market resolution matters
+  // More social/narrative driven than pure DeFi; dev activity important for market creation
+  prediction_market: {
+    market: 0.12, onchain: 0.25, social: 0.18, development: 0.15,
+    tokenomics: 0.12, distribution: 0.10, risk: 0.08,
+  },
   default: {
     market: 0.14, onchain: 0.18, social: 0.14, development: 0.18,
     tokenomics: 0.14, distribution: 0.12, risk: 0.10,
@@ -83,8 +95,12 @@ export const CATEGORY_MAP = {
   'borrowing-lending': 'defi_lending',
   dexes: 'defi_dex',
   dex: 'defi_dex',
-  yield: 'defi_lending',
-  'yield-aggregator': 'defi_lending',
+  yield: 'yield_aggregator',
+  'yield-aggregator': 'yield_aggregator',
+  'yield-optimizer': 'yield_aggregator',
+  'prediction-market': 'prediction_market',
+  'prediction-markets': 'prediction_market',
+  polymarket: 'prediction_market',
   'liquid-staking': 'defi_lending',
   bridge: 'defi_dex',
   derivatives: 'defi_dex',

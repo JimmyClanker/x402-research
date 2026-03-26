@@ -18,8 +18,9 @@ function nextUserAgent() {
 // Round 46: Simple in-memory negative cache to avoid hammering APIs that consistently fail
 // Key: url domain, Value: { fails: number, cooldownUntil: number }
 const domainFailCache = new Map();
-const DOMAIN_COOLDOWN_MS = 60_000; // 1 minute cooldown after 3 consecutive failures
-const DOMAIN_FAIL_THRESHOLD = 3;
+// Round 186 (AutoResearch): allow env-var tuning of cooldown parameters
+const DOMAIN_COOLDOWN_MS = Number(process.env.DOMAIN_COOLDOWN_MS) || 60_000; // default 1 minute
+const DOMAIN_FAIL_THRESHOLD = Number(process.env.DOMAIN_FAIL_THRESHOLD) || 3; // default 3 failures
 
 function extractDomain(url) {
   try { return new URL(url).hostname; } catch { return url; }
@@ -77,6 +78,7 @@ async function _fetchJsonImpl(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, re
     throw new Error(`Domain ${extractDomain(url)} in cooldown (too many recent failures)`);
   }
 
+  const _reqStart = Date.now(); // Round 203: track request start time
   let lastError;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -116,6 +118,16 @@ async function _fetchJsonImpl(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, re
 
       const result = await response.json();
       recordDomainSuccess(url); // clear failure counter on success
+      // Round 203 (AutoResearch): attach latency as non-enumerable metadata for diagnostics
+      // (Does not affect JSON serialization but available to callers who want timing)
+      if (result && typeof result === 'object') {
+        try {
+          Object.defineProperty(result, '_fetchLatencyMs', {
+            value: Date.now() - _reqStart,
+            writable: false, configurable: true, enumerable: false,
+          });
+        } catch { /* non-critical */ }
+      }
       return result;
     } catch (err) {
       lastError = err;

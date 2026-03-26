@@ -4,9 +4,15 @@ const GITHUB_API_BASE = 'https://api.github.com';
 const DEFAULT_TIMEOUT_MS = 12000;
 
 function createEmptyGithubResult(projectName) {
+  // Round 191 (AutoResearch): pre-populate repo_url from mappings when available
+  // so callers always have a non-null URL when the project is known
+  const mapped = getMappedRepo(projectName);
+  const mappedUrl = (mapped?.owner && mapped?.repo)
+    ? `https://github.com/${mapped.owner}/${mapped.repo}`
+    : null;
   return {
     project_name: projectName,
-    repo_url: null,
+    repo_url: mappedUrl,
     stars: null,
     forks: null,
     open_issues: null,
@@ -34,28 +40,50 @@ function createEmptyGithubResult(projectName) {
   };
 }
 
-async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+// Round 187 (AutoResearch): GitHub fetchJson with retry on 403/429 (rate-limit)
+// GitHub returns 403 with Retry-After or X-RateLimit-Reset on secondary rate limits.
+async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, retries = 2 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'alpha-scanner/6.0.0',
+        },
+        signal: controller.signal,
+      });
 
-  try {
-    const response = await fetch(url, {
-      headers: {
-        accept: 'application/vnd.github+json',
-        'user-agent': 'alpha-scanner/6.0.0',
-      },
-      signal: controller.signal,
-    });
+      // Handle GitHub rate limiting (403 secondary limit or 429)
+      if ((response.status === 429 || response.status === 403) && attempt < retries) {
+        const retryAfter = Number(response.headers.get('retry-after') || 0);
+        const resetAt = Number(response.headers.get('x-ratelimit-reset') || 0);
+        let delayMs = 1500; // default backoff
+        if (retryAfter > 0) delayMs = Math.min(retryAfter * 1000, 8000);
+        else if (resetAt > 0) delayMs = Math.min(Math.max((resetAt * 1000 - Date.now()), 0), 8000);
+        clearTimeout(timeout);
+        await new Promise((r) => setTimeout(r, delayMs));
+        lastError = new Error(`GitHub ${response.status} rate-limited: ${url}`);
+        continue;
+      }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} for ${url}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} for ${url}`);
+      }
+
+      const data = await response.json();
+      return { data, headers: response.headers };
+    } catch (err) {
+      lastError = err;
+      if (err.name === 'AbortError' || attempt >= retries) throw lastError;
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const data = await response.json();
-    return { data, headers: response.headers };
-  } finally {
-    clearTimeout(timeout);
   }
+  throw lastError;
 }
 
 function parseLastPage(linkHeader) {
@@ -124,7 +152,7 @@ export async function collectGithub(projectName) {
       repo = topRepo.name;
     }
 
-    const [repoInfo, commitsInfo, contributorsInfo, languagesInfo, packageJsonInfo, workflowsInfo, releasesInfo] = await Promise.allSettled([
+    const [repoInfo, commitsInfo, contributorsInfo, languagesInfo, packageJsonInfo, workflowsInfo, releasesInfo, closedIssuesInfo] = await Promise.allSettled([
       fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}`),
       fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}/commits?per_page=1`),
       fetchContributorStats(owner, repo),
@@ -134,6 +162,8 @@ export async function collectGithub(projectName) {
       fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}/contents/.github/workflows`),
       // Round 51: check latest release for recent activity
       fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}/releases?per_page=1`),
+      // Round 156 (AutoResearch): fetch count of recently closed issues for resolution rate
+      fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}/issues?state=closed&per_page=1&page=1`),
     ]);
 
     const repoData = repoInfo.status === 'fulfilled' ? repoInfo.value.data : topRepo;
@@ -239,6 +269,19 @@ export async function collectGithub(projectName) {
       : issueStarRatio < 0.2 ? 'moderate'
       : 'issue_heavy'; // many open issues = technical debt signal
 
+    // Round 156 (AutoResearch): issue resolution rate — closed vs total issues
+    const closedIssuesHeader = closedIssuesInfo.status === 'fulfilled'
+      ? closedIssuesInfo.value?.headers?.get('link') : null;
+    const totalClosedEstimate = closedIssuesHeader ? parseLastPage(closedIssuesHeader) : null;
+    const issueResolutionRate = (totalClosedEstimate != null && openIssues != null && totalClosedEstimate + openIssues > 0)
+      ? parseFloat(((totalClosedEstimate / (totalClosedEstimate + openIssues)) * 100).toFixed(1))
+      : null;
+
+    // Round 196 (AutoResearch): commit_frequency — avg commits/week over 90d window
+    const commitFrequency = commits90d != null
+      ? parseFloat((commits90d / 13).toFixed(2)) // 13 weeks in the 90d window
+      : null;
+
     // Round 24 (AutoResearch batch): fork-to-star ratio as ecosystem integration signal
     const forkStarRatio = stars > 0 ? forks / stars : null;
 
@@ -274,6 +317,15 @@ export async function collectGithub(projectName) {
       fork_star_ratio: forkStarRatio != null ? Math.round(forkStarRatio * 1000) / 1000 : null,
       issue_star_ratio: issueStarRatio != null ? Math.round(issueStarRatio * 1000) / 1000 : null,
       issue_health_signal: issueHealthSignal,
+      issue_resolution_rate: issueResolutionRate,
+      commit_frequency: commitFrequency,
+      // Round 204 (AutoResearch): days since last commit — quick staleness signal
+      days_since_last_commit: (() => {
+        const lastCommitDate = commitsData?.[0]?.commit?.author?.date;
+        if (!lastCommitDate) return null;
+        const days = Math.floor((Date.now() - new Date(lastCommitDate).getTime()) / 86400000);
+        return days >= 0 ? days : null;
+      })(),
       error: null,
     };
   } catch (error) {

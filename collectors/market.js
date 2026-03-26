@@ -1,5 +1,12 @@
 import { fetchJson } from './fetch.js';
 
+// Round 182 (AutoResearch): sanitize numeric fields — replace NaN/Infinity with null
+function safeNum(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 const COINGECKO_SEARCH_URL = 'https://api.coingecko.com/api/v3/search';
 const COINGECKO_COIN_URL = 'https://api.coingecko.com/api/v3/coins';
 const COINGECKO_TRENDING_URL = 'https://api.coingecko.com/api/v3/search/trending';
@@ -101,17 +108,17 @@ export async function collectMarket(projectName) {
 
     // Derived enrichment metrics
     const athDistancePct = (price != null && ath != null && ath > 0)
-      ? ((price - ath) / ath) * 100
+      ? safeNum(((price - ath) / ath) * 100)
       : null;
     const atl = marketData?.atl?.usd ?? null;
     const atlDistancePct = (price != null && atl != null && atl > 0 && price > atl)
-      ? ((price - atl) / atl) * 100
+      ? safeNum(((price - atl) / atl) * 100)
       : null;
     const circulatingToMaxRatio = (circulatingSupply != null && (maxSupply || totalSupply) > 0)
-      ? circulatingSupply / (maxSupply || totalSupply)
+      ? safeNum(circulatingSupply / (maxSupply || totalSupply))
       : null;
     const volumeToMcapRatio = (totalVolume != null && marketCap != null && marketCap > 0)
-      ? totalVolume / marketCap
+      ? safeNum(totalVolume / marketCap)
       : null;
     // Round 9: price range position (0 = at ATL, 1 = at ATH)
     const priceRangePosition = (price != null && ath != null && atl != null && ath > atl)
@@ -206,10 +213,19 @@ export async function collectMarket(projectName) {
       price_change_pct_60d: marketData?.price_change_percentage_60d_in_currency?.usd ?? null,
       price_change_pct_200d: marketData?.price_change_percentage_200d_in_currency?.usd ?? null,
       price_change_pct_1y: marketData?.price_change_percentage_1y_in_currency?.usd ?? null,
-      // Round 2 (AutoResearch nightly): 90-day momentum — fills gap between 60d and 200d
-      // CoinGecko doesn't have 90d natively; compute from sparkline if price_change_pct_60d and 200d both available
-      // Use as a fallback heuristic: average of 60d and 200d changes
+      // Round 197 (AutoResearch): 90-day price change from 90-day chart history (first vs last price)
+      // More accurate than a weighted average heuristic — uses actual chart data when available
       price_change_pct_90d: (() => {
+        const prices = (chartData?.prices || []).map(([, p]) => Number(p)).filter(Number.isFinite);
+        if (prices.length >= 2) {
+          const first = prices[0];
+          const last = prices[prices.length - 1];
+          if (first > 0) {
+            const change = ((last - first) / first) * 100;
+            return Number.isFinite(change) ? parseFloat(change.toFixed(2)) : null;
+          }
+        }
+        // Fallback: weighted blend of 60d and 200d if chart not available
         const c60 = marketData?.price_change_percentage_60d_in_currency?.usd;
         const c200 = marketData?.price_change_percentage_200d_in_currency?.usd;
         if (c60 != null && c200 != null) return parseFloat(((Number(c60) * 0.6 + Number(c200) * 0.4)).toFixed(2));
@@ -227,6 +243,8 @@ export async function collectMarket(projectName) {
       market_cap_rank: coinData?.market_cap_rank ?? null,
       twitter_followers: communityData?.twitter_followers ?? null,
       telegram_channel_user_count: communityData?.telegram_channel_user_count ?? null,
+      // Round 201 (AutoResearch): Reddit subscribers from CoinGecko community data
+      reddit_subscribers: communityData?.reddit_subscribers ?? null,
       // Round 2
       is_trending: isTrending,
       categories,
@@ -240,10 +258,50 @@ export async function collectMarket(projectName) {
       top_exchanges: topExchanges,
       sparkline_7d: coinData?.market_data?.sparkline_7d?.price || [],
       price_history_90d: (chartData?.prices || []).map(([ts, price]) => ({ t: ts, p: price })),
+      // Round 156 (AutoResearch): 7-day sparkline realized volatility (daily return std dev)
+      sparkline_7d_volatility: (() => {
+        const prices = (coinData?.market_data?.sparkline_7d?.price || []).map(Number).filter(Number.isFinite);
+        if (prices.length < 3) return null;
+        const returns = [];
+        for (let i = 1; i < prices.length; i++) {
+          if (prices[i - 1] > 0) returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
+        }
+        if (returns.length < 2) return null;
+        const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
+        const variance = returns.reduce((s, v) => s + (v - mean) ** 2, 0) / returns.length;
+        return parseFloat((Math.sqrt(variance) * 100).toFixed(3)); // % daily vol
+      })(),
+      // Round 156 (AutoResearch): 90-day realized volatility from chart history
+      realized_vol_90d: (() => {
+        const pxHistory = (chartData?.prices || []).map(([, p]) => Number(p)).filter(Number.isFinite);
+        if (pxHistory.length < 10) return null;
+        const returns = [];
+        for (let i = 1; i < pxHistory.length; i++) {
+          if (pxHistory[i - 1] > 0) returns.push((pxHistory[i] - pxHistory[i - 1]) / pxHistory[i - 1]);
+        }
+        const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
+        const variance = returns.reduce((s, v) => s + (v - mean) ** 2, 0) / returns.length;
+        return parseFloat((Math.sqrt(variance) * Math.sqrt(365) * 100).toFixed(1)); // annualized %
+      })(),
       // Round R1 (AutoResearch batch): 7-day average volume from chart data — enables suspicious spike detection
       volume_7d_avg: (() => {
         const vols = (chartData?.total_volumes || []).slice(-7).map(([, v]) => Number(v)).filter(Number.isFinite);
         return vols.length >= 3 ? Math.round(vols.reduce((s, v) => s + v, 0) / vols.length) : null;
+      })(),
+      // Round 205 (AutoResearch): volume spike flag — when 24h vol is anomalously high vs 7d avg
+      // Useful for catching pump-and-dump, news-driven spikes, or exchange listing events
+      volume_spike_flag: (() => {
+        const vol24h = totalVolume;
+        const vol7dAvg = (() => {
+          const vols = (chartData?.total_volumes || []).slice(-7).map(([, v]) => Number(v)).filter(Number.isFinite);
+          return vols.length >= 3 ? vols.reduce((s, v) => s + v, 0) / vols.length : null;
+        })();
+        if (vol24h == null || vol7dAvg == null || vol7dAvg === 0) return null;
+        const ratio = vol24h / vol7dAvg;
+        if (ratio >= 5) return 'extreme_spike';
+        if (ratio >= 3) return 'spike';
+        if (ratio >= 1.5) return 'elevated';
+        return null;
       })(),
       // Round R5: Global market context — BTC dominance, total mcap, macro trend
       btc_dominance: globalData?.data?.market_cap_percentage?.btc != null
@@ -251,6 +309,13 @@ export async function collectMarket(projectName) {
         : null,
       total_market_cap_usd: globalData?.data?.total_market_cap?.usd ?? null,
       market_cap_change_pct_24h_global: globalData?.data?.market_cap_change_percentage_24h_usd ?? null,
+      // Round 190 (AutoResearch): project description + homepage from CoinGecko
+      description: coinData?.description?.en
+        ? String(coinData.description.en).replace(/<[^>]+>/g, '').trim().slice(0, 500) || null
+        : null,
+      homepage: Array.isArray(coinData?.links?.homepage)
+        ? (coinData.links.homepage.find(Boolean) || null)
+        : null,
       error: null,
     };
   } catch (error) {

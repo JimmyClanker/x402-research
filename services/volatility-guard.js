@@ -64,6 +64,19 @@ export function assessVolatility(rawData = {}) {
     notes.push(`Weekly price swing of ${change7d?.toFixed(1)}% adds to volatility concern.`);
   }
 
+  // Round 156 (AutoResearch): 90-day realized annualized volatility — structural context
+  // Helps distinguish high-vol regime that's normal for this asset vs truly unusual
+  const realizedVol90d = safeN(rawData?.market?.realized_vol_90d);
+  if (realizedVol90d !== null && abs24h !== null) {
+    // If realized vol is very low (<30%) but 24h move is high → unusual event, increase caution
+    if (realizedVol90d < 30 && abs24h > 10 && regime === 'elevated') {
+      regime = 'high';
+      notes.push(`Realized 90d vol ${realizedVol90d}% (normally stable) but ${abs24h.toFixed(1)}% 24h move — unusual event, elevated caution.`);
+    } else if (realizedVol90d > 200) {
+      notes.push(`Asset has extremely high 90d realized volatility (${realizedVol90d}% annualized) — structural high-risk asset.`);
+    }
+  }
+
   // Buy/sell imbalance amplifies regime
   const buySellRatio = safeN(dex.buy_sell_ratio);
   if (buySellRatio != null && (buySellRatio > 1.8 || buySellRatio < 0.5)) {

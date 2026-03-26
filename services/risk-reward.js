@@ -136,6 +136,17 @@ export function assessRiskReward(rawData, scores, tradeSetup) {
     }
   }
 
+  // Round 155 (AutoResearch): DEX volume momentum quality adjustment
+  // Accelerating volume = higher conviction on TP1 (demand building); decelerating = lower
+  const dexVolMomentum = rawData?.dex?.volume_momentum;
+  if (dexVolMomentum === 'accelerating' && expectedValue !== null && expectedValue > 0) {
+    volAdjustedEv = round(volAdjustedEv * 1.1, 4);
+    notes.push('DEX volume accelerating intraday — EV adjusted upward 10%.');
+  } else if (dexVolMomentum === 'decelerating' && expectedValue !== null) {
+    volAdjustedEv = round(volAdjustedEv * 0.9, 4);
+    notes.push('DEX volume decelerating intraday — EV adjusted downward 10%.');
+  }
+
   return {
     rr_ratio: rrRatio,
     probability_tp1: pTP1,
