@@ -93,10 +93,16 @@
     a { color: var(--green); text-decoration: none; }
     a:hover { opacity: 0.85; }
 
+    /* Round 116: improved focus-visible ring — thicker, more visible */
     :focus-visible {
-      outline: 2px solid var(--green);
+      outline: 2.5px solid var(--green);
       outline-offset: 3px;
       border-radius: 4px;
+      box-shadow: 0 0 0 4px rgba(212,88,10,0.12);
+    }
+    /* Buttons need no extra box-shadow (already have borders) */
+    button:focus-visible {
+      outline-offset: 2px;
     }
 
     .container {
@@ -932,8 +938,13 @@
       letter-spacing: -0.04em; color: var(--green);
       line-height: 1; margin-bottom: 8px;
       font-family: 'IBM Plex Mono', monospace;
+      /* Round 118: subtle text glow */
+      text-shadow: 0 0 20px rgba(212,88,10,0.25);
     }
-    .stat-label { color: var(--muted2); font-size: 0.85rem; }
+    .stat-label { color: var(--muted2); font-size: 0.85rem; line-height: 1.4; }
+    /* Round 118: stat-box hover */
+    .stat-box { transition: background 0.2s; }
+    .stat-box:hover { background: rgba(212,88,10,0.03); }
 
     /* ── Scanner fade-in ── */
     .scanner-fade-in {
@@ -996,18 +1007,22 @@
       from { opacity: 0; transform: translateY(18px) scale(0.99); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
+    /* Round 114: panel stagger via CSS custom props */
     #report .panel {
-      animation: panelSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+      --stagger-delay: 0s;
+      animation: panelSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) var(--stagger-delay) both;
     }
-    #report .panel:nth-child(1) { animation-delay: 0.05s; }
-    #report .panel:nth-child(2) { animation-delay: 0.12s; }
-    #report .panel:nth-child(3) { animation-delay: 0.18s; }
-    #report .panel:nth-child(4) { animation-delay: 0.24s; }
-    #report .panel:nth-child(5) { animation-delay: 0.30s; }
-    #report .panel:nth-child(6) { animation-delay: 0.36s; }
+    #report > section:nth-child(1).panel { --stagger-delay: 0.04s; }
+    #report > section:nth-child(2).panel { --stagger-delay: 0.11s; }
+    #report > section:nth-child(3).panel { --stagger-delay: 0.17s; }
+    #report > section:nth-child(4).panel { --stagger-delay: 0.23s; }
+    #report > section:nth-child(5).panel { --stagger-delay: 0.29s; }
+    #report > section:nth-child(6).panel { --stagger-delay: 0.35s; }
+    /* Also stagger the rescan button */
+    #report > .rescan-btn { animation: panelSlideIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.02s both; }
     @keyframes panelSlideIn {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; transform: translateY(14px) scale(0.995); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     /* ── x402 Payment Modal ── */
@@ -1176,9 +1191,11 @@
       .payment-card { padding: 24px 18px; }
     }
     @media (max-width: 560px) {
-      .hero-section { padding: 48px 0 44px; }
-      h1.hero-headline { font-size: 2.2rem; }
-      .hero-ctas { flex-direction: column; align-items: center; }
+      .hero-section { padding: 44px 0 40px; }
+      h1.hero-headline { font-size: 2rem; }
+      /* Round 111: better hero CTA layout on mobile */
+      .hero-ctas { flex-direction: column; align-items: stretch; gap: 10px; max-width: 320px; margin-left: auto; margin-right: auto; }
+      .hero-ctas .btn-primary, .hero-ctas .btn-secondary { justify-content: center; width: 100%; }
       .how-step { padding: 20px 16px; }
       /* Round 75: full-width scan buttons on small screens */
       .toolbar .btn-row { flex-direction: column; gap: 8px; }

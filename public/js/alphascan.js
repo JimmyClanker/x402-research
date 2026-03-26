@@ -284,21 +284,31 @@
 
 
     function renderScoreBars(scores) {
+      // Round 112: tone pill with icon + improved coloring
+      // Round 119: add reasoning tooltip on score row
+      const toneData = [
+        {min:8, label:'High conviction', color:'#86efac', bg:'rgba(34,197,94,0.1)', border:'rgba(34,197,94,0.2)', icon:'↑'},
+        {min:6, label:'Constructive',    color:'#ffd3b6', bg:'rgba(212,88,10,0.1)', border:'rgba(212,88,10,0.2)', icon:'→'},
+        {min:4, label:'Mixed setup',     color:'#fdba74', bg:'rgba(251,146,60,0.1)', border:'rgba(251,146,60,0.2)', icon:'~'},
+        {min:0, label:'Fragile',         color:'#fca5a5', bg:'rgba(239,68,68,0.08)', border:'rgba(239,68,68,0.2)', icon:'↓'},
+      ];
       return SCORE_META.map(([key,label])=>{
-        const v=Number(scores?.[key]?.score||0), w=`${Math.max(0,Math.min(100,v*10))}%`;
-        const tone=v>=8?'High conviction':v>=6?'Constructive':v>=4?'Mixed setup':'Fragile';
-        const toneColor=v>=8?'#86efac':v>=6?'#ffd3b6':v>=4?'#fdba74':'#fca5a5';
+        const dim = scores?.[key] || {};
+        const v=Number(dim.score||0), w=`${Math.max(0,Math.min(100,v*10))}%`;
+        const t = toneData.find(td => v >= td.min) || toneData[toneData.length-1];
         const barC=barColor(v);
-        // Round 71: score value shown prominently, tone pill on the right
-        return `<div class="score-row">
+        // Truncate reasoning to 120 chars for tooltip
+        const reasoning = String(dim.reasoning || '').trim();
+        const tooltip = reasoning ? ` title="${escapeHtml(reasoning.slice(0, 140))}${reasoning.length > 140 ? '…' : ''}"` : '';
+        return `<div class="score-row"${tooltip}>
           <div class="score-label">
             <strong>${label}</strong>
-            <span style="color:${toneColor};font-size:0.68rem;">${tone}</span>
+            <span style="color:${t.color};font-size:0.65rem;background:${t.bg};border:1px solid ${t.border};border-radius:999px;padding:1px 6px;display:inline-flex;align-items:center;gap:3px;font-weight:600;">${t.icon} ${t.label}</span>
           </div>
           <div class="bar">
             <span style="--target-width:${w}; background:${barC}; box-shadow:0 0 8px ${barC}55"></span>
           </div>
-          <div class="score-value" style="color:${barC};font-family:'IBM Plex Mono',monospace;font-size:0.95rem;">${v.toFixed(1)}</div>
+          <div class="score-value" style="color:${barC};font-family:'IBM Plex Mono',monospace;font-size:0.92rem;">${v.toFixed(1)}</div>
         </div>`;
       }).join('');
     }
@@ -417,8 +427,22 @@
 
     function formatAnalysisText(text) {
       if (!text) return '<p>No analysis available.</p>';
-      // Split into paragraphs on double newline or single newline
+      // Round 115: improved paragraph splitting + key sentence emphasis
       const paragraphs = text.split(/\n\n+|\n(?=[A-Z])/).filter(p => p.trim());
+      function renderParagraph(raw) {
+        const p = raw.trim();
+        if (!p) return '';
+        // Escape HTML first, then add emphasis to key words
+        const escaped = escapeHtml(p);
+        const boldPattern = /\b(BUY|HOLD|AVOID|strong buy|strong sell|bullish|bearish|critical|caution|significant|key risk|key catalyst)\b/ig;
+        const rendered = escaped.replace(boldPattern, (m) => {
+          const isPositive = /buy|bullish|strong|catalyst/i.test(m);
+          const isNegative = /avoid|sell|bearish|risk|caution/i.test(m);
+          const color = isPositive ? '#D4580A' : isNegative ? '#ff8b94' : '#ffd3b6';
+          return `<strong style="color:${color};font-weight:700;">${m}</strong>`;
+        });
+        return `<p style="margin:0 0 14px 0;line-height:1.85;">${rendered}</p>`;
+      }
       if (paragraphs.length <= 1) {
         // Try splitting long single-paragraph text at sentence boundaries (~every 2-3 sentences)
         const sentences = text.match(/.+?[!?]+|.+?\.(?!\d)/g) || [text];
@@ -427,10 +451,11 @@
           for (let i = 0; i < sentences.length; i += 3) {
             chunks.push(sentences.slice(i, i + 3).join(' ').trim());
           }
-          return chunks.map(p => `<p style="margin:0 0 12px 0;line-height:1.8;">${escapeHtml(p)}</p>`).join('');
+          return chunks.map(c => renderParagraph(c)).join('');
         }
+        return renderParagraph(text);
       }
-      return paragraphs.map(p => `<p style="margin:0 0 12px 0;line-height:1.8;">${escapeHtml(p.trim())}</p>`).join('');
+      return paragraphs.map(p => renderParagraph(p)).join('');
     }
 
     function renderList(items, fallback='n/a') {

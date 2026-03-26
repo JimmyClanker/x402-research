@@ -88,12 +88,14 @@
     a { color: var(--green); text-decoration: none; }
     a:hover { opacity: 0.85; }
 
-    /* ── Visible focus states (a11y) ───────────── */
+    /* ── Visible focus states (a11y) — Round 116 ───────────── */
     :focus-visible {
-      outline: 2px solid var(--green);
+      outline: 2.5px solid var(--green);
       outline-offset: 3px;
       border-radius: 4px;
+      box-shadow: 0 0 0 4px rgba(212,88,10,0.12);
     }
+    button:focus-visible { outline-offset: 2px; }
 
     /* ── Layout ────────────────────────────────── */
     .container {
@@ -645,15 +647,23 @@
       flex-wrap: wrap;
       margin-top: 24px;
     }
+    /* Round 113: about chip pills — more visible with hover */
     .about-chip {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 12px;
+      padding: 6px 14px;
       border: 1px solid var(--border);
       border-radius: 999px;
       font-size: 0.82rem;
       color: var(--muted2);
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      background: rgba(255,255,255,0.02);
+    }
+    .about-chip:hover {
+      border-color: rgba(212,88,10,0.25);
+      color: var(--text);
+      background: rgba(212,88,10,0.04);
     }
 
     /* ── Footer ────────────────────────────────── */
