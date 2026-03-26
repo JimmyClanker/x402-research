@@ -302,6 +302,24 @@ export async function collectSocial(projectName, exaService) {
       ? (veryRecentCount / uniqueNews.length > 0.5 ? 'accelerating' : veryRecentCount > 0 ? 'steady' : 'declining')
       : 'no_data';
 
+    // Round 233 (AutoResearch nightly): sentiment_credibility_score (0-100)
+    // Combines: article count, domain trust, recency, sentiment dominance, signal quality (no-bot ratio)
+    const sentimentCredibility = (() => {
+      if (uniqueNews.length === 0) return 0;
+      const countScore = Math.min(30, uniqueNews.length * 3);          // 0-30: up to 10 articles max out
+      const qualityScore = (avgArticleQualityScore ?? 1.0) >= 1.3 ? 25  // high-trust domains
+        : (avgArticleQualityScore ?? 1.0) >= 1.1 ? 15 : 8;              // 0-25
+      const recencyScore = veryRecentCount > 0 ? Math.min(25, veryRecentCount * 8) : 0; // 0-25
+      const dominanceScore = sentimentDominance != null ? Math.round(sentimentDominance * 20) : 10; // 0-20
+      const botPenalty = rawItems.length > 0 ? Math.round((botFilteredCount / rawItems.length) * 20) : 0;
+      return Math.max(0, Math.min(100, countScore + qualityScore + recencyScore + dominanceScore - botPenalty));
+    })();
+
+    // Round 233 (AutoResearch nightly): bot_ratio — fraction of items flagged as spam
+    const botRatio = rawItems.length > 0
+      ? parseFloat((botFilteredCount / rawItems.length).toFixed(3))
+      : 0;
+
     return {
       ...fallback,
       mentions: rawItems.length,
@@ -324,6 +342,9 @@ export async function collectSocial(projectName, exaService) {
       // Round 12 (AutoResearch nightly): news recency signals
       very_recent_news_count: veryRecentCount,
       news_momentum: newsMomentum,
+      // Round 233 (AutoResearch nightly): signal quality metrics
+      sentiment_credibility_score: sentimentCredibility,
+      bot_ratio: botRatio,
       // Round 192 (AutoResearch): more informative error — report failure count and first error message
       error: (() => {
         const failed = settled.filter((e) => e.status === 'rejected');

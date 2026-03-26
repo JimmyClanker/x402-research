@@ -275,6 +275,19 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
     }
   }
 
+  // Round 233 (AutoResearch nightly): Social credibility collapse breaker
+  // High sentiment_credibility_score (>60) acts as a positive signal, but very low (<15)
+  // with many mentions indicates coordinated noise — cap to prevent false signals driving scores up
+  const socialCredibility = safeN(rawData?.social?.sentiment_credibility_score ?? null, null);
+  const socialMentionsForCB = safeN(rawData?.social?.filtered_mentions ?? rawData?.social?.mentions ?? 0);
+  if (socialCredibility !== null && socialCredibility < 15 && socialMentionsForCB >= 10) {
+    breakers.push({
+      cap: 6.5,
+      reason: `Social credibility score critically low (${socialCredibility}/100) despite ${socialMentionsForCB} mentions — likely bot/spam noise`,
+      severity: 'warning',
+    });
+  }
+
   // Round 212 (AutoResearch): Revenue collapse warning — TVL > $50M with zero fees for >7d
   // Protocols that have significant TVL but generate zero fees may have broken incentives
   const tvlR212 = safeN(onchain.tvl ?? 0);

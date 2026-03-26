@@ -152,7 +152,17 @@ export function calculateConviction(rawData, scores, enrichment = {}) {
   const f4 = scoreRedFlagImpact(enrichment);
   const f5 = scoreSpread(scores);
 
-  const total = f1.score + f2.score + f3.score + f4.score + f5.score;
+  // Round 233 (AutoResearch nightly): P/TVL micro-bonus — undervalued assets with data support get +3 conviction pts
+  const ptvlBonus = (() => {
+    const ptvl = rawData?.ptvl_ratio;
+    const tvl = safeN(rawData?.onchain?.tvl ?? 0);
+    if (ptvl == null || tvl < 5_000_000) return 0; // only applies to protocols with real TVL
+    if (ptvl < 0.5) return 3;  // deep value with TVL = high conviction opportunity
+    if (ptvl < 1.0) return 2;  // undervalued
+    return 0;
+  })();
+
+  const total = Math.min(100, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus);
   const label = convictionLabel(total);
 
   const reasoning = [

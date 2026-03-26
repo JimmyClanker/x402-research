@@ -83,6 +83,20 @@ export function detectScoreMomentum(db) {
       AND ABS(sc_recent.overall_score - sc_old.overall_score) > 1.0
   `).all();
 
+  // Helper: ottieni tutti gli snapshot recenti per trend consistency check
+  const getRecentSnapshots = (tokenId, recentAt) => {
+    return db.prepare(`
+      SELECT sc.overall_score
+      FROM token_snapshots ts
+      JOIN token_scores sc ON sc.snapshot_id = ts.id
+      WHERE ts.token_id = ?
+        AND datetime(ts.snapshot_at) <= datetime(?)
+        AND sc.overall_score IS NOT NULL
+      ORDER BY ts.snapshot_at DESC
+      LIMIT 5
+    `).all(tokenId, recentAt);
+  };
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
@@ -96,19 +110,36 @@ export function detectScoreMomentum(db) {
     const msOld = new Date(row.old_at.replace(' ', 'T') + 'Z').getTime();
     const msRecent = new Date(row.recent_at.replace(' ', 'T') + 'Z').getTime();
     const hours = Math.round((msRecent - msOld) / (1000 * 60 * 60));
+    const velocity = hours > 0 ? (delta / hours) : 0; // pts per hour
+    const normalizedDelta = row.current_score !== 0 ? (delta / row.current_score) : 0; // relative change
+
+    // Trend consistency: score è sempre cresciuto/decresciuto negli ultimi N snapshot?
+    const recentSnaps = getRecentSnapshots(row.token_id, row.recent_at);
+    let trendConsistent = false;
+    if (recentSnaps.length >= 3) {
+      const scores = recentSnaps.map(s => s.overall_score);
+      const allImproving = scores.every((s, i) => i === 0 || s >= scores[i - 1]);
+      const allDeclining = scores.every((s, i) => i === 0 || s <= scores[i - 1]);
+      trendConsistent = direction === 'improving' ? allImproving : allDeclining;
+    }
+
+    const consistencyNote = trendConsistent ? ' [consistent trend]' : '';
 
     return {
       signal_type: 'SCORE_MOMENTUM',
       token_id: row.token_id,
       severity,
-      title: `${tokenName}: score ${direction} ${absDelta.toFixed(1)} pts in 72h`,
-      detail: `Score moved from ${row.prev_score.toFixed(1)}/10 to ${row.current_score.toFixed(1)}/10. ${direction === 'improving' ? 'Positive momentum' : 'Deterioration detected'}.`,
+      title: `${tokenName}: score ${direction} ${absDelta.toFixed(1)} pts in 72h (velocity: ${velocity.toFixed(3)} pts/h)${consistencyNote}`,
+      detail: `Score moved from ${row.prev_score.toFixed(1)}/10 to ${row.current_score.toFixed(1)}/10. ${direction === 'improving' ? 'Positive momentum' : 'Deterioration detected'}. Velocity: ${velocity.toFixed(3)} pts/h.${trendConsistent ? ' Trend is consistent across recent snapshots.' : ''}`,
       data_json: JSON.stringify({
         current_score: row.current_score,
         prev_score: row.prev_score,
         delta,
         direction,
         hours,
+        velocity,
+        normalized_delta: normalizedDelta,
+        trend_consistent: trendConsistent,
       }),
       expires_at: expiresAt,
     };
@@ -210,13 +241,19 @@ export function detectCategoryLeaderShift(db) {
       .map(r => r.token_name || r.token_symbol || `#${r.token_id}`);
 
     const newLeader = newTop3Names[0] || 'Unknown';
+    const changeCount = enteredIds.length; // quanti nuovi entrati
+    const severity = changeCount >= 3 ? 'critical' : changeCount === 2 ? 'high' : 'medium';
+
+    const newLeaderScore = rows[0]?.overall_score ?? null;
+    const oldLeaderScore = oldRows2[0]?.overall_score ?? null;
+    const scoreGap = (newLeaderScore !== null && oldLeaderScore !== null) ? (newLeaderScore - oldLeaderScore) : null;
 
     signals.push({
       signal_type: 'CATEGORY_LEADER_SHIFT',
       token_id: null,
-      severity: 'medium',
-      title: `${category}: leadership change — ${newLeader} enters top 3`,
-      detail: `New top 3: ${newTop3Names.join(', ')}. Previous: ${oldTop3Names.join(', ')}.`,
+      severity,
+      title: `${category}: leadership change — ${newLeader} enters top 3 (${changeCount} new)`,
+      detail: `New top 3: ${newTop3Names.join(', ')}. Previous: ${oldTop3Names.join(', ')}. ${changeCount} token(s) changed.${scoreGap !== null ? ` Leader score gap: ${scoreGap > 0 ? '+' : ''}${scoreGap.toFixed(1)} pts.` : ''}`,
       data_json: JSON.stringify({
         category,
         new_top3: newTop3Names,
@@ -225,6 +262,8 @@ export function detectCategoryLeaderShift(db) {
         old_top3_ids: oldTop3Ids,
         entered: enteredNames,
         exited: exitedNames,
+        change_count: changeCount,
+        score_gap: scoreGap,
       }),
       expires_at: expiresAt,
     });
@@ -304,22 +343,66 @@ export function detectBreakerAlerts(db) {
     const tokenName = snap.token_name || snap.token_symbol || `token#${snap.token_id}`;
 
     // Breaker attivati (presenti ora, non prima)
+    const activatedBreakers = [];
     for (const breaker of currentBreakers) {
       const key = getBreakerKey(breaker);
       if (!prevKeys.has(key)) {
-        const breakerType = breaker?.type || breaker?.id || 'unknown';
-        const cap = breaker?.cap ?? breaker?.score_cap ?? null;
-        const reason = breaker?.reason || breaker?.detail || breakerType;
-        signals.push({
-          signal_type: 'BREAKER_ALERT',
-          token_id: snap.token_id,
-          severity: 'high',
-          title: `${tokenName}: circuit breaker ACTIVATED — ${breakerType}`,
-          detail: `${reason}. Score cap: ${cap != null ? cap + '/10' : 'n/a'}.`,
-          data_json: JSON.stringify({ breaker_type: breakerType, activated: true, cap, reason }),
-          expires_at: expiresAt,
-        });
+        activatedBreakers.push(breaker);
       }
+    }
+
+    if (activatedBreakers.length > 0) {
+      const breakerCount = currentBreakers.length;
+      
+      // Check se qualche breaker è attivo da >48h (presente negli ultimi 3+ snapshot)
+      const oldSnapshots = db.prepare(`
+        SELECT ts.id, sc.circuit_breakers_json
+        FROM token_snapshots ts
+        JOIN token_scores sc ON sc.snapshot_id = ts.id
+        WHERE ts.token_id = ?
+          AND datetime(ts.snapshot_at) <= datetime(?)
+        ORDER BY ts.snapshot_at DESC
+        LIMIT 4
+      `).all(snap.token_id, snap.snapshot_at);
+
+      let longDurationBreaker = false;
+      if (oldSnapshots.length >= 3) {
+        const currentKeys = new Set(currentBreakers.map(getBreakerKey));
+        let persistentCount = 0;
+        for (const oldSnap of oldSnapshots.slice(1)) {
+          try {
+            const oldB = oldSnap.circuit_breakers_json ? JSON.parse(oldSnap.circuit_breakers_json) : [];
+            const oldKeys = new Set(oldB.map(getBreakerKey));
+            const anyPersistent = [...currentKeys].some(k => oldKeys.has(k));
+            if (anyPersistent) persistentCount++;
+          } catch {}
+        }
+        longDurationBreaker = persistentCount >= 2; // presente in almeno 2 snapshot precedenti
+      }
+
+      const severity = longDurationBreaker ? 'critical' : (breakerCount >= 3 ? 'critical' : 'high');
+      const firstBreaker = activatedBreakers[0];
+      const breakerType = firstBreaker?.type || firstBreaker?.id || 'unknown';
+      const cap = firstBreaker?.cap ?? firstBreaker?.score_cap ?? null;
+      const reason = firstBreaker?.reason || firstBreaker?.detail || breakerType;
+      const durationNote = longDurationBreaker ? ' [active >48h]' : '';
+      signals.push({
+        signal_type: 'BREAKER_ALERT',
+        token_id: snap.token_id,
+        severity,
+        title: `${tokenName}: circuit breaker ACTIVATED — ${breakerType} (${breakerCount} active)${durationNote}`,
+        detail: `${reason}. Score cap: ${cap != null ? cap + '/10' : 'n/a'}. Total breakers: ${breakerCount}.${longDurationBreaker ? ' Breaker active for >48h.' : ''}`,
+        data_json: JSON.stringify({ 
+          breaker_type: breakerType, 
+          activated: true, 
+          cap, 
+          reason, 
+          breaker_count: breakerCount,
+          long_duration: longDurationBreaker,
+          all_breakers: currentBreakers.map(b => b?.type || b?.id || 'unknown'),
+        }),
+        expires_at: expiresAt,
+      });
     }
 
     // Breaker disattivati (presenti prima, non ora)
@@ -351,9 +434,9 @@ export function detectBreakerAlerts(db) {
 
 /**
  * Rileva divergenza sentiment-price:
- * - score >= 7.0 + prezzo sceso > 15% in 7d → positive_divergence (opportunità)
- * - score <= 4.0 + prezzo salito > 15% in 7d → negative_divergence (trappola)
- * Usa price_change_7d dallo snapshot.
+ * - score >= 6.5 + prezzo sceso > 15% in 7d → positive_divergence (opportunità)
+ * - score <= 4.5 + prezzo salito > 15% in 7d → negative_divergence (trappola)
+ * Severity: high se score estremo (≥7.0 o ≤4.0), medium se moderato (6.5-7.0 o 4.0-4.5).
  */
 export function detectDivergence(db) {
   const rows = db.prepare(`
@@ -362,6 +445,8 @@ export function detectDivergence(db) {
       tu.name AS token_name,
       tu.symbol AS token_symbol,
       ts.price_change_7d,
+      ts.volume_24h,
+      ts.market_cap,
       sc.overall_score
     FROM token_snapshots ts
     JOIN token_universe tu ON tu.id = ts.token_id
@@ -372,9 +457,9 @@ export function detectDivergence(db) {
       AND sc.overall_score IS NOT NULL
       AND ts.price_change_7d IS NOT NULL
       AND (
-        (sc.overall_score >= 7.0 AND ts.price_change_7d < -15.0)
+        (sc.overall_score >= 6.5 AND ts.price_change_7d < -15.0)
         OR
-        (sc.overall_score <= 4.0 AND ts.price_change_7d > 15.0)
+        (sc.overall_score <= 4.5 AND ts.price_change_7d > 15.0)
       )
   `).all();
 
@@ -382,23 +467,39 @@ export function detectDivergence(db) {
   const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
 
   return rows.map(row => {
-    const isPositive = row.overall_score >= 7.0 && row.price_change_7d < -15.0;
+    const isPositive = row.overall_score >= 6.5 && row.price_change_7d < -15.0;
     const divergenceType = isPositive ? 'positive_divergence' : 'negative_divergence';
     const tokenName = row.token_name || row.token_symbol || `token#${row.token_id}`;
     const priceDirection = row.price_change_7d < 0 ? `down ${Math.abs(row.price_change_7d).toFixed(1)}%` : `up ${row.price_change_7d.toFixed(1)}%`;
     const scoreImplication = isPositive ? 'strong fundamentals' : 'weak fundamentals';
     const opportunityOrTrap = isPositive ? 'accumulation opportunity' : 'potential value trap';
 
+    // Volume quality check: mcap e volume devono essere presenti per severity upgrade
+    const volumeToMcap = (row.volume_24h && row.market_cap && row.market_cap > 0) 
+      ? (row.volume_24h / row.market_cap) 
+      : 0;
+    const lowVolume = volumeToMcap < 0.05; // < 5% daily turnover = thin
+
+    // Severity: high se score estremo + volume OK, medium se moderato o low volume
+    const extremeScore = isPositive ? row.overall_score >= 7.0 : row.overall_score <= 4.0;
+    let severity = extremeScore ? 'high' : 'medium';
+    if (lowVolume && severity === 'high') severity = 'medium'; // downgrade se volume thin
+
+    const volumeNote = lowVolume ? ' [low volume]' : '';
+
     return {
       signal_type: 'DIVERGENCE',
       token_id: row.token_id,
-      severity: 'high',
-      title: `${tokenName}: ${divergenceType} — score ${row.overall_score.toFixed(1)}/10 but price ${priceDirection}`,
-      detail: `Algorithmic score ${row.overall_score.toFixed(1)}/10 suggests ${scoreImplication}, but price has moved ${priceDirection} in 7d. Potential ${opportunityOrTrap}.`,
+      severity,
+      title: `${tokenName}: ${divergenceType} — score ${row.overall_score.toFixed(1)}/10 but price ${priceDirection}${volumeNote}`,
+      detail: `Algorithmic score ${row.overall_score.toFixed(1)}/10 suggests ${scoreImplication}, but price has moved ${priceDirection} in 7d. Potential ${opportunityOrTrap}.${lowVolume ? ' Low volume (<5% daily turnover) — signal quality reduced.' : ''}`,
       data_json: JSON.stringify({
         score: row.overall_score,
         price_change_7d: row.price_change_7d,
         divergence_type: divergenceType,
+        extreme_score: extremeScore,
+        volume_to_mcap: volumeToMcap,
+        low_volume: lowVolume,
       }),
       expires_at: expiresAt,
     };

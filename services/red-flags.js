@@ -520,7 +520,33 @@ export function detectRedFlags(rawData = {}, scores = {}) {
     });
   }
 
-  // Round 232 (AutoResearch nightly): Community score collapse — large following but zero engagement signals
+  // Round 233b (AutoResearch nightly): Very low protocol efficiency for established DeFi
+  // A protocol with >$50M TVL and efficiency score <10 is barely extracting value from its capital
+  const protocolEfficiency = safeN(onchain.protocol_efficiency_score ?? null, null);
+  if (protocolEfficiency !== null && protocolEfficiency < 10 && safeN(onchain.tvl ?? 0) > 50_000_000) {
+    flags.push({
+      flag: 'very_low_protocol_efficiency',
+      severity: 'warning',
+      detail: `Protocol efficiency score is ${protocolEfficiency}/100 despite $${(safeN(onchain.tvl) / 1e6).toFixed(0)}M TVL — token holders are poorly served by current fee/revenue structure.`,
+    });
+  }
+
+  // Round 233 (AutoResearch nightly): Volume-to-market-cap anomaly — extremely low velocity
+  // Vol/MCap < 0.001 (0.1%) for established tokens = near-dead trading / possible liquidity trap
+  const vol24hForAnomaly = safeN(market.total_volume ?? 0);
+  const mcapForAnomaly = safeN(market.market_cap ?? 0);
+  if (vol24hForAnomaly > 0 && mcapForAnomaly > 10_000_000) {
+    const volMcapRatio = vol24hForAnomaly / mcapForAnomaly;
+    if (volMcapRatio < 0.001) {
+      flags.push({
+        flag: 'extremely_low_volume_velocity',
+        severity: 'warning',
+        detail: `Volume/MCap ratio is ${(volMcapRatio * 100).toFixed(3)}% — effectively illiquid relative to market cap. $${(vol24hForAnomaly / 1000).toFixed(0)}K traded vs $${(mcapForAnomaly / 1e6).toFixed(1)}M market cap.`,
+      });
+    }
+  }
+
+  // Round 233 (AutoResearch nightly): Community score collapse — large following but zero engagement signals
   // High follower count + zero recent mentions = ghost followers / dead community
   const communityScore = safeN(market.community_score ?? null, null);
   const twitterFollowers = safeN(market.twitter_followers ?? 0);

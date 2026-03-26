@@ -156,3 +156,19 @@ export function fetchJson(url, opts = {}) {
   }
   return _fetchJsonImpl(url, opts);
 }
+
+// Round 233 (AutoResearch nightly): Export domain failure stats for health diagnostics
+// Allows health endpoint to surface which domains are currently in cooldown
+export function getDomainFailStats() {
+  const now = Date.now();
+  const result = {};
+  for (const [domain, entry] of domainFailCache.entries()) {
+    const coolingDown = entry.fails >= DOMAIN_FAIL_THRESHOLD && now < entry.cooldownUntil;
+    result[domain] = {
+      fails: entry.fails,
+      cooling_down: coolingDown,
+      cooldown_remaining_ms: coolingDown ? entry.cooldownUntil - now : 0,
+    };
+  }
+  return result;
+}

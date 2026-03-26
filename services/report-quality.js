@@ -166,6 +166,14 @@ export function scoreReportQuality(rawData, scores, analysis) {
     }
   }
 
+  // ── 10b. Round 233 (AutoResearch nightly): project_summary presence check ──
+  // project_summary is the first thing users see — missing it degrades first impressions
+  const summaryText = analysis?.project_summary ?? rawData?.project_summary ?? '';
+  if (!summaryText || String(summaryText).trim().length < 30) {
+    issues.push('project_summary is missing or too short — reduces report usefulness for first-time readers.');
+    score -= 5;
+  }
+
   // ── 10. Round 15 (AutoResearch batch): LLM analysis depth check ──
   const analysisText = rawData?.llm_analysis?.analysis_text ?? rawData?.analysis_text ?? '';
   if (analysisText && analysisText.length < 200) {

@@ -127,6 +127,16 @@ function buildFactRegistry(rawData = {}) {
   push('social.governance_mentions', rawData?.social?.governance_mentions);
   push('github.issue_resolution_rate', rawData?.github?.issue_resolution_rate);
   push('dex.volume_momentum', rawData?.dex?.volume_momentum);
+  // Round 233 (AutoResearch nightly): momentum divergence and social credibility
+  push('market.momentum_divergence', rawData?.market?.momentum_divergence);
+  push('social.sentiment_credibility_score', rawData?.social?.sentiment_credibility_score);
+  push('github.issue_health_score', rawData?.github?.issue_health_score);
+  const _ptvlForFacts = rawData?.ptvl_ratio ?? (
+    rawData?.market?.market_cap != null && rawData?.onchain?.tvl != null && rawData.onchain.tvl > 0
+      ? rawData.market.market_cap / rawData.onchain.tvl
+      : null
+  );
+  push('onchain.ptvl_ratio', _ptvlForFacts != null ? parseFloat(_ptvlForFacts.toFixed(3)) : null);
 
   return facts;
 }
@@ -181,6 +191,12 @@ export function buildDataSummary(rawData = {}) {
     }
     if (market.volume_spike_flag) {
       marketLines.push(`- ⚠️ Volume spike: ${market.volume_spike_flag} (vs 7d avg)`);
+    }
+    // Round 233 (AutoResearch nightly): momentum divergence — is short-term vs long-term momentum aligned?
+    if (market.momentum_divergence != null) {
+      const div = market.momentum_divergence;
+      const divLabel = div > 500 ? 'strongly accelerating' : div > 0 ? 'accelerating' : div > -500 ? 'decelerating' : 'strongly decelerating';
+      marketLines.push(`- Momentum divergence: ${div > 0 ? '+' : ''}${div.toFixed(0)}% (short vs long-term, ${divLabel})`);
     }
     marketLines.push(add('FDV', market.fully_diluted_valuation ?? market.fdv, formatNumber));
 
@@ -271,6 +287,11 @@ export function buildDataSummary(rawData = {}) {
     }
     if (social.unlock_mentions != null && social.unlock_mentions > 0) {
       socialLines.push(`- Unlock/vesting mentions: ${social.unlock_mentions} (supply pressure signal)`);
+    }
+    // Round 233 (AutoResearch nightly): surface sentiment credibility for LLM context
+    if (social.sentiment_credibility_score != null) {
+      const credLabel = social.sentiment_credibility_score >= 60 ? 'high credibility' : social.sentiment_credibility_score >= 30 ? 'moderate credibility' : 'low credibility (noise risk)';
+      socialLines.push(`- Sentiment credibility: ${social.sentiment_credibility_score}/100 (${credLabel})`);
     }
     if (social.exploit_mentions != null && social.exploit_mentions > 0) {
       socialLines.push(`- Exploit/hack mentions: ${social.exploit_mentions} ⚠️`);

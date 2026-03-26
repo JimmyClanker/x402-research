@@ -104,6 +104,16 @@ export function createCollectorCache(db) {
     },
 
     /**
+     * Round 233 (AutoResearch nightly): Cache stats — per-collector TTL info for health endpoint.
+     */
+    getCacheTtlInfo() {
+      return Object.entries(COLLECTOR_TTLS_MS).reduce((acc, [name, ttlMs]) => {
+        acc[name] = { ttl_seconds: Math.round(ttlMs / 1000), stale_grace_seconds: Math.round(STALE_GRACE_MS / 1000) };
+        return acc;
+      }, {});
+    },
+
+    /**
      * Write collector result to cache.
      */
     write(collectorName, projectName, data) {

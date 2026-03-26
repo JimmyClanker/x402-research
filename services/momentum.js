@@ -174,5 +174,17 @@ export function calculateMomentum(rawData = {}, previousScanData = null) {
     price_vol_divergence: priceVolDivergence,
     momentum_alignment_score: momentumAlignmentScore,
     momentum_alignment_label: momentumAlignmentLabel,
+    // Round 233 (AutoResearch nightly): momentum_confidence — how reliable is the momentum signal?
+    // Confidence is higher when: more dims available, prev data exists for comparison, no divergence
+    momentum_confidence: (() => {
+      const hasPrev = previousScanData != null;
+      const noDivergence = priceVolDivergence === 'none';
+      const alignmentStrength = Math.abs(improvingCount - decliningCount) / totalDims; // 0 = evenly split
+      // Base from prev data availability + alignment strength
+      const base = hasPrev ? 60 : 35;
+      const alignBonus = Math.round(alignmentStrength * 30);
+      const divergencePenalty = !noDivergence ? 10 : 0;
+      return Math.max(0, Math.min(100, base + alignBonus - divergencePenalty));
+    })(),
   };
 }

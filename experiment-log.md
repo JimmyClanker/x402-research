@@ -1464,3 +1464,69 @@
 - **Change:** Bump engine_version da r44-2026-03-25 a r61-2026-03-26.
 - **Files:** synthesis/templates.js
 - **Tests:** 177/177 pass
+
+### Round 261 — Commit R251-261
+- **Commit:** 829eb3e. Pushed to main. Tests: 177/177.
+
+## Experiment 22 — SCORE_MOMENTUM: velocity metric
+- **Hypothesis:** Signal importance correlates with how fast score changes (pts/hour), not just absolute delta.
+- **Change:** Added `velocity` field (delta/hours) to SCORE_MOMENTUM signals; included in title and detail.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Velocity adds temporal context to momentum signals.
+
+## Experiment 23 — SCORE_MOMENTUM: trend_consistency flag
+- **Hypothesis:** Momentum signal quality improves when direction is consistent across multiple snapshots.
+- **Change:** Added trend_consistency boolean check (last 5 snapshots); flag shown in title/detail when true.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Provides confidence in direction (not just single delta).
+
+## Experiment 24 — SCORE_MOMENTUM: normalized_delta
+- **Hypothesis:** Delta of 1.5 is more significant at score 4 than at score 8; normalized_delta captures relative change.
+- **Change:** Added normalized_delta (delta / current_score) to SCORE_MOMENTUM data_json.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Enables relative momentum comparison across different score levels.
+
+## Experiment 25 — CATEGORY_LEADER_SHIFT: severity by change count
+- **Hypothesis:** Complete top3 overhaul (3 new) is more significant than single token swap.
+- **Change:** Severity = critical (3 new) | high (2 new) | medium (1 new); included change_count in data_json.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Severity now scales with magnitude of leadership change.
+
+## Experiment 26 — CATEGORY_LEADER_SHIFT: score_gap
+- **Hypothesis:** Score gap between new/old #1 indicates strength of regime change (large gap = dominant new leader).
+- **Change:** Added score_gap (new_leader_score - old_leader_score) to detail and data_json.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Adds quality context to leadership shifts.
+
+## Experiment 27 — BREAKER_ALERT: multiple breakers count + severity escalation
+- **Hypothesis:** 3+ active breakers is critical risk; count provides context on token health.
+- **Change:** Severity = critical (3+ breakers) | high (1-2); included breaker_count and all_breakers list in data_json.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Severity escalates with breaker count; full list logged for analysis.
+
+## Experiment 28 — BREAKER_ALERT: duration check + severity escalation
+- **Hypothesis:** Breaker active >48h (3+ snapshots) indicates persistent structural issue; should escalate to critical.
+- **Change:** Check last 4 snapshots; if breaker present in 2+ previous = long_duration → severity = critical.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Persistent breakers flagged as critical; transient breakers remain high.
+
+## Experiment 29 — DIVERGENCE: moderate divergence thresholds
+- **Hypothesis:** Score 6.5/4.5 capture moderate divergence earlier; severity scale provides quality filter.
+- **Change:** Lowered thresholds to 6.5 (positive) and 4.5 (negative); severity = high (extreme score ≥7.0/≤4.0), medium (moderate 6.5-7.0/4.0-4.5).
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Broader coverage with quality tier.
+
+## Experiment 30 — DIVERGENCE: volume quality filter
+- **Hypothesis:** Divergence on thin volume (<5% daily turnover) is less actionable; severity should downgrade.
+- **Change:** Added volume_to_mcap calculation; low_volume flag downgrades high → medium severity.
+- **Files:** oracle/signal-detector.js
+- **Test:** npm test → 177/177 pass
+- **Result:** keeper. Volume context improves signal quality filtering.

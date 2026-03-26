@@ -381,6 +381,19 @@ export async function collectMarket(projectName) {
       homepage: Array.isArray(coinData?.links?.homepage)
         ? (coinData.links.homepage.find(Boolean) || null)
         : null,
+      // Round 233 (AutoResearch nightly): short_term_vs_longterm_momentum_divergence
+      // Positive = recent momentum stronger than long-term (accelerating)
+      // Negative = recent momentum weaker (fading)
+      momentum_divergence: (() => {
+        const p24h = marketData?.price_change_percentage_24h_in_currency?.usd;
+        const p30d = marketData?.price_change_percentage_30d_in_currency?.usd;
+        if (p24h == null || p30d == null) return null;
+        // Normalize: annualized daily 24h vs monthly 30d
+        const daily24hAnnualized = Number(p24h) * 365;
+        const monthly30dAnnualized = Number(p30d) * 12;
+        const divergence = daily24hAnnualized - monthly30dAnnualized;
+        return Number.isFinite(divergence) ? parseFloat(divergence.toFixed(1)) : null;
+      })(),
       error: null,
     };
   } catch (error) {

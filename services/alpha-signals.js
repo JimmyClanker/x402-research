@@ -525,6 +525,33 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
   const lthSignal = detectLongTermHolderSignal(market);
   if (lthSignal) signals.push(lthSignal);
 
+  // Round 233b (AutoResearch nightly): High protocol efficiency signal
+  // Protocols with high efficiency score (>70) are efficiently deploying their TVL to generate revenue
+  const protocolEffScoreAlpha = safeN(onchain.protocol_efficiency_score ?? null, null);
+  const tvlForAlpha = safeN(onchain.tvl ?? 0);
+  if (protocolEffScoreAlpha !== null && protocolEffScoreAlpha >= 70 && tvlForAlpha >= 10_000_000) {
+    signals.push({
+      signal: 'high_fee_efficiency',
+      strength: protocolEffScoreAlpha >= 85 ? 'strong' : 'moderate',
+      detail: `Protocol efficiency score ${protocolEffScoreAlpha}/100 — capital is being deployed effectively with strong fee generation and revenue capture.`,
+    });
+  }
+
+  // Round 233 (AutoResearch nightly): P/TVL undervaluation signal
+  // When market cap is below TVL (P/TVL < 1), token is priced below on-chain value
+  const mcapPtvl = safeN(market.market_cap ?? 0);
+  const tvlPtvl = safeN(onchain.tvl ?? 0);
+  if (mcapPtvl > 0 && tvlPtvl > 0) {
+    const ptvl = mcapPtvl / tvlPtvl;
+    if (ptvl < 1.0 && tvlPtvl > 5_000_000) {
+      signals.push({
+        signal: 'low_price_to_tvl',
+        strength: ptvl < 0.5 ? 'strong' : 'moderate',
+        detail: `P/TVL ratio ${ptvl.toFixed(2)}x — market cap ($${(mcapPtvl/1e6).toFixed(1)}M) is below TVL ($${(tvlPtvl/1e6).toFixed(1)}M), suggesting the token may be undervalued relative to on-chain capital.`,
+      });
+    }
+  }
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {

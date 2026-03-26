@@ -85,6 +85,9 @@
         case 'inflation_rate': return formatPercent(value,2);
         case 'realized_vol_90d': return formatPercent(value,1) + ' ann.';
         case 'community_score': return `${Number(value).toFixed(0)}/100`;
+        case 'sentiment_credibility_score': return `${Number(value).toFixed(0)}/100`;
+        case 'issue_health_score': return `${Number(value).toFixed(0)}/100`;
+        case 'momentum_divergence': { const n=Number(value); if(!Number.isFinite(n)) return 'n/a'; return `${n>0?'+':''}${n.toFixed(0)}%/yr`; }
         case 'coin_age_days': { const days=Number(value); if(!Number.isFinite(days)) return 'n/a'; if(days<90) return `${days}d`; if(days<730) return `${(days/30.44).toFixed(0)}mo`; return `${(days/365).toFixed(1)}yr`; }
         default: return formatNumber(value,k);
       }
@@ -324,12 +327,20 @@
 
     function metricRows(raw) {
       const mp = raw?.market?.current_price ?? raw?.market?.price ?? raw?.market?.price_usd;
+      // Round 233 (AutoResearch nightly): compute P/TVL ratio client-side for display
+      const ptvlRaw = (() => {
+        const mcap = raw?.market?.market_cap;
+        const tvl = raw?.onchain?.tvl;
+        if (!mcap || !tvl || tvl <= 0) return null;
+        return parseFloat((mcap / tvl).toFixed(2));
+      })();
       const rows = [
         ['Price','price',mp,null],
         ['Market cap','market_cap',raw?.market?.market_cap,null],
         ['24h volume','total_volume',raw?.market?.total_volume,null],
         ['FDV','fdv',raw?.market?.fully_diluted_valuation ?? raw?.market?.fdv,null],
         ['TVL','tvl',raw?.onchain?.tvl,null],
+        ['P/TVL ratio','ptvl_ratio',ptvlRaw != null ? ptvlRaw + 'x' : null,null],
         ['7d TVL %','tvl_change_7d',raw?.onchain?.tvl_change_7d,'change'],
         ['30d TVL %','tvl_change_30d',raw?.onchain?.tvl_change_30d,'change'],
         ['Fees 7d','fees_7d',raw?.onchain?.fees_7d,null],
@@ -344,6 +355,10 @@
         ['Coin age (days)','coin_age_days',raw?.market?.coin_age_days,null],
         ['Community score','community_score',raw?.market?.community_score,null],
         ['Realized vol 90d','realized_vol_90d',raw?.market?.realized_vol_90d,'pct'],
+        // Round 233 (AutoResearch nightly): new diagnostic metrics
+        ['Sentiment quality','sentiment_credibility_score',raw?.social?.sentiment_credibility_score,null],
+        ['Issue health','issue_health_score',raw?.github?.issue_health_score,null],
+        ['Momentum divergence','momentum_divergence',raw?.market?.momentum_divergence,null],
       ];
       return rows.filter(([,,value])=> value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== 'n/a').map(([label,key,value,type])=>{
         const cls=type==='change'?` class="${changeClass(value)}"`:''
@@ -402,6 +417,10 @@
         'stablecoin_depeg': 'Stablecoin depeg risk',
         'uneven_dimension_scores': 'Uneven score profile',
         'zombie_protocol': 'Zombie protocol',
+        'extremely_low_volume_velocity': 'Extremely low volume velocity',
+        'ghost_community': 'Ghost community (bot followers)',
+        'old_ath_stagnation': 'ATH stagnation (1yr+)',
+        'social_credibility_collapse': 'Social signal noise warning',
         'recent_release': 'Recent release',
         'dev_acceleration': 'Accelerating development velocity',
         'improving_sector_position': 'Improving sector standing',

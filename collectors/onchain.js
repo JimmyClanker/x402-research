@@ -393,6 +393,32 @@ export async function collectOnchain(projectName) {
       tvl_stickiness: tvlStickiness,
       tvl_data_quality: tvlDataQuality,
       protocol_maturity: protocolMaturity,
+      // Round 233 (AutoResearch nightly): protocol_efficiency_score (0-100)
+      // Composite: fee generation rate, TVL stickiness, revenue capture quality, chain diversification
+      protocol_efficiency_score: (() => {
+        if (!currentTvl || currentTvl <= 0) return null;
+        let score = 0;
+        // Fee efficiency component (0-40): log scale on fees per TVL
+        if (revenueEfficiency != null) {
+          // $0/M = 0, $10/M = 8, $100/M = 24, $1000/M = 40
+          const feeScore = Math.min(40, Math.max(0, Math.log10(Math.max(1, revenueEfficiency)) / 3 * 40));
+          score += feeScore;
+        }
+        // TVL stability (0-30)
+        if (tvlStickiness === 'sticky') score += 30;
+        else if (tvlStickiness === 'moderate') score += 15;
+        else if (tvlStickiness === 'fleeing') score += 0;
+        // Revenue capture (0-20): what % of fees become protocol revenue
+        if (revenueToFeesRatio != null) {
+          score += Math.min(20, revenueToFeesRatio * 40); // 50% capture → 20 pts
+        }
+        // Chain diversification (0-10): more chains = more resilient
+        const chainCount = (protocol?.chains || []).length;
+        if (chainCount >= 5) score += 10;
+        else if (chainCount >= 3) score += 6;
+        else if (chainCount >= 2) score += 3;
+        return Math.round(Math.min(100, score));
+      })(),
       // Round 6 (AutoResearch nightly): governance signals — placeholder populated from DeFiLlama if available
       governance_proposals_30d: protocol?.governanceProposals ?? null,
       governance_participation_pct: protocol?.governanceParticipation ?? null,

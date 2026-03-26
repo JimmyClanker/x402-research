@@ -83,6 +83,12 @@ export const CATEGORY_WEIGHTS = {
     market: 0.12, onchain: 0.25, social: 0.18, development: 0.15,
     tokenomics: 0.12, distribution: 0.10, risk: 0.08,
   },
+  // Round 233 (AutoResearch nightly): Payments/stablecoin infrastructure
+  // Adoption metrics + distribution are critical; dev activity and onchain tx volume matter more than TVL
+  payments: {
+    market: 0.12, onchain: 0.20, social: 0.12, development: 0.20,
+    tokenomics: 0.12, distribution: 0.14, risk: 0.10,
+  },
   // Round 232 (AutoResearch nightly): Consumer crypto apps (Base/Farcaster/social protocols)
   // User adoption and social signals drive value; dev activity is critical for app quality
   consumer_crypto: {
@@ -180,6 +186,13 @@ export const CATEGORY_MAP = {
   'data-availability': 'layer_2',
   'rollup': 'layer_2',
   'rollup-as-a-service': 'layer_2',
+  // Round 233: payments category mappings
+  'payments': 'payments',
+  'payment': 'payments',
+  'payment-solutions': 'payments',
+  'cross-border-payments': 'payments',
+  'remittance': 'payments',
+  'stablecoin-payment': 'payments',
 };
 
 // ─── Boot-time validation ────────────────────────────────────────────────────

@@ -99,6 +99,17 @@ export function phaseEnrich(rawData, scores) {
   // Risk matrix (Round 7)
   const riskMatrix = buildRiskMatrix(rawData, scores, redFlags);
 
+  // Round 233 (AutoResearch nightly): compute P/TVL and inject as enrichment signal
+  try {
+    const mcap = rawData?.market?.market_cap;
+    const tvl = rawData?.onchain?.tvl;
+    if (mcap != null && tvl != null && tvl > 0) {
+      const ptvl = mcap / tvl;
+      rawData.ptvl_ratio = parseFloat(ptvl.toFixed(3));
+      rawData.ptvl_label = ptvl < 0.5 ? 'deep_value' : ptvl < 1.0 ? 'undervalued' : ptvl < 2.0 ? 'fair_value' : ptvl < 5.0 ? 'premium' : 'highly_speculative';
+    }
+  } catch (_) { /* non-critical */ }
+
   // Round 155 (AutoResearch): compute sparkline trend quality and inject for LLM context
   try {
     const sparklineTrend = computeSparklineTrend(rawData?.market?.sparkline_7d);

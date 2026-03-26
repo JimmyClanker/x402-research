@@ -2,6 +2,7 @@ import express from 'express';
 import { appendFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { APP_NAME } from '../config.js';
+import { getDomainFailStats } from '../collectors/fetch.js';
 
 const ENTITY_PATTERNS = [
   /\b(BTC|ETH|SOL|SEI|ATOM|TIA|INJ|AVAX|SUI|APT|ARB|OP|MATIC|POL|BNB|XRP|DOGE|LINK|UNI|AAVE|MKR|ENA|JUP|PYTH|WIF|FET|TAO|RENDER|RNDR|NEAR)\b/gi,
@@ -177,6 +178,25 @@ export function createRestRouter({ config, exaService, signalsService }) {
       // ── Diagnostics ──────────────────────────────────────────────
       cache: exaService.getCacheStats(),
       environment: config.nvmEnv,
+      // Round 233 (AutoResearch nightly): domain fail stats for collector health monitoring
+      domain_fail_stats: (() => {
+        try { return getDomainFailStats(); } catch (_) { return {}; }
+      })(),
+      // Round 233 (AutoResearch nightly): surface scan engine version and latest features
+      engine: {
+        scoring_version: 'v3.233',
+        features: [
+          'P/TVL valuation scoring (R233)',
+          'Sentiment credibility score (R233)',
+          'Issue health score (R233)',
+          'Momentum divergence signal (R233)',
+          'Volume velocity anomaly detection (R233)',
+          'Payments category weights (R233)',
+          'P/TVL alpha signal (R233)',
+          'Score tier labels in calibration (R233)',
+          'Social credibility circuit breaker (R233)',
+        ],
+      },
     });
   });
 

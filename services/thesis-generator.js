@@ -53,6 +53,9 @@ const SIGNAL_PHRASES = {
   low_price_to_tvl:              'undervalued relative to TVL',
   strong_treasury:               'strong protocol treasury',
   strong_long_term_trend:        'sustained long-term uptrend',
+  // Round 233 (AutoResearch nightly): P/TVL valuation signal
+  low_price_to_tvl:              'trading below on-chain value (P/TVL < 1x)',
+  payments_network_growth:       'payment network adoption growth',
   accelerating_news_coverage:    'accelerating news coverage',
 };
 

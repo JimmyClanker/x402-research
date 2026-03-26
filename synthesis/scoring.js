@@ -123,6 +123,28 @@ export function calculateConfidence(rawData = {}) {
   };
 }
 
+// ─── Round 233 (AutoResearch nightly): P/TVL ratio scoring supplement ─────────────
+/**
+ * Compute a P/TVL (price-to-TVL) score adjustment for onchain health.
+ * P/TVL < 1.0 suggests the market cap is below locked value (potentially undervalued).
+ * P/TVL > 5.0 suggests high speculation premium relative to TVL.
+ * @param {number|null} mcap
+ * @param {number|null} tvl
+ * @returns {{ adjustment: number, ptvl: number|null, label: string }}
+ */
+export function computePTVLAdjustment(mcap, tvl) {
+  if (!mcap || !tvl || tvl <= 0) return { adjustment: 0, ptvl: null, label: 'n/a' };
+  const ptvl = mcap / tvl;
+  let adjustment = 0;
+  let label;
+  if (ptvl < 0.5) { adjustment = 0.6; label: 'deep_value'; label = 'deep_value'; }
+  else if (ptvl < 1.0) { adjustment = 0.3; label = 'undervalued'; }
+  else if (ptvl < 2.0) { adjustment = 0; label = 'fair_value'; }
+  else if (ptvl < 5.0) { adjustment = -0.2; label = 'premium'; }
+  else { adjustment = -0.5; label = 'highly_speculative'; }
+  return { adjustment, ptvl: parseFloat(ptvl.toFixed(3)), label };
+}
+
 // ─── Round 150 (AutoResearch): Sparkline momentum quality — reward smooth uptrends ──
 /**
  * Compute sparkline trend quality from 7d price array.
@@ -350,7 +372,7 @@ function scoreMarketStrength(market = {}) {
   };
 }
 
-function scoreOnchainHealth(onchain = {}) {
+function scoreOnchainHealth(onchain = {}, rawData = {}) {
   // Round 135 (AutoResearch): No onchain data guard
   // Many tokens have no onchain data (not DeFi protocols, no TVL).
   // Instead of 4.0 base which implies "below average", return neutral 5.0 (N/A, not applicable).
@@ -404,6 +426,15 @@ function scoreOnchainHealth(onchain = {}) {
   else if (chainCount >= 3) multichainBonus = 0.3;
   else if (chainCount >= 2) multichainBonus = 0.15;
   raw += multichainBonus;
+
+  // Round 233 (AutoResearch nightly): P/TVL supplement — undervalued protocols get boost
+  const ptvlResult = computePTVLAdjustment(
+    safeNumber(rawData?.market?.market_cap ?? null),
+    safeNumber(onchain.tvl ?? null)
+  );
+  if (ptvlResult.adjustment !== 0) {
+    raw += ptvlResult.adjustment;
+  }
 
   // Round 232 (AutoResearch nightly): chain TVL concentration penalty
   // A protocol on 3+ chains but with 95%+ on one chain is effectively single-chain
@@ -686,10 +717,12 @@ function scoreDevelopment(github = {}) {
     Math.min(commits90d / 100, 1) * 20,               // commit velocity (0-20)
     stars > 0 ? Math.min(Math.log10(stars) / 4, 1) * 15 : 0, // traction (0-15)
     daysSinceCommit != null ? Math.max(0, 1 - daysSinceCommit / 180) * 15 : 7.5, // freshness (0-15)
-    github.has_ci ? 10 : 0,                            // CI/CD (0-10)
-    repoHealthTier === 'excellent' ? 10 : repoHealthTier === 'good' ? 6 : repoHealthTier === 'moderate' ? 3 : 0, // repo health (0-10)
-    languageCount >= 4 ? 5 : languageCount >= 2 ? 3 : 0, // ecosystem breadth (0-5)
-    github.license ? 5 : 0,                            // license (0-5)
+    github.has_ci ? 8 : 0,                             // CI/CD (0-8)
+    repoHealthTier === 'excellent' ? 8 : repoHealthTier === 'good' ? 5 : repoHealthTier === 'moderate' ? 2 : 0, // repo health (0-8)
+    languageCount >= 4 ? 4 : languageCount >= 2 ? 2 : 0, // ecosystem breadth (0-4)
+    github.license ? 3 : 0,                            // license (0-3)
+    // Round 233 (AutoResearch nightly): issue_health_score supplement (0-7)
+    github.issue_health_score != null ? Math.round(github.issue_health_score / 100 * 7) : 3,
   ];
   const devQualityIndex = Math.round(dqComponents.reduce((a, b) => a + b, 0));
 
@@ -1060,7 +1093,7 @@ function applyRedditSupplement(socialScore, reddit = {}) {
 
 export function calculateScores(data) {
   const market_strength   = scoreMarketStrength(safeCollector(data?.market));
-  const onchain_health    = scoreOnchainHealth(safeCollector(data?.onchain));
+  const onchain_health    = scoreOnchainHealth(safeCollector(data?.onchain), data);
   const social_momentum   = scoreSocialMomentum(safeCollector(data?.social));
   const development       = scoreDevelopment(safeCollector(data?.github));
   const tokenomics_health = scoreTokenomicsRisk(safeCollector(data?.tokenomics));

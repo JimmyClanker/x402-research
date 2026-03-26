@@ -287,6 +287,35 @@ export async function collectGithub(projectName) {
       ? parseFloat(((totalClosedEstimate / (totalClosedEstimate + openIssues)) * 100).toFixed(1))
       : null;
 
+    // Round 233 (AutoResearch nightly): issue_health_score — 0-100 composite issue tracker health
+    // Combines resolution rate, open issue count, and open PRs as a dev responsiveness metric
+    const issueHealthScore = (() => {
+      let score = 0;
+      if (issueResolutionRate != null) {
+        // Resolution rate component (0-50)
+        score += Math.min(50, issueResolutionRate / 2);
+      } else {
+        score += 25; // neutral when unknown
+      }
+      // Open issue volume relative to stars (0-30): fewer open issues relative to stars = better health
+      if (issueStarRatio != null) {
+        const issueRatioScore = Math.max(0, 30 - issueStarRatio * 100);
+        score += Math.min(30, issueRatioScore);
+      } else {
+        score += 15; // neutral
+      }
+      // Open PRs as a pipeline health signal (0-20): some PRs = active development
+      if (openPrsCount != null) {
+        if (openPrsCount > 0 && openPrsCount <= 30) score += 20;      // healthy pipeline
+        else if (openPrsCount > 30 && openPrsCount <= 100) score += 10; // backlog forming
+        else if (openPrsCount > 100) score += 5;                        // PR backlog is a concern
+        else score += 0; // 0 PRs = no active development pipeline
+      } else {
+        score += 10; // neutral
+      }
+      return Math.round(Math.min(100, score));
+    })();
+
     // Round 196 (AutoResearch): commit_frequency — avg commits/week over 90d window
     const commitFrequency = commits90d != null
       ? parseFloat((commits90d / 13).toFixed(2)) // 13 weeks in the 90d window
@@ -328,6 +357,7 @@ export async function collectGithub(projectName) {
       issue_star_ratio: issueStarRatio != null ? Math.round(issueStarRatio * 1000) / 1000 : null,
       issue_health_signal: issueHealthSignal,
       issue_resolution_rate: issueResolutionRate,
+      issue_health_score: issueHealthScore,
       commit_frequency: commitFrequency,
       // Round 215 (AutoResearch): contributor_bus_factor — risk when 1-2 contributors dominate activity
       // High bus factor = decentralized dev; low = single point of failure

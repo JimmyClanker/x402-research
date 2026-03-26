@@ -62,6 +62,19 @@ export function calibrateScores(db, rawScores) {
     };
   }
 
+  // Round 233 (AutoResearch nightly): Add score_tier to each calibrated dimension
+  // Lets consumers quickly see "is this dimension exceptional, normal, or below-average?"
+  for (const dim of Object.keys(calibrated)) {
+    const c = calibrated[dim];
+    if (!c?.calibrated || c.z_score == null) continue;
+    const z = c.z_score;
+    c.score_tier = z >= 2.0 ? 'exceptional'
+      : z >= 1.0 ? 'above_average'
+      : z >= -1.0 ? 'average'
+      : z >= -2.0 ? 'below_average'
+      : 'poor';
+  }
+
   // Round 17 (AutoResearch nightly): Add calibration summary — overall z-score and outlier detection
   const calibratedDims = Object.values(calibrated).filter((c) => c.calibrated && c.z_score != null);
   const avgZScore = calibratedDims.length > 0
