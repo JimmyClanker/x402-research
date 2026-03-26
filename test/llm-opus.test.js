@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOpusPrompt } from '../synthesis/llm.js';
+import { buildOpusPrompt, buildScoreSummary, buildDataSummary } from '../synthesis/llm.js';
 
 const mockRawData = {
   market: {
@@ -120,5 +120,65 @@ describe('buildOpusPrompt', () => {
     const { user } = buildOpusPrompt('TestProject', mockRawData, scoresWithCB);
     assert.ok(user.includes('CIRCUIT_BREAKERS'), 'user message should include circuit breaker info');
     assert.ok(user.includes('Rug risk detected'), 'user message should include breaker reason');
+  });
+});
+
+// Round R180: tests for new helper exports
+describe('buildScoreSummary', () => {
+  it('returns a non-empty string for valid scores', () => {
+    const result = buildScoreSummary(mockScores);
+    assert.equal(typeof result, 'string');
+    assert.ok(result.length > 0, 'should return non-empty string');
+  });
+
+  it('includes OVERALL score', () => {
+    const result = buildScoreSummary(mockScores);
+    assert.ok(result.includes('OVERALL'), 'should include OVERALL label');
+    assert.ok(result.includes('7.2'), 'should include overall score value');
+  });
+
+  it('returns empty string for missing scores', () => {
+    const result = buildScoreSummary({});
+    assert.equal(result, '', 'should return empty string when no overall');
+  });
+
+  it('includes dimension scores when present', () => {
+    const result = buildScoreSummary(mockScores);
+    assert.ok(result.includes('Market'), 'should include Market dimension');
+    assert.ok(result.includes('Onchain'), 'should include Onchain dimension');
+  });
+});
+
+describe('buildDataSummary', () => {
+  it('returns a string for empty rawData', () => {
+    const result = buildDataSummary({});
+    assert.equal(typeof result, 'string');
+    assert.ok(result.includes('VERIFIED DATA'), 'should include header');
+  });
+
+  it('includes P/TVL ratio when both market_cap and tvl are present', () => {
+    const data = {
+      market: { market_cap: 100_000_000, total_volume: 10_000_000 },
+      onchain: { tvl: 50_000_000, fees_7d: 500_000 },
+    };
+    const result = buildDataSummary(data);
+    assert.ok(result.includes('P/TVL'), 'should include P/TVL ratio');
+    assert.ok(result.includes('2.00'), 'P/TVL should be 2.00x for 100M mcap / 50M TVL');
+  });
+
+  it('includes revenue capture percentage', () => {
+    const data = {
+      onchain: { tvl: 10_000_000, fees_7d: 100_000, revenue_7d: 40_000 },
+    };
+    const result = buildDataSummary(data);
+    assert.ok(result.includes('Revenue Capture'), 'should include revenue capture');
+    assert.ok(result.includes('40.0%'), 'revenue capture should be 40%');
+  });
+
+  it('includes data gaps section when collectors fail', () => {
+    const data = { market: { error: 'timeout' } };
+    const result = buildDataSummary(data);
+    assert.ok(result.includes('DATA GAPS'), 'should include data gaps');
+    assert.ok(result.includes('market'), 'should flag market as a gap');
   });
 });

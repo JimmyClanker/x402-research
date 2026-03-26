@@ -383,10 +383,25 @@ export function buildDataSummary(rawData = {}) {
   const holders = rawData.holders || {};
   if (!holders.error && holders.top10_concentration_pct != null) {
     lines.push('HOLDERS:');
-    lines.push(add('Top 10 Concentration', holders.top10_concentration_pct, (v) => `${v.toFixed(1)}%`));
+    lines.push(add('Top 10 Concentration', holders.top10_concentration_pct, (v) => {
+      const concLabel = v > 80 ? 'extreme — whale squeeze risk' : v > 60 ? 'high — dump risk' : v > 40 ? 'moderate' : 'well-distributed';
+      return `${v.toFixed(1)}% (${concLabel})`;
+    }));
     lines.push('');
   } else {
     gaps.push('holders (no data)');
+  }
+
+  // ECOSYSTEM
+  const ecosystem = rawData.ecosystem || {};
+  if (!ecosystem.error && (ecosystem.chain_count != null || ecosystem.primary_chain)) {
+    lines.push('ECOSYSTEM:');
+    if (ecosystem.chain_count != null) {
+      const chainLabel = ecosystem.chain_count >= 10 ? 'highly multichain' : ecosystem.chain_count >= 5 ? 'multichain' : ecosystem.chain_count >= 2 ? 'cross-chain' : 'single chain';
+      lines.push(`- Supported chains: ${ecosystem.chain_count} (${chainLabel})`);
+    }
+    if (ecosystem.primary_chain) lines.push(`- Primary chain: ${ecosystem.primary_chain}`);
+    lines.push('');
   }
 
   // TOKENOMICS
@@ -1036,13 +1051,40 @@ function clampPct(value, fallback = 50) {
 export function validateReport(report, rawData) {
   const warnings = [];
 
-  // 0. Normalize section confidence and enforce provenance fields
+  // 0. Normalize + R176: auto-calibrate section confidence based on data availability
+  // If LLM reports very high confidence but key data sources are missing, cap confidence
+  const hasOnchain = rawData?.onchain && !rawData.onchain.error && rawData.onchain.tvl != null;
+  const hasSocial = rawData?.social && !rawData.social.error && (rawData.social.mentions > 0 || rawData.social.filtered_mentions > 0);
+  const hasGithub = rawData?.github && !rawData.github.error && rawData.github.commits_90d > 0;
+  const hasMarket = rawData?.market && !rawData.market.error && rawData.market.market_cap != null;
+
+  // Cap fundamentals confidence if onchain data is missing
+  const maxFundamentals = hasOnchain ? 90 : hasMarket ? 60 : 35;
+  // Cap market_sentiment if no social data
+  const maxSentiment = hasSocial ? 90 : 45;
+  // Cap outlook if both onchain and social are missing
+  const maxOutlook = (hasOnchain || hasSocial) ? 85 : 40;
+
+  const rawFundamentals = clampPct(report?.section_confidence?.fundamentals);
+  const rawSentiment = clampPct(report?.section_confidence?.market_sentiment);
+  const rawOutlook = clampPct(report?.section_confidence?.outlook);
+
   report.section_confidence = {
-    fundamentals: clampPct(report?.section_confidence?.fundamentals),
-    market_sentiment: clampPct(report?.section_confidence?.market_sentiment),
-    outlook: clampPct(report?.section_confidence?.outlook),
+    fundamentals: Math.min(rawFundamentals, maxFundamentals),
+    market_sentiment: Math.min(rawSentiment, maxSentiment),
+    outlook: Math.min(rawOutlook, maxOutlook),
     overall: clampPct(report?.section_confidence?.overall),
   };
+  // Recalculate overall as weighted average if it seems unrealistically high
+  const weightedOverall = Math.round(
+    report.section_confidence.fundamentals * 0.4 +
+    report.section_confidence.market_sentiment * 0.3 +
+    report.section_confidence.outlook * 0.3
+  );
+  if (report.section_confidence.overall > weightedOverall + 20) {
+    warnings.push(`section_confidence.overall (${report.section_confidence.overall}) capped to data-weighted estimate (${weightedOverall})`);
+    report.section_confidence.overall = weightedOverall;
+  }
 
   if (!Array.isArray(report.facts_verified)) report.facts_verified = [];
   if (!Array.isArray(report.opinions)) report.opinions = [];
@@ -1273,11 +1315,30 @@ export function validateReport(report, rawData) {
     report.bear_case.probability = 'medium';
   }
 
+  // Round R171: analysis_text quality assessment
+  const analysisLen = String(report.analysis_text || '').length;
+  const analysisWords = String(report.analysis_text || '').split(/\s+/).filter(Boolean).length;
+  let analysisQuality = 'none';
+  if (analysisLen === 0) {
+    warnings.push('analysis_text is empty — report is unusable without AI analysis');
+  } else if (analysisWords < 50) {
+    warnings.push(`analysis_text is very short (${analysisWords} words) — likely incomplete`);
+    analysisQuality = 'minimal';
+  } else if (analysisWords < 100) {
+    analysisQuality = 'brief';
+  } else if (analysisWords < 200) {
+    analysisQuality = 'adequate';
+  } else {
+    analysisQuality = 'comprehensive';
+  }
+
   // Attach validation metadata
   report._validation = {
     warnings,
     validated_at: new Date().toISOString(),
     data_sources_available: Object.keys(rawData || {}).filter(k => rawData[k] && !rawData[k]?.error),
+    analysis_quality: analysisQuality,
+    analysis_word_count: analysisWords,
   };
 
   if (warnings.length > 0) {
@@ -1412,21 +1473,23 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '8. VERDICT CONSISTENCY: your analysis_text, risks, catalysts, bull_case, and bear_case must be CONSISTENT with your verdict. If verdict=HOLD, the bull and bear cases should be roughly balanced. If verdict=BUY, the bull case should be clearly stronger. Inconsistent verdict/narrative = low credibility.',
 
     '## SCORING CALIBRATION',
-    `The algorithmic score is ${overallScore}/10. Use this as a starting point but adjust based on qualitative factors:`,
-    '- STRONG BUY (8.5-10): Clear edge — strong fundamentals + positive narrative + upcoming catalyst. High conviction entry.',
-    '- BUY (7-8.4): Solid fundamentals, constructive sentiment, risk/reward favorable. Worth accumulating.',
+    `The algorithmic score is ${overallScore}/10 (data completeness: ${scores?.overall?.completeness ?? 'n/a'}%). Use this as a starting point but adjust based on qualitative factors:`,
+    '- STRONG BUY (8.5-10): Clear edge — strong fundamentals + positive narrative + upcoming catalyst. High conviction entry. Requires: 2+ strong alpha signals OR sector-leading metrics.',
+    '- BUY (7-8.4): Solid fundamentals, constructive sentiment, risk/reward favorable. Worth accumulating. Requires: no critical red flags.',
     '- HOLD (5.5-6.9): Mixed signals. Worth watching but no urgent entry. Wait for better setup.',
     '- AVOID (3.5-5.4): Weak fundamentals or negative developments. Better opportunities elsewhere.',
     '- STRONG AVOID (0-3.4): Clear red flags — failing fundamentals, negative catalysts, or active risk events.',
+    '⚠️ DOWNGRADE: if data completeness < 40%, cap at HOLD. If critical red flags, cap at AVOID. If circuit breakers, follow the cap.',
+    '⚠️ UPGRADE: only upgrade above algorithmic score if you found a specific qualitative catalyst in X_SOCIAL or data that the algorithm missed.',
 
     '## OUTPUT FORMAT',
     'Return ONLY valid JSON. Required fields:',
     '- verdict: "STRONG BUY" | "BUY" | "HOLD" | "AVOID" | "STRONG AVOID"',
-    '- project_summary: 1-2 sentences explaining what the project IS, in plain English for an investor seeing it for the first time. Derive from RAW_DATA and X_SOCIAL. No hype, no source tags.',
+    '- project_summary: 2-3 sentences MAX. Sentence 1: what the project IS (protocol type, blockchain, use case). Sentence 2: key traction metric from RAW_DATA (e.g. "manages $XM TVL", "X GitHub contributors", "ranked #Y by MCap"). Sentence 3 (optional): who uses it and why it matters. Use only RAW_DATA and X_SOCIAL — no hype, no source tags.',
     '- project_category: the project\'s primary category (examples: "DeFi Lending", "Layer 1", "DEX", "NFT Marketplace", "AI Infrastructure", "Meme Token"). Use the most specific category you can support from RAW_DATA.',
     '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. Each paragraph MUST cover different ground — NEVER repeat the same metric in two paragraphs. Para 1: summary thesis with the 2-3 most important metrics and verdict justification. Para 2: on-chain/fundamental evidence — DIFFERENT numbers from Para 1, focus on TVL, fees, protocol health. Para 3: market/sentiment context — price action, social, DEX pressure. Para 4: near-term outlook — what to watch for, risk/reward. FORMAT ALL NUMBERS READABLY: use $414.8M not 414828652, use -2.48% not -2.484401525322113%. NO source tags. NO snake_case field names.',
     '- moat: competitive advantage in 1-2 sentences. MANDATORY: cite a specific, concrete advantage backed by RAW_DATA (e.g., "highest TVL in category at $XM with X% weekly growth", "X contributors and Y commits suggest deep dev community"). FORBIDDEN: generic phrases like "first mover advantage", "network effects" (without data), "strong community" (without mention count), "robust ecosystem" (without chain count). If no genuine moat is evident from data, write "No clear moat identified from available data."',
-    '- risks: array of 3-5 risk strings. Format: "Risk type: specific detail." Only include risks you can substantiate with data. NO source tags.',
+    '- risks: array of 3-5 risk strings. Format: "[Risk Type]: [Specific detail with numbers when available]. [Why this matters for price]". Examples: "Dilution risk: only 42% circulating, 58% supply unlocking over 18 months could suppress price." or "DEX sell pressure: buy/sell ratio 0.78 suggests sustained distribution." FORBIDDEN: vague risks like "regulatory uncertainty" without context, "smart contract risk" without audit/exploit data. Each risk must be actionable.',
     '- catalysts: array of 2-4 upcoming catalysts. ONLY include catalysts supported by data. Prefix unverified ones with "[Unverified]". It is OK to have fewer catalysts if data is limited.',
     '- competitor_comparison: Compare ONLY with metrics you have data for. If no competitor data available, write "Insufficient data for competitor comparison."',
     '- x_sentiment_summary: Summarize the X_SOCIAL data provided below. If X_SOCIAL is empty or has errors, write "No X/Twitter data available."',
@@ -1451,9 +1514,26 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '8. CHECK VERDICT: does your narrative actually justify the verdict? If you say HOLD but your evidence is all positive, recalibrate.',
   ].join('\n\n');
 
+  // Round R179: Build composite indexes block from scoring output
+  const compositeIndexes = (() => {
+    const parts = [];
+    const mkt = scores?.market_strength;
+    const och = scores?.onchain_health;
+    const dev = scores?.development;
+    const soc = scores?.social_momentum;
+    const risk = scores?.risk;
+    if (mkt?.market_efficiency_score != null) parts.push(`Market efficiency index: ${mkt.market_efficiency_score}/100`);
+    if (och?.onchain_maturity_score != null) parts.push(`Onchain maturity index: ${och.onchain_maturity_score}/100`);
+    if (dev?.dev_quality_index != null) parts.push(`Dev quality index: ${dev.dev_quality_index}/100`);
+    if (soc?.social_health_index != null) parts.push(`Social health index: ${soc.social_health_index}/100`);
+    if (risk?.liquidity_risk_score != null) parts.push(`Liquidity risk score: ${risk.liquidity_risk_score}/100 (higher=safer)`);
+    return parts.length ? `COMPOSITE INDEXES:\n${parts.map(p => `- ${p}`).join('\n')}` : null;
+  })();
+
   const userParts = [
     `PROJECT: ${projectName}`,
     buildScoreSummary(scores),
+    compositeIndexes,
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
     `FACT_REGISTRY: ${JSON.stringify(factRegistry, null, 2)}`,
     `RAW_DATA_SUMMARY:\n${buildDataSummary(rawData)}`,
@@ -1540,17 +1620,17 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     '## ROLE',
     'You are a senior crypto alpha analyst. Produce a concise but actionable quick-scan report. No tools available — rely ENTIRELY on attached data.',
 
-    '## CRITICAL: ANTI-HALLUCINATION RULES',
-    '1. You have NO tools — no web search, no X search. You can ONLY use RAW_DATA and SCORES provided below.',
-    '2. NEVER invent facts, numbers, events, partnerships, funding rounds, or KOL opinions.',
-    '3. EVERY claim must reference a specific data point from RAW_DATA.',
-    '4. If data for a field is missing, write "Insufficient data" — do NOT fill in plausible-sounding information.',
-    '5. For catalysts: only mention catalysts inferable from the data (e.g., "active development suggests upcoming releases"). Do NOT invent specific events or dates.',
-    '6. For competitor_comparison: only compare if you have data. Otherwise write "No competitor data available in this scan."',
-    '7. For x_sentiment_summary: only use data from social collector. If no social data, write "No social data available."',
-    '8. A shorter, accurate report is ALWAYS better than a longer, hallucinated one.',
-    '9. Do NOT put [source: ...] tags in analysis_text, moat, risks, or catalysts — those are for human readers. Put source references ONLY in facts_verified.',
-    '10. FORMAT ALL NUMBERS for humans: $414.8M not 414828652, -2.48% not -2.484401525322113%. NEVER expose field names like tvl_change_7d — write "7-day TVL change" instead.',
+    '## CRITICAL: ANTI-HALLUCINATION RULES (VIOLATIONS = USELESS REPORT)',
+    '1. ZERO TOOLS. You have NO web search, NO X search, NO external data. You ONLY use RAW_DATA and SCORES below.',
+    '2. NEVER invent: facts, numbers, events, partnerships, funding rounds, KOL opinions, Twitter handles, token prices, TVL, competitor metrics.',
+    '3. EVERY claim = specific RAW_DATA field. If you cannot point to the field, delete the claim.',
+    '4. MISSING DATA → write "Insufficient data" in that field. DO NOT fill blanks with plausible-sounding info.',
+    '5. x_sentiment_summary: ONLY use RAW_DATA.social collector data. If social.mentions=0 or social.error → OMIT x_sentiment_summary entirely. DO NOT write about X/Twitter community if you have no data — this is the #1 hallucination vector.',
+    '6. catalysts: ONLY infer from data patterns (e.g., "active dev with 120 commits → likely protocol updates"). NEVER invent specific dates, events, integrations, or listings.',
+    '7. competitor_comparison: ONLY write if RAW_DATA.sector_comparison exists. Otherwise OMIT the field entirely.',
+    '8. Shorter accurate report >> longer hallucinated report. When uncertain, omit.',
+    '9. Source tags ONLY in facts_verified. Human-facing fields = no source tags.',
+    '10. FORMAT ALL NUMBERS: $414.8M not 414828652, -2.48% not -2.484401525322113%. No snake_case field names.',
 
     '## SCORING CALIBRATION',
     `Algorithmic score: ${overallScore}/10. Adjust verdict based on data quality and signal strength:`,
@@ -1654,6 +1734,7 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     })(),
 
     `PROJECT: ${projectName}`,
+    buildScoreSummary(scores),
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
     `RAW_DATA_SUMMARY:\n${buildDataSummary(rawData)}`,
   ].filter(Boolean).join('\n\n');
