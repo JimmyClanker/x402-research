@@ -327,6 +327,22 @@ export function detectRedFlags(rawData = {}, scores = {}) {
     });
   }
 
+  // Round 143 (AutoResearch): Price pump without fundamental backing
+  // +300% in 30d with no TVL or revenue growth = likely unsustainable pump
+  const change30d_rf = safeN(market.price_change_pct_30d ?? 0);
+  const tvl_rf = safeN(onchain.tvl ?? 0);
+  const fees7d_rf = safeN(onchain.fees_7d ?? 0);
+  if (change30d_rf > 300) {
+    const hasOnchainBacking = tvl_rf > 1_000_000 || fees7d_rf > 50_000;
+    if (!hasOnchainBacking) {
+      flags.push({
+        flag: 'unsupported_price_pump',
+        severity: change30d_rf > 1000 ? 'critical' : 'warning',
+        detail: `Price up ${change30d_rf.toFixed(0)}% in 30 days with no significant TVL/revenue backing — classic pump pattern, extreme reversal risk.`,
+      });
+    }
+  }
+
   // Round 133 (AutoResearch): Staking APY divergence — advertised vs actual APY mismatch
   // Large divergence signals unsustainable yield farming (Ponzi dynamics)
   const advertisedApy = safeN(onchain.advertised_staking_apy ?? onchain.max_apy ?? 0);

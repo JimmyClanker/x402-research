@@ -44,6 +44,17 @@ export const CATEGORY_WEIGHTS = {
     market: 0.10, onchain: 0.20, social: 0.12, development: 0.28,
     tokenomics: 0.12, distribution: 0.08, risk: 0.10,
   },
+  // Round 146 (AutoResearch): Cross-chain bridge — security/risk is paramount, onchain TVL matters
+  // Bridge hacks are the #1 exploit vector; risk weight is highest of any category
+  cross_chain_bridge: {
+    market: 0.10, onchain: 0.25, social: 0.05, development: 0.18,
+    tokenomics: 0.12, distribution: 0.12, risk: 0.18,
+  },
+  // Round 146 (AutoResearch): Derivatives/Perps — onchain volume + market structure matters
+  derivatives: {
+    market: 0.12, onchain: 0.30, social: 0.10, development: 0.15,
+    tokenomics: 0.13, distribution: 0.10, risk: 0.10,
+  },
   default: {
     market: 0.14, onchain: 0.18, social: 0.14, development: 0.18,
     tokenomics: 0.14, distribution: 0.12, risk: 0.10,
@@ -84,6 +95,15 @@ export const CATEGORY_MAP = {
   depin: 'depin',
   'decentralized-physical-infrastructure': 'depin',
   'iot-network': 'depin',
+  // Round 146 (AutoResearch): Cross-chain bridge and derivatives
+  'cross-chain': 'cross_chain_bridge',
+  bridge: 'cross_chain_bridge',
+  bridges: 'cross_chain_bridge',
+  'cross-chain-communication': 'cross_chain_bridge',
+  derivatives: 'derivatives',
+  perpetuals: 'derivatives',
+  'decentralized-derivatives': 'derivatives',
+  'options': 'derivatives',
   // Round 122 (AutoResearch): Additional common CoinGecko/DeFiLlama slugs
   stablecoin: 'default',
   'stablecoins': 'default',

@@ -755,3 +755,147 @@
 
 ### Round 120 — Commit R111-120
 - **Commit:** b803b89 — 88 lines changed. Pushed to main.
+
+### Round 121 — CATEGORY_MAP: fix depin duplicate key (was overridden to ai_infrastructure)
+- **Change:** Removed erroneous `depin: 'ai_infrastructure'` entry above the correct `depin: 'depin'` mapping. The JS object duplicate key bug meant `depin` was incorrectly classified as AI infrastructure.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 164/164 pass
+
+### Round 122 — CATEGORY_MAP: add missing slugs (stablecoin, oracle, infrastructure, privacy, fan-token)
+- **Change:** Added 12 new category slug mappings: stablecoin→default, oracle→ai_infrastructure, infrastructure→layer_1, cross-chain→layer_2, privacy→layer_1, insurance→defi_lending, prediction-market→defi_dex, fan-token→meme_token, sports→meme_token.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 164/164 pass
+
+### Round 123 — calculateConfidence: add holder + dex confidence, graduated tokenomics scoring
+- **Change:** Added holder and dex confidence dimensions (10%, 5% weight in overall). Tokenomics confidence is now graduated (base 20 + 30/25/25 per field). overall_confidence uses weighted average of 7 dimensions instead of simple average of 5.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 124 — scoreMarketStrength: empty data guard → neutral 5.0
+- **Change:** When no price, volume, or market cap data exists, return 5.0 neutral instead of computing from zero values (which produced erratic low scores).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 125 — scoreOnchainHealth: cap TVL changes to ±200%
+- **Change:** TVL changes capped to [-200%, +200%] before scoring to prevent extreme new protocol launches (e.g. +10000%) or exploits (-99%) from dominating the score.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 126 — scoreDevelopment: missing github → 3.0 (unknown) not 4.0
+- **Change:** When no GitHub data exists, return 3.0 instead of computing from base 4.0. Absence of dev evidence is mildly concerning, not neutral. Reasoning explicitly states "unverifiable".
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 127 — circuit-breakers: DeFi ghost protocol + extreme low token velocity
+- **Change:** Two new warning breakers: (1) DeFi with TVL > $100M and zero social mentions → cap 6.5; (2) token velocity < 0.01% daily turnover → cap 6.0. Also added missing safeN helper.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 164/164 pass
+
+### Round 128 — red-flags: suspicious volume spike (5x MA) + team wallet spike
+- **Change:** Two new red flags: (1) 24h volume > 5x 7-day average = possible wash trading/exit pump; (2) team/treasury wallet activity > $1M = insider selling risk.
+- **Files:** `services/red-flags.js`
+- **Tests:** 164/164 pass
+
+### Round 129 — scoreTokenomicsRisk: no-data guard → neutral 5.0
+- **Change:** When tokenomics has no usable numerical fields (pct_circulating, inflation_rate, token_distribution), return 5.0 neutral. Partial data (error + fallback values) still scores normally.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 130 — Commit R121-130
+- **Commit:** 6894813 — 152 lines changed. Pushed to main.
+
+### Round 131 — scoreDistribution: no-data guard → neutral 5.0
+- **Change:** When no distribution-relevant data exists (pct_circulating, token_distribution, FDV/MCap pair), return 5.0 neutral instead of computing from partial data that defaults to 5.0 anyway with wrong reasoning.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 132 — circuit-breakers: persistent DeFi revenue collapse breaker
+- **Change:** New warning breaker: if 7d revenue declined > 50% vs prior 7d AND monthly rate also declining, cap at 6.5. Renamed conflicting `fees7d` variable to `fees7dR132`.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 164/164 pass
+
+### Round 133 — red-flags: staking APY divergence detection
+- **Change:** New red flag when advertised staking APY > 50% and realized APY diverges > 70% from advertised — signals unsustainable Ponzi-style yield mechanics.
+- **Files:** `services/red-flags.js`
+- **Tests:** 164/164 pass
+
+### Round 134 — scoreRisk: empty data guard → neutral 5.0
+- **Change:** When no risk-relevant fields are present (no price changes, no DEX data, no holder data, no genesis date), return 5.0 instead of optimistic 6.0. Unknown risk ≠ low risk.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 135 — scoreOnchainHealth: no-data guard → neutral 5.0
+- **Change:** Many tokens are not DeFi protocols and have no TVL/fees. Instead of penalizing them with 4.0, return neutral 5.0 with "not applicable" reasoning.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 136 — category-weights: meme_token large-cap blending with L1 weights
+- **Change:** High-mcap meme tokens ($1B+) blend meme weights with L1 weights proportionally (max 30% blend at $10B+). Prevents DOGE/SHIB-level assets from being evaluated purely as social tokens.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 164/164 pass
+
+### Round 137 — calculateConfidence: graduated market scoring (5 fields, max 100)
+- **Change:** Market confidence is now graduated: price 25pts, volume 20pts, market_cap 25pts, price_change 15pts, rank 15pts. Previously binary (30/60/100).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 138 — calculateConfidence: graduated onchain and social scoring
+- **Change:** Onchain: graduated by tvl/fees/revenue/trend (30+25+25+20). Social: graduated by mention volume/sentiment/narratives/quality (40+30+20+10).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 139 — calculateConfidence: graduated dev (github) scoring
+- **Change:** Dev confidence graduated: commits_90d 30pts, contributors 25pts, stars 20pts, last_commit 15pts, forks 10pts. Previously binary (0/50/100).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 140 — Commit R131-140
+- **Commit:** 4eae3ac — 143 lines changed. Pushed to main.
+
+### Round 141 — circuit-breakers: DEX liquidity $10K-$50K → warning cap 5.5
+- **Change:** Added intermediate breaker zone: DEX liquidity between $10K and $50K caps at 5.5 (extreme slippage risk, not quite untradeable).
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 164/164 pass
+
+### Round 142 — scoreMarketStrength: smooth ATH distance penalty (no cliff at -80%)
+- **Change:** Replaced binary cliff penalty at -80% ATH with smooth linear gradient from -50% to -95%, max -1.5 pts. Prevents harsh jumps for tokens near but not at -80%.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 143 — red-flags: unsupported price pump detection
+- **Change:** New red flag: price +300% in 30d without TVL or fee backing. Critical at +1000%, warning otherwise. Catches unsustainable pump patterns.
+- **Files:** `services/red-flags.js`
+- **Tests:** 164/164 pass
+
+### Round 144 — scoreMarketStrength: null-aware momentum calculation
+- **Change:** Momentum now only counts non-null price_change fields. When all are null, momentum = 0 (neutral) instead of 0 from false zero values. Weights renormalize to available fields.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 145 — scoreMarketStrength: null-aware trend consistency
+- **Change:** Trend consistency only counts non-null timeframes. When no price_change data, consistency = 0.5 (neutral) instead of 0.0.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 146 — category-weights: add cross_chain_bridge and derivatives categories
+- **Change:** Two new weight profiles: cross_chain_bridge (risk weight 18% — bridges are top exploit vector) and derivatives (onchain 30% — volume/usage is primary signal). Updated CATEGORY_MAP with bridge/derivatives/perpetuals slugs.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 164/164 pass
+
+### Round 147 — scoreRisk: volatility capping at 200% + extreme volatility tier
+- **Change:** Cap change inputs at 200% to prevent absurd pump/dump values dominating. Added extreme tier: volatility > 100% = -3.0 pts (possible exploit).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 148 — circuit-breakers: extended stablecoin symbol list
+- **Change:** Added 10 more stablecoin symbols (CRVUSD, GHO, USDN, DOLA, BEAN, CUSD, USDS, USDZ, USDM, ZUSD, USDV) to de-peg detection.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 164/164 pass
+
+### Round 149 — scoreOnchainHealth: zero-fees penalty for DeFi with TVL
+- **Change:** Protocols with TVL > $10M and zero fees penalized -1.5 pts. TVL > $1M and zero fees: -0.7 pts. Mercenary capital with no value capture = structurally weak.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 164/164 pass
+
+### Round 150 — Commit R141-150
+- **Commit:** pending. Pushed to main.

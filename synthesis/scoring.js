@@ -154,11 +154,33 @@ function scoreMarketStrength(market = {}) {
   const change7d = safeNumber(market.price_change_pct_7d);
   const change30d = safeNumber(market.price_change_pct_30d);
   // Weighted composite momentum (24h most relevant for current signal)
-  const momentum = (change1h * 0.1) + (change24h * 0.4) + (change7d * 0.3) + (change30d * 0.2);
+  // Round 144 (AutoResearch): only count timeframes with actual data (non-null)
+  // When all price_change fields are null/0, momentum contribution should be neutral (0)
+  const momentumFields = [
+    { v: market.price_change_pct_1h, w: 0.1 },
+    { v: market.price_change_pct_24h, w: 0.4 },
+    { v: market.price_change_pct_7d, w: 0.3 },
+    { v: market.price_change_pct_30d, w: 0.2 },
+  ];
+  const activeMomentumFields = momentumFields.filter(({ v }) => v != null);
+  let momentum;
+  if (activeMomentumFields.length === 0) {
+    momentum = 0; // no data → neutral, don't penalize
+  } else {
+    const totalW = activeMomentumFields.reduce((a, { w }) => a + w, 0);
+    momentum = activeMomentumFields.reduce((a, { v, w }) => a + safeNumber(v) * (w / totalW), 0);
+  }
 
   // Trend consistency bonus: all timeframes positive = strong trend confirmation
-  const positiveTrends = [change1h, change24h, change7d, change30d].filter((c) => c > 0).length;
-  const trendConsistency = positiveTrends / 4; // 0 to 1
+  // Round 145 (AutoResearch): only count non-null fields for trend consistency
+  const trendFields = [
+    market.price_change_pct_1h != null ? change1h : null,
+    market.price_change_pct_24h != null ? change24h : null,
+    market.price_change_pct_7d != null ? change7d : null,
+    market.price_change_pct_30d != null ? change30d : null,
+  ].filter((v) => v != null);
+  const positiveTrends = trendFields.filter((c) => c > 0).length;
+  const trendConsistency = trendFields.length > 0 ? positiveTrends / trendFields.length : 0.5; // neutral when no data
 
   let raw = 4;
   raw += Math.min(ratio * 20, 3);
@@ -172,8 +194,13 @@ function scoreMarketStrength(market = {}) {
   if (athDistancePct != null) {
     if (athDistancePct > -15) raw += 0.5;  // Near ATH = price strength
     else if (athDistancePct > -40) raw += 0.1; // Still in reasonable range
-    if (athDistancePct < -80) raw -= 1.2;  // Deep in the hole
-    else if (athDistancePct < -50) raw -= Math.min((Math.abs(athDistancePct) - 50) / 25, 0.8);
+    // Round 142 (AutoResearch): Smoother ATH distance penalty — avoid cliff effect at -80%
+    // Old: binary cliff at -80. New: linear gradient from -50% to -95%, max penalty capped at -1.5
+    if (athDistancePct < -50) {
+      // Linear: -50% = 0 penalty, -95% = full penalty (1.5 pts)
+      const penaltyRaw = (Math.abs(athDistancePct) - 50) / 45; // 0 at -50%, 1 at -95%
+      raw -= Math.min(penaltyRaw * 1.5, 1.5);
+    }
   }
 
   // Round 6: price_momentum_tier bonus — reward consistent multi-TF trends
@@ -312,6 +339,16 @@ function scoreOnchainHealth(onchain = {}) {
     : safeNumber(onchain.revenue_30d) / 4;
 
   let raw = 4;
+  // Round 149 (AutoResearch): Zero fees penalty for established DeFi protocols
+  // A protocol with significant TVL but zero fees = no value capture → token has no fundamental backing
+  const tvlForFees = safeNumber(onchain.tvl ?? 0);
+  const feesCheck = onchain.fees_7d != null ? safeNumber(onchain.fees_7d) : (safeNumber(onchain.fees_30d) / 4);
+  if (tvlForFees > 10_000_000 && feesCheck === 0) {
+    raw -= 1.5; // Significant TVL but zero fee generation = speculative/mercenary capital
+  } else if (tvlForFees > 1_000_000 && feesCheck === 0) {
+    raw -= 0.7; // Smaller TVL, still concerning
+  }
+
   // Scale trend contribution: ±200% maps to ±2 points (25 divisor kept but capped input)
   raw += Math.max(Math.min((trend7d + trend30d) / 25, 3), -2);
   raw += fees > 0 ? Math.min(Math.log10(fees + 1), 2) : 0;
@@ -721,8 +758,13 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
   // 1. Volatility risk: large price swings = higher risk
   const change24h = Math.abs(safeNumber(market.price_change_pct_24h));
   const change7d  = Math.abs(safeNumber(market.price_change_pct_7d));
-  const volatility = (change24h * 0.6) + (change7d * 0.4);
-  if (volatility > 30) raw -= 2.5;
+  // Round 147 (AutoResearch): cap inputs at 200% to prevent astronomical volatility
+  // from dominating the entire risk score (e.g. +10000% pump doesn't need extra scoring)
+  const cappedChange24h = Math.min(change24h, 200);
+  const cappedChange7d = Math.min(change7d, 200);
+  const volatility = (cappedChange24h * 0.6) + (cappedChange7d * 0.4);
+  if (volatility > 100) raw -= 3.0; // extreme: likely exploit or severe pump/dump
+  else if (volatility > 30) raw -= 2.5;
   else if (volatility > 15) raw -= 1.5;
   else if (volatility > 7)  raw -= 0.7;
   else if (volatility < 3)  raw += 0.5; // Very stable = lower risk

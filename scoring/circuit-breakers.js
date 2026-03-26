@@ -61,6 +61,16 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
     });
   }
 
+  // Round 141 (AutoResearch): DEX liquidity in "extremely thin" zone ($10K-$50K) = warning cap
+  // Not quite untradeable but severe slippage risk for any meaningful position
+  if (dexLiq >= 10_000 && dexLiq < 50_000) {
+    breakers.push({
+      cap: 5.5,
+      reason: `DEX liquidity $${(dexLiq / 1000).toFixed(1)}K — extremely thin, severe slippage risk`,
+      severity: 'warning',
+    });
+  }
+
   // ── WARNING BREAKERS: Cap a 6.5 (max HOLD) ───────────────────────────────
 
   // Whale concentration > 40%
@@ -132,7 +142,13 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
   // If a token is supposed to be pegged to $1 but is significantly off-peg, cap score
   const symbol = (market.symbol || '').toUpperCase();
   const currentPrice = market.current_price ?? market.price ?? 0;
-  const STABLECOIN_SYMBOLS = new Set(['USDT', 'USDC', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'USDD', 'FDUSD', 'PYUSD', 'USDE', 'USDX', 'SUSD', 'EURS', 'TUSD', 'GUSD', 'USDP']);
+  // Round 148 (AutoResearch): Extended stablecoin list including algo-stables and newer issuers
+  const STABLECOIN_SYMBOLS = new Set([
+    'USDT', 'USDC', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'USDD', 'FDUSD', 'PYUSD',
+    'USDE', 'USDX', 'SUSD', 'EURS', 'TUSD', 'GUSD', 'USDP',
+    'CRVUSD', 'GHO', 'USDN', 'USDD', 'USDJ', 'DOLA', 'BEAN', 'CUSD',
+    'USDS', 'USDZ', 'USDM', 'ZUSD', 'USDV',
+  ]);
   if (STABLECOIN_SYMBOLS.has(symbol) && currentPrice > 0) {
     const depegPct = Math.abs((currentPrice - 1.0) / 1.0) * 100;
     if (depegPct > 10) {
