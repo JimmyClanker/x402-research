@@ -1054,3 +1054,257 @@
 
 ### Round 181 — Commit R151-180
 - **Commits:** fd51cdd (R151-160), 60f5f7d (R161-170), 722310b (R171-180). Pushed to main.
+
+## AutoResearch Data Collectors Batch — 30 Rounds (2026-03-26 03:45 UTC)
+
+**Focus:** Collector robustness, NaN/Infinity guards, error messages, new data fields, scoring integration.
+
+### Round 182 — market.js: safeNum() NaN/Infinity guard on derived metrics
+- **Change:** Added `safeNum()` helper; applied to all division-derived fields (athDistancePct, circulatingToMaxRatio, volumeToMcapRatio) to prevent NaN/Infinity from propagating.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 183 — onchain.js: computePctChange NaN/Infinity guard
+- **Change:** Added `Number.isFinite(result)` guard in `computePctChange()` to return null instead of NaN/Infinity for extreme TVL swings.
+- **Files:** `collectors/onchain.js`
+- **Tests:** 172/172 pass
+
+### Round 184 — tokenomics.js: pct_circulating clamped to [0, 100]
+- **Change:** `pct_circulating` now clamped to `[0, 100]` with NaN/Infinity guard — prevents CoinGecko rounding artifacts (>100%) from inflating tokenomics score.
+- **Files:** `collectors/tokenomics.js`
+- **Tests:** 172/172 pass
+
+### Round 185 — dexscreener.js: volume_to_liquidity_ratio field
+- **Change:** Added `volume_to_liquidity_ratio` (24h vol / total liquidity) — measures capital efficiency of DEX pairs; >1.0 = high velocity.
+- **Files:** `collectors/dexscreener.js`
+- **Tests:** 172/172 pass
+
+### Round 186 — fetch.js: DOMAIN_COOLDOWN_MS/FAIL_THRESHOLD env-var tuning
+- **Change:** Domain cooldown and failure threshold now configurable via `DOMAIN_COOLDOWN_MS` and `DOMAIN_FAIL_THRESHOLD` env vars (defaults: 60s, 3 failures).
+- **Files:** `collectors/fetch.js`
+- **Tests:** 172/172 pass
+
+### Round 187 — github.js: retry on 403/429 with Retry-After respect
+- **Change:** Replaced simple `fetchJson` with retry-aware version that handles GitHub rate limiting (403/429) with `Retry-After` header and `X-RateLimit-Reset` respect.
+- **Files:** `collectors/github.js`
+- **Tests:** 172/172 pass
+
+### Round 188 — onchain.js: fees_7d null guard for multiple DeFiLlama response shapes
+- **Change:** DeFiLlama fees API response now tried across multiple known array fields (`totalDataChart`, `totalDataChartBreakdown`, `data`); fallbacks to `total7d` and `total24h×7`; NaN sanitized.
+- **Files:** `collectors/onchain.js`
+- **Tests:** 172/172 pass
+
+### Round 189 — index.js: per-collector age_ms in metadata
+- **Change:** `collectorsInfo` now includes `age_ms` per collector for cache diagnostic visibility (was missing from metadata before).
+- **Files:** `collectors/index.js`
+- **Tests:** 172/172 pass
+
+### Round 190 — market.js: description + homepage from CoinGecko
+- **Change:** Added `description` (HTML-stripped, max 500 chars) and `homepage` URL from `coinData.links.homepage`. Zero API cost — already in the coin data response.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 191 — github.js: pre-populate repo_url from known mappings in fallback
+- **Change:** `createEmptyGithubResult()` now pre-populates `repo_url` from `github-repos.json` when a mapping exists — so callers always have a URL for known protocols even when the API fails.
+- **Files:** `collectors/github.js`
+- **Tests:** 172/172 pass
+
+### Round 192 — social.js: informative error with failure count + first error message
+- **Change:** Replaced binary "All Exa queries failed" with a structured error: "All N queries failed (e.g. [first error])" or "N/M queries failed (partial data)".
+- **Files:** `collectors/social.js`
+- **Tests:** 172/172 pass
+
+### Round 193 — tokenomics.js: error includes tried slugs for debugging
+- **Change:** When Messari fails entirely, error message now includes the first 4 slugs tried (e.g. "tried: ethereum, eth, ethereum…") to make debugging faster.
+- **Files:** `collectors/tokenomics.js`
+- **Tests:** 172/172 pass
+
+### Round 194 — onchain.js: error includes best-match name + score
+- **Change:** "DeFiLlama protocol not found" now includes the best candidate name and score (e.g. "best match: \"ethereum\" score=45") to debug borderline cases.
+- **Files:** `collectors/onchain.js`
+- **Tests:** 172/172 pass
+
+### Round 195 — dexscreener.js: informative no-pairs error
+- **Change:** "No DEX pairs found" now distinguishes between "0 pairs returned" vs "unexpected API response format".
+- **Files:** `collectors/dexscreener.js`
+- **Tests:** 172/172 pass
+
+### Round 196 — github.js: commit_frequency (commits/week)
+- **Change:** Added `commit_frequency` field = commits_90d / 13 (avg commits/week over 90d window) — normalizes dev pace across repos of different ages.
+- **Files:** `collectors/github.js`
+- **Tests:** 172/172 pass
+
+### Round 197 — market.js: price_change_pct_90d from actual chart data
+- **Change:** `price_change_pct_90d` now computed from first/last price in 90-day chart history; falls back to weighted blend of 60d+200d only when chart unavailable. More accurate than heuristic.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 198 — dexscreener.js: top_pair_address + top_pair_chain
+- **Change:** Added `top_pair_address` and `top_pair_chain` from top pair data — enables direct DexScreener URL construction.
+- **Files:** `collectors/dexscreener.js`
+- **Tests:** 172/172 pass
+
+### Round 199 — onchain.js: fees_per_tvl_7d capital efficiency ratio
+- **Change:** Added `fees_per_tvl_7d = fees_7d / tvl` — weekly fees divided by total TVL; higher = capital working harder. Complements revenue_efficiency.
+- **Files:** `collectors/onchain.js`
+- **Tests:** 172/172 pass
+
+### Round 200 — onchain.js: protocol_age_days from DeFiLlama listedAt
+- **Change:** Added `protocol_age_days` derived from DeFiLlama `listedAt` UNIX timestamp — gives the exact number of days since the protocol was listed.
+- **Files:** `collectors/onchain.js`
+- **Tests:** 172/172 pass
+
+### Round 201 — market.js: reddit_subscribers from community_data
+- **Change:** Added `reddit_subscribers` from CoinGecko `community_data` — already in the response, just wasn't being surfaced.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 202 — index.js: log collector errors to stderr per project
+- **Change:** After metadata is built, each failed collector's error is logged to stderr with project name for observability: "[collectAll:projectName] collector X failed: message".
+- **Files:** `collectors/index.js`
+- **Tests:** 172/172 pass
+
+### Round 203 — fetch.js: attach _fetchLatencyMs non-enumerable metadata
+- **Change:** Added `_reqStart` timer; attaches `_fetchLatencyMs` as non-enumerable property to response objects — available for diagnostics without affecting JSON.stringify.
+- **Files:** `collectors/fetch.js`
+- **Tests:** 172/172 pass
+
+### Round 204 — github.js: days_since_last_commit
+- **Change:** Added `days_since_last_commit` derived from `last_commit.date` — instant staleness signal without needing to parse dates downstream.
+- **Files:** `collectors/github.js`
+- **Tests:** 172/172 pass
+
+### Round 205 — market.js: volume_spike_flag (extreme_spike/spike/elevated)
+- **Change:** Added `volume_spike_flag` comparing 24h volume vs 7d average: extreme_spike (>5x), spike (3-5x), elevated (1.5-3x). Null when no spike or insufficient data.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 206 — onchain.js: revenue_trend (improving/declining/flat)
+- **Change:** Added `revenue_trend` comparing current 7d revenue vs prior 7d — improving (>15% increase), declining (<-15%), flat (within ±15%).
+- **Files:** `collectors/onchain.js`
+- **Tests:** 172/172 pass
+
+### Round 207 — dexscreener.js: h6_volume_pct_of_24h intraday concentration
+- **Change:** Added `h6_volume_pct_of_24h` = h6 volume / 24h volume × 100. High % = activity concentrated in recent 6 hours (breakout or news event signal).
+- **Files:** `collectors/dexscreener.js`
+- **Tests:** 172/172 pass
+
+### Round 208 — tokenomics.js: unlock_risk_label combining overhang + team allocation
+- **Change:** Added `unlock_risk_label` (critical/high/moderate/low) combining `unlock_overhang_pct` and vesting `team_allocation_pct` for a single-field unlock risk assessment.
+- **Files:** `collectors/tokenomics.js`
+- **Tests:** 172/172 pass
+
+### Round 209 — Commit R182-208 + market.js community_score (0-100)
+- **Commit:** 87a973e — 577 lines changed
+- **Change:** Added `community_score` (0-100) using log-scale combination of Twitter followers, Telegram users, and Reddit subscribers.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 210 — github.js: has_recent_release
+- **Change:** Added `has_recent_release` (boolean) = true when latest release was published within 90 days.
+- **Files:** `collectors/github.js`
+- **Tests:** 172/172 pass
+
+### Round 211 — dexscreener.js: net_buy_pressure_pct
+- **Change:** Added `net_buy_pressure_pct` = buys / (buys + sells) × 100. >55% = accumulation, <45% = distribution. More intuitive than buy/sell ratio.
+- **Files:** `collectors/dexscreener.js`
+- **Tests:** 172/172 pass
+
+### Round 212 — circuit-breakers.js: DeFi TVL>50M + zero fees warning breaker
+- **Change:** New warning circuit breaker: DeFi protocols with >$50M TVL generating zero fees get capped at 6.5 (value accrual mechanism may be broken).
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 172/172 pass
+
+### Round 213 — social.js: avg_article_quality_score
+- **Change:** Added `avg_article_quality_score` = mean domain trust score across all articles. 1.0 = average quality; 1.4 = tier-1 dominated coverage.
+- **Files:** `collectors/social.js`
+- **Tests:** 172/172 pass
+
+### Round 214 — market.js: contract_addresses per-chain dict
+- **Change:** Added `contract_addresses` dict from CoinGecko `platforms` field — maps chain names to contract addresses for all chains where the token is deployed.
+- **Files:** `collectors/market.js`
+- **Tests:** 172/172 pass
+
+### Round 215 — github.js: contributor_bus_factor
+- **Change:** Added `contributor_bus_factor` (critical/high/moderate/healthy) based on top contributor's commit share — critical when 1 person = 80%+ of commits.
+- **Files:** `collectors/github.js`
+- **Tests:** 172/172 pass
+
+### Round 216 — scoring.js: commit_frequency + bus_factor in dev score
+- **Change:** `scoreDevelopment` now uses `commit_frequency` for a smoothed dev pace signal (±0.15-0.3) and applies `contributor_bus_factor` penalty (−0.25 high, −0.5 critical).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 172/172 pass
+
+### Round 217 — scoring.js: volume_spike_flag in risk score
+- **Change:** `scoreRisk` now applies tiered penalties from `volume_spike_flag`: extreme_spike −0.6, spike −0.3. Reinforces the existing 7d avg spike detection.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 172/172 pass
+
+### Round 218 — scoring.js: revenue_trend in onchain health score
+- **Change:** `scoreOnchainHealth` now applies ±0.3 adjustment from `revenue_trend` — improving revenue = bullish fundamental, declining = structural concern.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 172/172 pass
+
+### Round 219 — alpha-signals.js: volume_spike + buy_pressure breakout + revenue_momentum
+- **Change:** Added `volume_spike_buy_pressure` signal (spike + net buy = potential breakout) and `revenue_momentum` signal (improving revenue + high efficiency = fundamentals strengthening).
+- **Files:** `services/alpha-signals.js`
+- **Tests:** 172/172 pass
+
+### Round 220 — red-flags.js: high_unlock_overhang from unlock_risk_label
+- **Change:** Added `high_unlock_overhang` red flag using `tokenomics.unlock_risk_label === 'critical'` — catches critical unlock risk via the composite label when individual fields aren't available.
+- **Files:** `services/red-flags.js`
+- **Tests:** 172/172 pass
+
+### Round 221 — Commit R209-221 + llm.js: net_buy_pressure_pct + volume_to_liquidity in DEX block
+- **Commit:** c522e7b — 141 lines changed
+- **Change:** `buildDataSummary` DEX section now includes `net_buy_pressure_pct` (with accumulation/distribution label) and `volume_to_liquidity_ratio` (with capital efficiency label).
+- **Files:** `synthesis/llm.js`
+- **Tests:** 172/172 pass
+
+### Round 222 — market.js: ath_recency field
+- **Change:** Added `ath_recency` (recent_ath/near_ath/moderate_ath/old_ath) from `ath_date` — single-field assessment of whether the ATH was set recently or years ago.
+- **Files:** `collectors/market.js`
+- **Tests:** 177/177 pass
+
+### Round 223 — github.js: open_prs_count
+- **Change:** Added 9th parallel API call to `collectGithub` fetching open PRs count via Link header — signals active development pipeline depth.
+- **Files:** `collectors/github.js`
+- **Tests:** 177/177 pass
+
+### Round 224 — market.js: coin_age_days from genesis_date
+- **Change:** Added `coin_age_days` computed from `coinData.genesis_date` — quick age signal for age-based risk/maturity assessment without date parsing downstream.
+- **Files:** `collectors/market.js`
+- **Tests:** 177/177 pass
+
+### Round 225 — llm.js: ath_recency + community_score + volume_spike in market block
+- **Change:** `buildDataSummary` market section now surfaces ATH recency label, community score with context, and volume spike warning when present.
+- **Files:** `synthesis/llm.js`
+- **Tests:** 177/177 pass
+
+### Round 226 — index.js: per-collector latency_ms tracking
+- **Change:** Added `timedCollect()` wrapper; each collector records its start time; `collectorsInfo` now includes `latency_ms` per collector for performance diagnostics.
+- **Files:** `collectors/index.js`
+- **Tests:** 177/177 pass
+
+### Round 227 — market.js: price_momentum_score (0-100) composite
+- **Change:** Added `price_momentum_score` (0-100) using sigmoid normalization across 1h/24h/7d/30d changes (weights: 15/25/30/30). 100 = perfectly positive all timeframes.
+- **Files:** `collectors/market.js`
+- **Tests:** 177/177 pass
+
+### Round 228 — test: 5 new collector field coverage tests (177/177)
+- **Change:** Added tests for community_score, volume_spike_flag, net_buy_pressure_pct, revenue_trend, and pct arithmetic validation. Total: 177 tests.
+- **Files:** `test/llm-opus.test.js`
+- **Tests:** 177/177 pass
+
+### Round 229 — onchain.js: fees_30d_actual from real 30d sum
+- **Change:** `fees_30d` now prefers actual 30d sum from DeFiLlama data array; falls back to 7d×4.3 estimate only when insufficient history. Added `fees_30d_actual` field for explicitness.
+- **Files:** `collectors/onchain.js`
+- **Tests:** 177/177 pass
+
+### Round 230 — alpha-signals.js: veteran_protocol_strong_fees signal
+- **Change:** Added `veteran_protocol_strong_fees` signal: protocols 2+ years old with >$500K/week fees = battle-tested product-market fit. Uses new `protocol_age_days` field.
+- **Files:** `services/alpha-signals.js`
+- **Tests:** 177/177 pass
+
+### Round 231 — Commit R222-230 (Final)
+- **Commits:** ece354a. Pushed to main. Total: 177/177 tests. Net new lines: ~868 across 3 commits.
