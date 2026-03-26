@@ -227,13 +227,36 @@ export function buildDataSummary(rawData = {}) {
     const socialLines = [];
     const mentions = social.filtered_mentions ?? social.mentions;
     if (mentions != null) {
-      socialLines.push(`- Mentions: ${mentions}${social.filtered_mentions != null && social.mentions != null ? ` (filtered: ${social.filtered_mentions})` : ''}`);
+      const mentionLabel = mentions >= 200 ? 'viral' : mentions >= 50 ? 'active' : mentions >= 10 ? 'moderate' : 'low';
+      socialLines.push(`- Mentions: ${mentions} (${mentionLabel})${social.filtered_mentions != null && social.mentions != null && social.filtered_mentions !== social.mentions ? ` — ${social.filtered_mentions} quality-filtered` : ''}`);
     }
     socialLines.push(add('Sentiment Score', social.sentiment_score, (v) => {
-      const label = v > 0.2 ? 'bullish-leaning' : v < -0.2 ? 'bearish-leaning' : 'neutral';
-      return `${v.toFixed(1)} (${label})`;
+      const label = v > 0.4 ? 'strongly bullish' : v > 0.2 ? 'bullish-leaning' : v < -0.4 ? 'strongly bearish' : v < -0.2 ? 'bearish-leaning' : 'neutral';
+      return `${v.toFixed(2)} (${label})`;
     }));
-    socialLines.push(add('Bot Ratio', social.bot_ratio, (v) => `${(v * 100).toFixed(0)}%`));
+    socialLines.push(add('Bot Ratio', social.bot_ratio, (v) => {
+      const quality = v > 0.4 ? 'high bot noise' : v > 0.2 ? 'moderate bot noise' : 'clean signal';
+      return `${(v * 100).toFixed(0)}% (${quality})`;
+    }));
+    // Round R161: Surface sentiment breakdown if available
+    if (social.sentiment_counts) {
+      const { bullish = 0, bearish = 0, neutral = 0 } = social.sentiment_counts;
+      const total = bullish + bearish + neutral;
+      if (total > 0) {
+        const bullPct = ((bullish / total) * 100).toFixed(0);
+        const bearPct = ((bearish / total) * 100).toFixed(0);
+        socialLines.push(`- Sentiment breakdown: ${bullPct}% bullish / ${bearPct}% bearish (${total} articles analyzed)`);
+      }
+    }
+    if (Array.isArray(social.key_narratives) && social.key_narratives.length) {
+      socialLines.push(`- Key narratives: ${social.key_narratives.slice(0, 4).join(', ')}`);
+    }
+    if (social.unlock_mentions != null && social.unlock_mentions > 0) {
+      socialLines.push(`- Unlock/vesting mentions: ${social.unlock_mentions} (supply pressure signal)`);
+    }
+    if (social.exploit_mentions != null && social.exploit_mentions > 0) {
+      socialLines.push(`- Exploit/hack mentions: ${social.exploit_mentions} ⚠️`);
+    }
 
     const validSocial = socialLines.filter(Boolean);
     if (validSocial.length) {
@@ -291,9 +314,23 @@ export function buildDataSummary(rawData = {}) {
   if (!dex.error && rawData.dex) {
     const dexLines = [];
     dexLines.push(add('DEX Price', dex.dex_price_usd, formatNumber));
-    dexLines.push(add('Liquidity', dex.dex_liquidity_usd, formatNumber));
-    dexLines.push(add('Pair Count', dex.dex_pair_count));
-    dexLines.push(add('Buy/Sell Ratio', dex.buy_sell_ratio, (v) => v.toFixed(1)));
+    dexLines.push(add('Liquidity', dex.dex_liquidity_usd, (v) => {
+      const liqLabel = v >= 5e6 ? 'deep — institutional grade' : v >= 1e6 ? 'good — retail friendly' : v >= 100e3 ? 'moderate — light slippage' : v >= 50e3 ? 'thin — notable slippage' : 'very thin — high slippage risk';
+      return `${formatNumber(v)} (${liqLabel})`;
+    }));
+    dexLines.push(add('Pair Count', dex.dex_pair_count, (v) => {
+      return `${v} pair${v !== 1 ? 's' : ''}${dex.dex_chains?.length ? ` across ${dex.dex_chains.slice(0, 3).join(', ')}` : ''}`;
+    }));
+    dexLines.push(add('Buy/Sell Ratio', dex.buy_sell_ratio, (v) => {
+      const pressureLabel = v >= 1.15 ? 'buy pressure 🟢' : v <= 0.87 ? 'sell pressure 🔴' : 'balanced';
+      return `${v.toFixed(2)} (${pressureLabel})`;
+    }));
+    if (dex.buys_24h != null && dex.sells_24h != null) {
+      dexLines.push(`- Txns 24h: ${dex.buys_24h} buys / ${dex.sells_24h} sells`);
+    }
+    if (dex.top_dex_name) {
+      dexLines.push(`- Primary venue: ${dex.top_dex_name}`);
+    }
 
     const validDex = dexLines.filter(Boolean);
     if (validDex.length) {
@@ -356,7 +393,23 @@ export function buildDataSummary(rawData = {}) {
   const tokenomics = rawData.tokenomics || {};
   if (!tokenomics.error && tokenomics.pct_circulating != null) {
     lines.push('TOKENOMICS:');
-    lines.push(add('% Circulating', tokenomics.pct_circulating, (v) => `${v.toFixed(1)}%`));
+    lines.push(add('% Circulating', tokenomics.pct_circulating, (v) => {
+      const unlockRisk = v < 30 ? 'HIGH unlock risk — most supply not yet circulating' : v < 60 ? 'moderate unlock risk' : v < 90 ? 'low unlock risk' : 'fully circulating';
+      return `${v.toFixed(1)}% (${unlockRisk})`;
+    }));
+    if (tokenomics.inflation_rate != null) {
+      const inflLabel = tokenomics.inflation_rate > 20 ? 'hyperinflationary' : tokenomics.inflation_rate > 8 ? 'high inflation' : tokenomics.inflation_rate > 3 ? 'moderate inflation' : tokenomics.inflation_rate > 0 ? 'low inflation' : 'deflationary';
+      lines.push(`- Inflation rate: ${tokenomics.inflation_rate.toFixed(1)}%/yr (${inflLabel})`);
+    }
+    if (tokenomics.vesting_info) {
+      const vi = tokenomics.vesting_info;
+      if (vi.team_allocation_pct != null) {
+        lines.push(`- Team allocation: ${vi.team_allocation_pct.toFixed(1)}%${vi.team_allocation_pct > 30 ? ' ⚠️ HIGH' : ''}`);
+      }
+      if (vi.vesting_schedule_summary) {
+        lines.push(`- Vesting: ${vi.vesting_schedule_summary}`);
+      }
+    }
     lines.push('');
   }
 
@@ -407,12 +460,63 @@ export function buildDataSummary(rawData = {}) {
     }
   }
 
+  // Round R168: Alpha signals and red flags summary for LLM orientation
+  const alphaSignals = rawData.alpha_signals;
+  const redFlags = rawData.red_flags;
+  if (Array.isArray(alphaSignals) && alphaSignals.length > 0) {
+    const strongSignals = alphaSignals.filter(s => s.strength === 'strong');
+    const modSignals = alphaSignals.filter(s => s.strength === 'moderate');
+    lines.push(`\nALGORITHMIC ALPHA SIGNALS (${alphaSignals.length} total, ${strongSignals.length} strong):`);
+    for (const s of alphaSignals.slice(0, 5)) {
+      lines.push(`- [${s.strength?.toUpperCase() || 'MODERATE'}] ${s.signal}: ${s.detail}`);
+    }
+    lines.push('');
+  }
+  if (Array.isArray(redFlags) && redFlags.length > 0) {
+    const critFlags = redFlags.filter(f => f.severity === 'critical');
+    lines.push(`\nALGORITHMIC RED FLAGS (${redFlags.length} total, ${critFlags.length} critical):`);
+    for (const f of redFlags.slice(0, 5)) {
+      lines.push(`- [${f.severity?.toUpperCase() || 'WARNING'}] ${f.flag}: ${f.detail}`);
+    }
+    lines.push('');
+  }
+
   // Data gaps summary
   if (gaps.length) {
     lines.push(`DATA GAPS: ${gaps.join(', ')}`);
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Round R170: Builds a compact score dimension summary block for LLM orientation.
+ * Shows dimension scores with labels so the LLM understands where strength/weakness lies.
+ */
+export function buildScoreSummary(scores = {}) {
+  if (!scores?.overall) return '';
+  const dims = [
+    { key: 'market_strength', label: 'Market' },
+    { key: 'onchain_health', label: 'Onchain' },
+    { key: 'social_momentum', label: 'Social' },
+    { key: 'development', label: 'Dev' },
+    { key: 'tokenomics_health', label: 'Tokenomics' },
+    { key: 'risk', label: 'Risk' },
+    { key: 'distribution', label: 'Distribution' },
+  ];
+  const parts = ['=== SCORE DIMENSIONS ==='];
+  for (const { key, label } of dims) {
+    const dim = scores[key];
+    if (!dim) continue;
+    const s = dim.score ?? 0;
+    const bar = '█'.repeat(Math.round(s)) + '░'.repeat(10 - Math.round(s));
+    const qLabel = s >= 7.5 ? 'strong' : s >= 5.5 ? 'moderate' : s >= 3.5 ? 'weak' : 'very weak';
+    const completeness = dim.completeness != null ? ` (${dim.completeness}% data)` : '';
+    parts.push(`${label.padEnd(12)} ${bar} ${s.toFixed(1)}/10 [${qLabel}]${completeness}`);
+  }
+  const overall = scores.overall;
+  parts.push(`${'OVERALL'.padEnd(12)} ${overall.score?.toFixed(1)}/10${overall.completeness != null ? ` (data: ${overall.completeness}%)` : ''}`);
+  return parts.join('\n');
 }
 
 function inferProjectCategory(rawData = {}) {
@@ -1149,6 +1253,26 @@ export function validateReport(report, rawData) {
     warnings.push(`DEX liquidity ($${dexLiquidity.toLocaleString('en-US')}) exceeds 10x market cap ($${mcap.toLocaleString('en-US')}) — likely bad data`);
   }
 
+  // 7b. Round R165: Validate bull/bear case thesis quality — must contain at least one number
+  const hasNumber = (text) => /\$[\d.,]+[MBKmb]?|\b\d+[\d.,]*%|\b\d{2,}[\d.,]*\b/.test(String(text || ''));
+  if (report.bull_case?.thesis && !hasNumber(report.bull_case.thesis)) {
+    warnings.push('bull_case.thesis contains no specific numbers — may be too generic');
+    // Append a note to the thesis to prompt more specific language
+    report.bull_case.thesis = report.bull_case.thesis + ' [Note: cite specific metrics from the data to strengthen this thesis]';
+  }
+  if (report.bear_case?.thesis && !hasNumber(report.bear_case.thesis)) {
+    warnings.push('bear_case.thesis contains no specific numbers — may be too generic');
+    report.bear_case.thesis = report.bear_case.thesis + ' [Note: cite specific metrics from the data to strengthen this thesis]';
+  }
+  // Validate probability field is valid
+  const validProbs = ['high', 'medium', 'low'];
+  if (report.bull_case?.probability && !validProbs.includes(String(report.bull_case.probability).toLowerCase())) {
+    report.bull_case.probability = 'medium';
+  }
+  if (report.bear_case?.probability && !validProbs.includes(String(report.bear_case.probability).toLowerCase())) {
+    report.bear_case.probability = 'medium';
+  }
+
   // Attach validation metadata
   report._validation = {
     warnings,
@@ -1285,6 +1409,7 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '5. Clearly separate FACTS (from data) from OPINIONS (your analysis). Your opinions are welcome but must be labeled as such.',
     '6. INTERNAL tracking: for each claim, mentally verify which data source backs it. But do NOT put [source: ...] tags in analysis_text, moat, risks, catalysts, or x_sentiment_summary. Those tags make the output unreadable for humans.',
     '7. Put source references ONLY in the facts_verified array (e.g., "TVL: $414.8M [source: RAW_DATA.onchain.tvl]").',
+    '8. VERDICT CONSISTENCY: your analysis_text, risks, catalysts, bull_case, and bear_case must be CONSISTENT with your verdict. If verdict=HOLD, the bull and bear cases should be roughly balanced. If verdict=BUY, the bull case should be clearly stronger. Inconsistent verdict/narrative = low credibility.',
 
     '## SCORING CALIBRATION',
     `The algorithmic score is ${overallScore}/10. Use this as a starting point but adjust based on qualitative factors:`,
@@ -1300,12 +1425,12 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '- project_summary: 1-2 sentences explaining what the project IS, in plain English for an investor seeing it for the first time. Derive from RAW_DATA and X_SOCIAL. No hype, no source tags.',
     '- project_category: the project\'s primary category (examples: "DeFi Lending", "Layer 1", "DEX", "NFT Marketplace", "AI Infrastructure", "Meme Token"). Use the most specific category you can support from RAW_DATA.',
     '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. Each paragraph MUST cover different ground — NEVER repeat the same metric in two paragraphs. Para 1: summary thesis with the 2-3 most important metrics and verdict justification. Para 2: on-chain/fundamental evidence — DIFFERENT numbers from Para 1, focus on TVL, fees, protocol health. Para 3: market/sentiment context — price action, social, DEX pressure. Para 4: near-term outlook — what to watch for, risk/reward. FORMAT ALL NUMBERS READABLY: use $414.8M not 414828652, use -2.48% not -2.484401525322113%. NO source tags. NO snake_case field names.',
-    '- moat: competitive advantage in 1-2 sentences. Must be based on RAW_DATA or X_SOCIAL data.',
+    '- moat: competitive advantage in 1-2 sentences. MANDATORY: cite a specific, concrete advantage backed by RAW_DATA (e.g., "highest TVL in category at $XM with X% weekly growth", "X contributors and Y commits suggest deep dev community"). FORBIDDEN: generic phrases like "first mover advantage", "network effects" (without data), "strong community" (without mention count), "robust ecosystem" (without chain count). If no genuine moat is evident from data, write "No clear moat identified from available data."',
     '- risks: array of 3-5 risk strings. Format: "Risk type: specific detail." Only include risks you can substantiate with data. NO source tags.',
     '- catalysts: array of 2-4 upcoming catalysts. ONLY include catalysts supported by data. Prefix unverified ones with "[Unverified]". It is OK to have fewer catalysts if data is limited.',
     '- competitor_comparison: Compare ONLY with metrics you have data for. If no competitor data available, write "Insufficient data for competitor comparison."',
     '- x_sentiment_summary: Summarize the X_SOCIAL data provided below. If X_SOCIAL is empty or has errors, write "No X/Twitter data available."',
-    '- key_findings: array of 3-5 key findings. Each MUST reference a specific data point from RAW_DATA or X_SOCIAL.',
+    '- key_findings: array of 3-5 key findings. Format: "[Metric]: [value] — [what this means for investors]". Example: "TVL: $45.2M growing +8% weekly — suggests growing protocol adoption." Each MUST cite a specific data point from RAW_DATA or X_SOCIAL.',
     '- liquidity_assessment: Based on RAW_DATA volume, market cap, and DEX liquidity. Do not invent slippage estimates.',
     '- bull_case: object with { thesis: string (2-3 sentences — the STRONGEST argument FOR investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA, e.g. "TVL of $X growing +Y% weekly", "P/TVL of Z is below sector median". Explain WHY those numbers are bullish.), catalysts: array of 2-3 specific events/metrics that could drive price up (data-backed, e.g. "fee efficiency $X/M TVL signals product-market fit"), target_conditions: string (concrete threshold conditions — e.g. "TVL crosses $XM, weekly fees above $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification based on data) }. NEVER use generic phrases like "strong fundamentals" without specific numbers.',
     '- bear_case: object with { thesis: string (2-3 sentences — the STRONGEST argument AGAINST investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA that support the bear thesis, e.g. "TVL down Y% in 30d", "volume velocity only Z% suggests no conviction". Be brutally honest.), risks: array of 2-3 specific measurable risks (e.g. "DEX sell pressure ratio 0.82 — possible distribution"), failure_conditions: string (concrete conditions that confirm the bear case — e.g. "TVL falls below $XM, price breaks below $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification) }. Do NOT soften bear cases.',
@@ -1321,14 +1446,18 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '3. If you wrote something you cannot trace to data, DELETE IT.',
     '4. "I don\'t have data for this" is ALWAYS better than making something up.',
     '5. Shorter and accurate > longer and fabricated.',
+    '6. CHECK FOR REPETITION: scan your analysis_text — if the same metric (e.g., TVL, price, fees) appears in more than one paragraph, remove it from the less important paragraph. Each paragraph = unique information.',
+    '7. CHECK BULL/BEAR CASES: do they contain at least 2 specific numbers from RAW_DATA? If not, add them or delete the generic claim.',
+    '8. CHECK VERDICT: does your narrative actually justify the verdict? If you say HOLD but your evidence is all positive, recalibrate.',
   ].join('\n\n');
 
   const userParts = [
     `PROJECT: ${projectName}`,
+    buildScoreSummary(scores),
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
     `FACT_REGISTRY: ${JSON.stringify(factRegistry, null, 2)}`,
     `RAW_DATA_SUMMARY:\n${buildDataSummary(rawData)}`,
-  ];
+  ].filter(Boolean);
 
   if (rawData?.sector_comparison) {
     userParts.push(`SECTOR_CONTEXT:\n${JSON.stringify(rawData.sector_comparison, null, 2)}`);
@@ -1442,7 +1571,7 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     '- catalysts: array of 1-3 catalysts ONLY inferable from data (e.g., active dev = likely updates). Do NOT invent events. Prefix uncertain ones with "[Inferred]".',
     '- competitor_comparison: OPTIONAL. Only if sector_comparison data exists in RAW_DATA. If no sector data → OMIT this field entirely (do not write it).',
     '- x_sentiment_summary: OPTIONAL. Summarize ONLY social collector data from RAW_DATA. If social.mentions is 0 or social has error → OMIT this field entirely.',
-    '- key_findings: array of 3-5 data-backed insights. Each MUST cite a specific number from RAW_DATA.',
+    '- key_findings: array of 3-5 data-backed insights. Format: "[Metric]: [value] — [what this means for investors]". Example: "TVL: $45.2M growing +8% weekly — capital inflows suggest growing protocol adoption." Each MUST cite a specific number.',
     '- liquidity_assessment: based on volume and market_cap from RAW_DATA only.',
     '- data_gaps: array of strings listing which data sources were missing or had errors.',
     '- facts_verified: array of 3-6 strings with explicit [source: RAW_DATA.<field>] tags.',
