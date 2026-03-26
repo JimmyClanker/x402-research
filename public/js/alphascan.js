@@ -262,7 +262,7 @@
         const tickX=(center+0.5).toFixed(1);
         const tickY=(center-lr-3).toFixed(1);
         const scoreLabel=l*2; // 2,4,6,8,10
-        return `<polygon points="${lp}" fill="none" stroke="rgba(232,232,232,${0.06+l*0.025})" stroke-dasharray="${l===5?'none':'3 5'}" stroke-width="${l===5?'1.5':'1'}" />${l%2===0?`<text x="${tickX}" y="${tickY}" fill="rgba(232,232,232,0.4)" font-size="9.5" text-anchor="middle">${scoreLabel}</text>`:''}`;
+        return `<polygon points="${lp}" fill="none" stroke="rgba(232,232,232,${0.08+l*0.03})" stroke-dasharray="${l===5?'none':'3 5'}" stroke-width="${l===5?'1.5':'1'}" />${l%2===0?`<text x="${tickX}" y="${tickY}" fill="rgba(232,232,232,0.5)" font-size="10" text-anchor="middle">${scoreLabel}</text>`:''}`;
       }).join('');
       // Axes + labels
       const axes = labels.map((label,i)=>{
@@ -272,7 +272,7 @@
         const anchor=Math.cos(a)>0.25?'start':Math.cos(a)<-0.25?'end':'middle';
         const score = values[i];
         const scoreColor = SCORE_META[i][2];
-        return `<line x1="${center}" y1="${center}" x2="${x}" y2="${y}" stroke="rgba(232,232,232,0.12)" stroke-width="1" /><text x="${tx}" y="${ty}" fill="#c8c8c8" font-size="11.5" font-weight="600" text-anchor="${anchor}" dominant-baseline="middle" font-family="Inter,sans-serif">${label}</text>`;
+        return `<line x1="${center}" y1="${center}" x2="${x}" y2="${y}" stroke="rgba(232,232,232,0.15)" stroke-width="1.2" /><text x="${tx}" y="${ty}" fill="#d8d8d8" font-size="12.5" font-weight="650" text-anchor="${anchor}" dominant-baseline="middle" font-family="Inter,sans-serif">${label}</text>`;
       }).join('');
       // Aria description
       const ariaLabel = `Score radar: ${SCORE_META.map(([k,l],i)=>`${l} ${values[i].toFixed(1)}`).join(', ')}`;

@@ -1733,3 +1733,48 @@
 - **Change:** Link `.footer-links a` ora hanno `:focus-visible` state con outline verde e underline attivo, per navigazione keyboard.
 - **Files:** public/index.html
 - **Tests:** 177/177 pass
+
+### Round 272 — Colore aragosta più saturo sui pill badge attivi
+- **Change:** `.product-tag` attivo ora usa `#E8721A` (più saturo e luminoso) invece di `var(--green)` (#D4580A). Border anche più visibile (opacity 0.3 vs 0.22).
+- **Files:** public/index.html
+- **Tests:** 177/177 pass
+
+### Round 273 — Miglioramento padding e spacing su .btn-card
+- **Change:** `.btn-card` ora ha padding `11px 20px` (più equilibrato), gap `7px`, e transition uniformata a 0.25s. Aggiunto `transform: translateY(-1px)` su `:hover`.
+- **Files:** public/index.html
+- **Tests:** 177/177 pass
+
+### Round 274 — Font-size hero-sub più grande su desktop
+- **Change:** `.hero-sub` ora usa `clamp(1rem, 2vw, 1.25rem)` (max era 1.2rem) e `max-width: 620px` (era 600px) per migliorare la leggibilità su schermi grandi.
+- **Files:** public/index.html
+- **Tests:** 177/177 pass
+
+### Round 275 — Border-radius più coerente su tutti i box
+- **Change:** Aggiunta variabile CSS `--radius-xs: 8px` e rimpiazzati tutti i `border-radius: 8px` hardcoded con `var(--radius-xs)` per uniformità.
+- **Files:** public/index.html
+- **Tests:** 177/177 pass
+
+### Round 276 — Smooth opacity transition su code syntax highlight
+- **Change:** Elementi syntax highlight nel code block (`.comment`, `.key`, `.val`, `.str`, `.green`) ora hanno `transition: color 0.2s ease` per smooth theme switching futuro.
+- **Files:** public/index.html
+- **Tests:** 177/177 pass
+
+### Round 277 — AlphaScan: migliorare leggibilità radar chart labels
+- **Change:** Label assi radar chart ora usano `font-size="12.5"` (era 11.5), `font-weight="650"` (era 600), e `fill="#d8d8d8"` (era #c8c8c8) per maggiore leggibilità.
+- **Files:** public/js/alphascan.js
+- **Tests:** 177/177 pass
+
+### Round 278 — Colore grid radar più contrastato
+- **Change:** Grid radar chart usa opacity aumentata (base 0.08 invece di 0.06, incremento 0.03 invece di 0.025). Score ticks ora `fill="rgba(232,232,232,0.5)"` (era 0.4) e `font-size="10"` (era 9.5).
+- **Files:** public/js/alphascan.js
+- **Tests:** 177/177 pass
+
+### Round 279 — Stroke width assi radar più spesso per visibilità
+- **Change:** Assi radar chart ora `stroke-width="1.2"` (era 1) e `stroke="rgba(232,232,232,0.15)"` (era 0.12) per maggiore presenza visiva.
+- **Files:** public/js/alphascan.js
+- **Tests:** 177/177 pass
+
+### Round 280 — Spacing più ampio tra section blocks
+- **Change:** `section` padding portato a `90px 0` (era 80px) per dare più respiro verticale su desktop.
+- **Files:** public/index.html
+- **Tests:** 177/177 pass
