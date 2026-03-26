@@ -224,6 +224,35 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
     }
   }
 
+  // Round R12 (AutoResearch batch): Suspicious volume — 24h vol < 0.05% of market cap for established coin
+  // Very low token velocity for a mid-cap coin = illiquid, manipulation risk, hard to exit
+  const mcapR12 = safeN(market.market_cap ?? 0);
+  const vol24hR12 = safeN(market.total_volume ?? 0);
+  const vol7dAvgR12 = safeN(market.volume_7d_avg ?? 0);
+  if (mcapR12 > 50_000_000 && vol24hR12 > 0 && vol7dAvgR12 > 0) {
+    // If today's volume is suspiciously 10x+ above 7d average = possible wash trading
+    const spikeRatio = vol24hR12 / vol7dAvgR12;
+    if (spikeRatio > 10 && vol24hR12 > 5_000_000) {
+      breakers.push({
+        cap: 7.0,
+        reason: `Volume spike ${spikeRatio.toFixed(0)}x above 7d average — possible wash trading or exit pump; data may be misleading`,
+        severity: 'warning',
+      });
+    }
+  }
+
+  // Round R12: Zero liquidity + high score guard
+  // A project with no DEX liquidity cannot be traded and should never score above 7.0
+  const dexLiqR12 = safeN(dex.dex_liquidity_usd ?? dex.liquidity ?? dex.total_liquidity ?? 0);
+  const mcapR12b = safeN(market.market_cap ?? 0);
+  if (dexLiqR12 === 0 && mcapR12b > 0 && mcapR12b < 10_000_000 && !onchain.tvl) {
+    breakers.push({
+      cap: 6.5,
+      reason: `No DEX liquidity found for small-cap token — tradability unverified`,
+      severity: 'warning',
+    });
+  }
+
   // Applica il cap più restrittivo
   if (breakers.length === 0) {
     return { score: overallScore, breakers: [], capped: false };

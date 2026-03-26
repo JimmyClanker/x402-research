@@ -295,6 +295,9 @@ export async function phaseSynthesize({
  * Drop-in replacement for runAnalysis().
  */
 export async function runPipeline({ projectName, exaService, mode, config, collectAllFn, collectorCache, db }) {
+  // Round R30: Track total scan duration for performance telemetry
+  const _pipelineStart = Date.now();
+
   let rawData;
   try {
     rawData = await phaseCollect({ projectName, exaService, collectorCache, collectAllFn });
@@ -322,12 +325,19 @@ export async function runPipeline({ projectName, exaService, mode, config, colle
     throw withPipelineStage('async-enrichment', error, { projectName, mode });
   }
 
+  let result;
   try {
-    return await phaseSynthesize({
+    result = await phaseSynthesize({
       projectName, rawData, scores, enrichment, mode, config, db,
     });
   } catch (error) {
     throw withPipelineStage('synthesis', error, { projectName, mode });
   }
+
+  // Round R30: Attach scan_duration_ms to the result for telemetry
+  if (result && typeof result === 'object') {
+    result.scan_duration_ms = Date.now() - _pipelineStart;
+  }
+  return result;
 }
 

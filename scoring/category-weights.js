@@ -55,6 +55,22 @@ export const CATEGORY_WEIGHTS = {
     market: 0.12, onchain: 0.30, social: 0.10, development: 0.15,
     tokenomics: 0.13, distribution: 0.10, risk: 0.10,
   },
+  // Round R27 (AutoResearch batch): Privacy protocols — regulatory risk is critical, dev activity key
+  // Mixers/privacy coins face regulatory headwinds; risk weight elevated, social weight reduced
+  privacy_protocol: {
+    market: 0.10, onchain: 0.15, social: 0.06, development: 0.25,
+    tokenomics: 0.14, distribution: 0.12, risk: 0.18,
+  },
+  // Round R27: Oracle networks — data integrity + security is paramount, dev activity core signal
+  oracle: {
+    market: 0.10, onchain: 0.20, social: 0.08, development: 0.28,
+    tokenomics: 0.12, distribution: 0.10, risk: 0.12,
+  },
+  // Round R27: Liquid staking — onchain TVL & security are the core value drivers
+  liquid_staking: {
+    market: 0.10, onchain: 0.30, social: 0.08, development: 0.18,
+    tokenomics: 0.14, distribution: 0.12, risk: 0.08,
+  },
   default: {
     market: 0.14, onchain: 0.18, social: 0.14, development: 0.18,
     tokenomics: 0.14, distribution: 0.12, risk: 0.10,
@@ -107,12 +123,18 @@ export const CATEGORY_MAP = {
   // Round 122 (AutoResearch): Additional common CoinGecko/DeFiLlama slugs
   stablecoin: 'default',
   'stablecoins': 'default',
-  oracle: 'ai_infrastructure',    // oracles are infra; dev/onchain signals matter most
-  'oracle-network': 'ai_infrastructure',
+  oracle: 'oracle',               // Round R27: oracles get dedicated weights
+  'oracle-network': 'oracle',
+  'data-oracle': 'oracle',
   infrastructure: 'layer_1',      // generic infra → treat like L1 (dev-heavy)
   'cross-chain': 'layer_2',       // bridges/cross-chain are layer_2-like
-  privacy: 'layer_1',             // privacy protocols: dev + onchain matter
-  'privacy-coins': 'layer_1',
+  privacy: 'privacy_protocol',    // Round R27: privacy protocols get dedicated weights
+  'privacy-coins': 'privacy_protocol',
+  'privacy-protocol': 'privacy_protocol',
+  mixer: 'privacy_protocol',
+  'liquid-staking': 'liquid_staking', // Round R27: liquid staking dedicated weights
+  'liquid-staking-tokens': 'liquid_staking',
+  restaking: 'liquid_staking',
   'insurance': 'defi_lending',    // DeFi insurance is onchain-risk heavy
   'prediction-market': 'defi_dex', // prediction markets: onchain volume/usage
   'fan-token': 'meme_token',      // fan tokens behave like memes: social-driven

@@ -54,12 +54,24 @@ function jitterMs(baseMs) {
   return Math.round(baseMs * (0.75 + Math.random() * 0.5));
 }
 
+// Round R25: In-flight deduplication — prevent multiple identical concurrent fetches
+// E.g. if 3 collectors fetch the same CoinGecko trending URL simultaneously,
+// only one HTTP request fires; all callers await the same promise.
+const _inFlight = new Map();
+function dedupeRequest(url, makeRequest) {
+  const existing = _inFlight.get(url);
+  if (existing) return existing;
+  const promise = makeRequest().finally(() => _inFlight.delete(url));
+  _inFlight.set(url, promise);
+  return promise;
+}
+
 /**
  * fetchJson with automatic retry + exponential backoff.
  * Handles 429 (rate-limit) with Retry-After header respect.
  * Returns partial data (null) instead of throwing on final failure.
  */
-export async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, retries = DEFAULT_RETRIES } = {}) {
+async function _fetchJsonImpl(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, retries = DEFAULT_RETRIES } = {}) {
   // Round 46: Skip domains that are consistently failing
   if (isDomainCoolingDown(url)) {
     throw new Error(`Domain ${extractDomain(url)} in cooldown (too many recent failures)`);
@@ -121,4 +133,14 @@ export async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, 
 
   recordDomainFailure(url);
   throw lastError;
+}
+
+// Round R25: Public fetchJson wraps _fetchJsonImpl with in-flight deduplication
+export function fetchJson(url, opts = {}) {
+  // Only deduplicate GET-like requests (no special headers, default retries)
+  // Skip deduplication for requests with custom headers (may have auth tokens)
+  if (!opts.headers) {
+    return dedupeRequest(url, () => _fetchJsonImpl(url, opts));
+  }
+  return _fetchJsonImpl(url, opts);
 }

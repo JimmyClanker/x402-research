@@ -115,6 +115,12 @@ function buildFactRegistry(rawData = {}) {
   push('ecosystem.chain_count', rawData?.ecosystem?.chain_count);
   push('ecosystem.primary_chain', rawData?.ecosystem?.primary_chain);
   push('contract.verified', rawData?.contract?.verified);
+  // Round R6: Global macro context — helps Grok assess altcoin vs BTC rotation risk
+  push('macro.btc_dominance', rawData?.market?.btc_dominance);
+  push('macro.total_market_cap_usd', rawData?.market?.total_market_cap_usd);
+  push('macro.market_cap_change_pct_24h_global', rawData?.market?.market_cap_change_pct_24h_global);
+  // Round R6: Volume anomaly context
+  push('market.volume_7d_avg', rawData?.market?.volume_7d_avg);
 
   return facts;
 }
@@ -185,6 +191,20 @@ export function buildDataSummary(rawData = {}) {
     onchainLines.push(add('Fees 7d', onchain.fees_7d, formatNumber));
     onchainLines.push(add('Revenue 7d', onchain.revenue_7d, formatNumber));
     onchainLines.push(add('Treasury', onchain.treasury_balance, formatNumber));
+    // Round R156: Revenue-to-fees ratio (protocol efficiency — what % of fees become protocol revenue)
+    if (onchain.fees_7d != null && onchain.fees_7d > 0 && onchain.revenue_7d != null) {
+      const ratio = onchain.revenue_7d / onchain.fees_7d;
+      const ratioLabel = ratio >= 0.5 ? 'high capture' : ratio >= 0.2 ? 'moderate capture' : 'low capture (most fees go to LPs/users)';
+      onchainLines.push(`- Revenue Capture: ${(ratio * 100).toFixed(1)}% of fees → protocol (${ratioLabel})`);
+    }
+    // Round R156: TVL stickiness with context
+    if (onchain.tvl_stickiness) {
+      const stickinessContext = onchain.tvl_stickiness === 'sticky' ? 'capital retention — users committed' : onchain.tvl_stickiness === 'fleeing' ? 'capital exit — users withdrawing' : 'stable but cautious';
+      onchainLines.push(`- TVL Stickiness: ${onchain.tvl_stickiness} (${stickinessContext})`);
+    }
+    if (onchain.protocol_maturity) {
+      onchainLines.push(`- Protocol Maturity: ${onchain.protocol_maturity}`);
+    }
 
     const validOnchain = onchainLines.filter(Boolean);
     if (validOnchain.length) {
@@ -231,18 +251,33 @@ export function buildDataSummary(rawData = {}) {
   const github = rawData.github || {};
   if (!github.error && rawData.github) {
     const githubLines = [];
-    githubLines.push(add('Commits 90d', github.commits_90d));
-    githubLines.push(add('Contributors', github.contributors));
-    githubLines.push(add('Stars', github.stars));
+    githubLines.push(add('Commits 90d', github.commits_90d, (v) => {
+      const velocityLabel = v >= 100 ? 'very active' : v >= 30 ? 'active' : v >= 10 ? 'moderate' : 'low activity';
+      return `${v} (${velocityLabel})`;
+    }));
+    githubLines.push(add('Contributors', github.contributors, (v) => {
+      const breadthLabel = v >= 50 ? 'large team' : v >= 10 ? 'small team' : 'solo/micro';
+      return `${v} (${breadthLabel})`;
+    }));
+    githubLines.push(add('Stars', github.stars, (v) => {
+      const tractionLabel = v >= 10000 ? 'high traction' : v >= 1000 ? 'notable' : 'niche';
+      return `${v} (${tractionLabel})`;
+    }));
     githubLines.push(add('Commit Trend', github.commit_trend));
+    githubLines.push(add('Language', github.language));
+    githubLines.push(add('License', github.license));
+    githubLines.push(add('Watchers', github.watchers));
+    // Round R153: dev_quality_index if available
+    if (github.dev_quality_index != null) {
+      const dqi = github.dev_quality_index;
+      const dqLabel = dqi >= 70 ? 'strong' : dqi >= 40 ? 'average' : 'weak';
+      githubLines.push(`- Dev Quality Index: ${dqi}/100 (${dqLabel})`);
+    }
 
     const validGithub = githubLines.filter(Boolean);
     if (validGithub.length) {
       lines.push('GITHUB [GitHub API]:');
       lines.push(...validGithub);
-      const missing = [];
-      if (github.languages == null) missing.push('languages');
-      if (missing.length) lines.push(`(missing: ${missing.join(', ')})`);
       lines.push('');
     } else {
       gaps.push('github (no data)');
@@ -335,6 +370,43 @@ export function buildDataSummary(rawData = {}) {
     gaps.push('contract (no data)');
   }
 
+  // Round R151: Derived efficiency metrics — P/TVL ratio and Volume/MCap velocity
+  const mkt = rawData.market || {};
+  const och = rawData.onchain || {};
+  const mcapVal = mkt.market_cap;
+  const tvlVal = och.tvl;
+  const volVal = mkt.total_volume;
+  if (mcapVal != null && tvlVal != null && tvlVal > 0) {
+    const ptvl = mcapVal / tvlVal;
+    lines.push('\nDERIVED METRICS:');
+    lines.push(`- P/TVL ratio: ${ptvl.toFixed(2)}x (MCap ${formatNumber(mcapVal)} / TVL ${formatNumber(tvlVal)}) — below 1.0 = undervalued vs locked capital`);
+    if (volVal != null && mcapVal > 0) {
+      const velPct = (volVal / mcapVal) * 100;
+      lines.push(`- Volume velocity: ${velPct.toFixed(2)}% of MCap traded in 24h — above 10% = high conviction activity`);
+    }
+    if (och.fees_7d != null && tvlVal > 0) {
+      const feeEfficiency = (och.fees_7d / (tvlVal / 1e6)).toFixed(2);
+      lines.push(`- Fee efficiency: $${feeEfficiency}/M TVL per week — measures capital productivity`);
+    }
+    lines.push('');
+  }
+
+  // Round R14: Global macro context section
+  const btcDom = rawData?.market?.btc_dominance;
+  const totalMcap = rawData?.market?.total_market_cap_usd;
+  const globalChange = rawData?.market?.market_cap_change_pct_24h_global;
+  if (btcDom != null || totalMcap != null) {
+    const macroLines = [
+      add('BTC dominance', btcDom, (v) => `${v.toFixed(1)}%`),
+      add('Total crypto market cap', totalMcap, formatNumber),
+      add('Global market 24h change', globalChange, (v) => `${Number(v).toFixed(2)}%`),
+    ].filter(Boolean);
+    if (macroLines.length > 0) {
+      lines.push('\nMACRO CONTEXT [CoinGecko Global]');
+      lines.push(...macroLines);
+    }
+  }
+
   // Data gaps summary
   if (gaps.length) {
     lines.push(`DATA GAPS: ${gaps.join(', ')}`);
@@ -388,6 +460,14 @@ function buildPrompt(projectName, rawData, scores) {
     '## ROLE',
     'You are a senior crypto alpha analyst. Your job: produce actionable, evidence-based reports for sophisticated investors. No fluff, no generic disclaimers.',
 
+    // Round R15: Add macro context instruction
+    '## MACRO CONTEXT AWARENESS',
+    'The RAW_DATA_SUMMARY may include macro data (BTC dominance, global market cap change). Use this to contextualize the project\'s analysis:',
+    '- High BTC dominance (>58%) = alt risk-off environment → factor into risk assessment',
+    '- Low BTC dominance (<45%) = altcoin season potential → factor into opportunity assessment',
+    '- Global market down >3% 24h = risk-off → raise bear case weight',
+    '- Global market up >3% 24h = risk-on → may inflate short-term scores',
+    '',
     '## CRITICAL: ANTI-HALLUCINATION RULES',
     'These rules are ABSOLUTE and override everything else:',
     '1. EVERY factual claim MUST be backed by either: (a) a specific field from RAW_DATA below, (b) a specific X Search result you found, or (c) a specific Web Search result with URL.',
@@ -958,6 +1038,7 @@ export function validateReport(report, rawData) {
     /partnership with (google|microsoft|apple|amazon|meta)/i,
     /raised \$\d+.*(series [A-Z]|seed|funding)/i,  // funding claims need verification
     /listed on (binance|coinbase|kraken).*recently/i,  // listing claims
+    /\$\d+[MBK]\s+(?:market cap|tvl|volume)\s+(?:for|of)\s+(?:uniswap|aave|compound|curve|maker|synthetix|sushi)/i,  // invented competitor numbers
   ];
 
   if (report.analysis_text) {
@@ -966,6 +1047,17 @@ export function validateReport(report, rawData) {
       if (match) {
         warnings.push(`Potential unverified claim detected: "${match[0]}"`);
       }
+    }
+  }
+
+  // 3b. Round R155: Validate competitor_comparison doesn't cite TVL/MCap for competitors when no sector data
+  if (report.competitor_comparison && rawData && !rawData.sector_comparison) {
+    // If there's no sector_comparison data but the LLM cited specific competitor TVL/mcap numbers, flag it
+    const competitorNumbers = report.competitor_comparison.match(/(?:uniswap|aave|compound|maker|curve|sushi|balancer|gmx|dydx|jupiter)[^.]*\$[\d.,]+[MBK]?/gi);
+    if (competitorNumbers && competitorNumbers.length > 0) {
+      warnings.push(`competitor_comparison cites specific competitor numbers without sector_comparison data — possible hallucination: ${competitorNumbers.slice(0, 2).join('; ')}`);
+      // Replace with a safe message rather than deleting entirely
+      report.competitor_comparison = 'No sector comparison data available for this scan. Competitor metrics would require additional data collection.';
     }
   }
 
@@ -1005,6 +1097,30 @@ export function validateReport(report, rawData) {
     }
     if (/\b\d{7,}(?:\.\d+)?\b/.test(String(report[field] || ''))) {
       warnings.push(`${field} may contain unformatted large number(s)`);
+    }
+  }
+
+  // 6c. Round R159: Detect and remove near-duplicate sentences in analysis_text
+  // LLMs sometimes repeat the same fact across multiple paragraphs
+  if (report.analysis_text && typeof report.analysis_text === 'string') {
+    const sentences = report.analysis_text.match(/[^.!?]+[.!?]+/g) || [];
+    const seen = new Set();
+    const deduped = [];
+    let duplicatesFound = 0;
+    for (const s of sentences) {
+      // Normalize for comparison: lowercase, strip numbers/punctuation, collapse spaces
+      const normalized = s.toLowerCase().replace(/[\d$%,]/g, '').replace(/\s+/g, ' ').trim();
+      if (normalized.length < 20) { deduped.push(s); continue; } // too short to dedupe
+      if (seen.has(normalized)) {
+        duplicatesFound++;
+        continue; // skip duplicate sentence
+      }
+      seen.add(normalized);
+      deduped.push(s);
+    }
+    if (duplicatesFound > 0) {
+      warnings.push(`analysis_text had ${duplicatesFound} near-duplicate sentence(s) removed`);
+      report.analysis_text = deduped.join('').replace(/\s{2,}/g, ' ').trim();
     }
   }
   // 6b. Validate risks/key_findings for circulating supply hallucination
@@ -1183,7 +1299,7 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '- verdict: "STRONG BUY" | "BUY" | "HOLD" | "AVOID" | "STRONG AVOID"',
     '- project_summary: 1-2 sentences explaining what the project IS, in plain English for an investor seeing it for the first time. Derive from RAW_DATA and X_SOCIAL. No hype, no source tags.',
     '- project_category: the project\'s primary category (examples: "DeFi Lending", "Layer 1", "DEX", "NFT Marketplace", "AI Infrastructure", "Meme Token"). Use the most specific category you can support from RAW_DATA.',
-    '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. Para 1: summary thesis with key metrics. Para 2: on-chain/fundamental evidence. Para 3: market/sentiment context. Para 4: near-term outlook. FORMAT ALL NUMBERS READABLY: use $414.8M not 414828652, use -2.48% not -2.484401525322113%, use $292.6M not 292636115. NO source tags, NO field names like "tvl_change_7d" — write human-readable labels.',
+    '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. Each paragraph MUST cover different ground — NEVER repeat the same metric in two paragraphs. Para 1: summary thesis with the 2-3 most important metrics and verdict justification. Para 2: on-chain/fundamental evidence — DIFFERENT numbers from Para 1, focus on TVL, fees, protocol health. Para 3: market/sentiment context — price action, social, DEX pressure. Para 4: near-term outlook — what to watch for, risk/reward. FORMAT ALL NUMBERS READABLY: use $414.8M not 414828652, use -2.48% not -2.484401525322113%. NO source tags. NO snake_case field names.',
     '- moat: competitive advantage in 1-2 sentences. Must be based on RAW_DATA or X_SOCIAL data.',
     '- risks: array of 3-5 risk strings. Format: "Risk type: specific detail." Only include risks you can substantiate with data. NO source tags.',
     '- catalysts: array of 2-4 upcoming catalysts. ONLY include catalysts supported by data. Prefix unverified ones with "[Unverified]". It is OK to have fewer catalysts if data is limited.',
@@ -1191,8 +1307,8 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '- x_sentiment_summary: Summarize the X_SOCIAL data provided below. If X_SOCIAL is empty or has errors, write "No X/Twitter data available."',
     '- key_findings: array of 3-5 key findings. Each MUST reference a specific data point from RAW_DATA or X_SOCIAL.',
     '- liquidity_assessment: Based on RAW_DATA volume, market cap, and DEX liquidity. Do not invent slippage estimates.',
-    '- bull_case: object with { thesis: string (2-3 sentences — the strongest argument FOR investing, with specific numbers from RAW_DATA), catalysts: array of 2-3 specific upcoming catalysts that could drive price up, target_conditions: string (what needs to happen for the bull case to play out), probability: string ("high"/"medium"/"low" — how likely based on current data) }. Base this ONLY on verified data.',
-    '- bear_case: object with { thesis: string (2-3 sentences — the strongest argument AGAINST investing, with specific numbers), risks: array of 2-3 specific risks that could drive price down, failure_conditions: string (what would confirm the bear case), probability: string ("high"/"medium"/"low" — how likely based on current data) }. Be brutally honest.',
+    '- bull_case: object with { thesis: string (2-3 sentences — the STRONGEST argument FOR investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA, e.g. "TVL of $X growing +Y% weekly", "P/TVL of Z is below sector median". Explain WHY those numbers are bullish.), catalysts: array of 2-3 specific events/metrics that could drive price up (data-backed, e.g. "fee efficiency $X/M TVL signals product-market fit"), target_conditions: string (concrete threshold conditions — e.g. "TVL crosses $XM, weekly fees above $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification based on data) }. NEVER use generic phrases like "strong fundamentals" without specific numbers.',
+    '- bear_case: object with { thesis: string (2-3 sentences — the STRONGEST argument AGAINST investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA that support the bear thesis, e.g. "TVL down Y% in 30d", "volume velocity only Z% suggests no conviction". Be brutally honest.), risks: array of 2-3 specific measurable risks (e.g. "DEX sell pressure ratio 0.82 — possible distribution"), failure_conditions: string (concrete conditions that confirm the bear case — e.g. "TVL falls below $XM, price breaks below $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification) }. Do NOT soften bear cases.',
     '- data_gaps: array of strings listing what data was missing or could not be verified. This helps the reader assess report reliability.',
     '- facts_verified: array of 4-8 strings. ONLY hard facts, each with a [source: ...] tag.',
     '- opinions: array of 2-5 strings. Analytical interpretations; if not directly proven, prefix with [Opinion].',
@@ -1320,7 +1436,7 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     '- verdict: "STRONG BUY" | "BUY" | "HOLD" | "AVOID" | "STRONG AVOID"',
     '- project_summary: 1-2 sentences explaining what the project IS, using only RAW_DATA. No hype, no source tags.',
     '- project_category: OPTIONAL. The project\'s primary category if it is clear from RAW_DATA. If unclear, OMIT this field entirely.',
-    '- analysis_text: 2-3 clean paragraphs for HUMAN READERS (thesis → evidence → outlook). Format numbers readably ($292.6M, -2.48%). No source tags, no field names.',
+    '- analysis_text: 2-3 clean paragraphs for HUMAN READERS. NO repetition across paragraphs — each paragraph covers NEW information. Para 1: verdict + the single most important data signal that drives it. Para 2: 2-3 supporting evidence points (different from Para 1). Para 3: risk/reward and what to watch next. Format numbers readably ($292.6M, -2.48%). No source tags. No snake_case.',
     '- moat: specific competitive advantage (1-2 sentences, avoid generics like "first mover")',
     '- risks: array of 3-5 risks, format: "Risk type: specific detail"',
     '- catalysts: array of 1-3 catalysts ONLY inferable from data (e.g., active dev = likely updates). Do NOT invent events. Prefix uncertain ones with "[Inferred]".',
@@ -1350,15 +1466,27 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
         ]
       : []),
 
-    // Phase 3: category-adaptive weighting context
+    // Phase 3 + R154: category-adaptive deep analysis instructions
     ...(scores?.overall?.category
       ? [
           `## TOKEN CATEGORY: ${scores.overall.category} (detected via ${scores.overall.category_source}, confidence ${(scores.overall.category_confidence * 100).toFixed(0)}%)`,
-          'Adjust your analysis register for this category. For meme tokens, focus heavily on social dynamics and whale behavior. For DeFi, focus on TVL/fees/revenue fundamentals. For L1/L2, focus on development and ecosystem growth.',
+          (() => {
+            const cat = scores?.overall?.category || '';
+            const catMap = {
+              meme_token: 'MEME TOKEN ANALYSIS: Focus on (1) social velocity — is mention volume accelerating or decelerating? (2) whale/holder concentration — top-10 concentration above 60% = squeeze risk; (3) exchange listing breadth; (4) narrative freshness — how long has this meme been running?',
+              defi_lending: 'DEFI LENDING ANALYSIS: Focus on (1) utilization rate (TVL vs borrow volume) — above 80% = high yield but liquidation risk; (2) bad debt ratio if available; (3) collateral quality; (4) P/TVL vs Aave/Compound benchmarks (Aave ~0.3x, Compound ~0.4x). Fee efficiency > /M TVL/week = healthy.',
+              defi_dex: 'DEX ANALYSIS: Focus on (1) volume/TVL ratio — Uniswap v3 benchmarks at 3-8x daily; (2) fee tier distribution; (3) impermanent loss risk for LPs; (4) real yield (fees - emissions) — negative real yield = mercenary capital risk.',
+              layer_1: 'L1 ANALYSIS: Focus on (1) developer activity — commits/contributors vs Ethereum/Solana benchmarks; (2) ecosystem TVL as % of mcap; (3) transaction throughput and fee revenue; (4) validator/node decentralization if data available.',
+              layer_2: 'L2 ANALYSIS: Focus on (1) L1 security vs L2 independence tradeoff; (2) sequencer decentralization; (3) TVL migration from L1; (4) fee competitiveness; (5) canonical bridge TVL if available.',
+              rwa: 'RWA ANALYSIS: Focus on (1) regulatory compliance signals; (2) real-world asset backing quality and transparency; (3) yield source legitimacy; (4) counterparty risk in off-chain assets.',
+              depin: 'DePIN ANALYSIS: Focus on (1) hardware/node deployment metrics; (2) token emission vs network utility ratio; (3) real-world service demand (bandwidth, compute, storage sold); (4) token velocity as proxy for network usage.',
+            };
+            return catMap[cat] || `Adjust your analysis for this category. Focus on the most relevant fundamentals for ${cat.replace(/_/g, ' ')} projects.`;
+          })()
         ]
       : []),
 
-    // Round 59: Concise market snapshot for quick orientation
+    // Round 59 + R157: Enriched market snapshot with derived efficiency signals
     (() => {
       const m = rawData?.market ?? {};
       const o = rawData?.onchain ?? {};
@@ -1366,16 +1494,34 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
       const mcap = m.market_cap;
       const vol = m.total_volume;
       const tvl = o.tvl;
-      const c24h = m.price_change_pct_24h;
-      const c7d = m.price_change_pct_7d;
-      const lines = ['## MARKET SNAPSHOT'];
-      if (price != null) lines.push(`Price: $${Number(price).toLocaleString('en-US', { maximumSignificantDigits: 6 })}`);
-      if (mcap != null) lines.push(`MCap: $${(Number(mcap) / 1e6).toFixed(1)}M`);
-      if (vol != null) lines.push(`Vol24h: $${(Number(vol) / 1e6).toFixed(1)}M`);
-      if (tvl != null) lines.push(`TVL: $${(Number(tvl) / 1e6).toFixed(1)}M`);
-      if (c24h != null) lines.push(`24h: ${Number(c24h) >= 0 ? '+' : ''}${Number(c24h).toFixed(1)}%`);
-      if (c7d != null) lines.push(`7d: ${Number(c7d) >= 0 ? '+' : ''}${Number(c7d).toFixed(1)}%`);
-      return lines.length > 1 ? lines.join(' | ') : null;
+      const c24h = m.price_change_pct_24h ?? m.price_change_percentage_24h;
+      const c7d = m.price_change_pct_7d ?? m.price_change_percentage_7d_in_currency;
+      const c30d = m.price_change_percentage_30d_in_currency;
+      const athDist = m.ath_distance_pct;
+      const parts = ['## MARKET SNAPSHOT (verified data only)'];
+      if (price != null) parts.push(`Price: $${Number(price).toLocaleString('en-US', { maximumSignificantDigits: 6 })}`);
+      if (mcap != null) {
+        const mcapStr = mcap >= 1e9 ? `$${(mcap / 1e9).toFixed(2)}B` : `$${(mcap / 1e6).toFixed(1)}M`;
+        parts.push(`MCap: ${mcapStr}${m.market_cap_rank ? ` (#${m.market_cap_rank})` : ''}`);
+      }
+      if (vol != null && mcap != null) {
+        const velPct = (vol / mcap * 100).toFixed(1);
+        parts.push(`Vol24h: $${(Number(vol) / 1e6).toFixed(1)}M (${velPct}% velocity)`);
+      } else if (vol != null) {
+        parts.push(`Vol24h: $${(Number(vol) / 1e6).toFixed(1)}M`);
+      }
+      if (tvl != null) {
+        const tvlStr = tvl >= 1e9 ? `$${(tvl / 1e9).toFixed(2)}B` : `$${(tvl / 1e6).toFixed(1)}M`;
+        const ptvl = mcap != null ? ` P/TVL: ${(mcap / tvl).toFixed(2)}x` : '';
+        parts.push(`TVL: ${tvlStr}${ptvl}`);
+      }
+      const changes = [];
+      if (c24h != null) changes.push(`24h: ${Number(c24h) >= 0 ? '+' : ''}${Number(c24h).toFixed(1)}%`);
+      if (c7d != null) changes.push(`7d: ${Number(c7d) >= 0 ? '+' : ''}${Number(c7d).toFixed(1)}%`);
+      if (c30d != null) changes.push(`30d: ${Number(c30d) >= 0 ? '+' : ''}${Number(c30d).toFixed(1)}%`);
+      if (changes.length) parts.push(changes.join(' / '));
+      if (athDist != null) parts.push(`ATH dist: ${athDist.toFixed(1)}%`);
+      return parts.length > 1 ? parts.join(' | ') : null;
     })(),
 
     `PROJECT: ${projectName}`,

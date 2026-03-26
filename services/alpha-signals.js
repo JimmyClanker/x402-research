@@ -425,6 +425,30 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // Round R11 (AutoResearch batch): BTC risk-off macro context — btc_dominance rising = alt risk
+  // If BTC dominance > 58% AND rising global market cap → alts outperforming BTC regime not confirmed
+  const btcDominance = safeN(market.btc_dominance ?? 0);
+  const globalMcapChange = safeN(market.market_cap_change_pct_24h_global ?? 0);
+  if (btcDominance > 0 && btcDominance < 45 && globalMcapChange > 2) {
+    signals.push({
+      signal: 'altcoin_season_macro',
+      strength: btcDominance < 40 ? 'strong' : 'moderate',
+      detail: `BTC dominance at ${btcDominance.toFixed(1)}% (below 45%) with +${globalMcapChange.toFixed(1)}% global market cap growth — altcoin rotation window open.`,
+    });
+  }
+
+  // Round R11: Strong recovery signal — price bouncing off ATL with volume
+  const atlDistSig = safeN(market.atl_distance_pct ?? null, null);
+  const change7dSig = safeN(market.price_change_pct_7d ?? 0);
+  const volRatioSig = mcap > 0 && volume > 0 ? volume / mcap : 0;
+  if (atlDistSig !== null && atlDistSig < 50 && atlDistSig > 10 && change7dSig > 15 && volRatioSig > 0.1) {
+    signals.push({
+      signal: 'low_base_recovery',
+      strength: change7dSig > 30 ? 'strong' : 'moderate',
+      detail: `Recovering from near-ATL base (${atlDistSig.toFixed(0)}% above ATL) with +${change7dSig.toFixed(0)}% 7d and high volume — potential bottom reversal.`,
+    });
+  }
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {

@@ -4,6 +4,8 @@ const COINGECKO_SEARCH_URL = 'https://api.coingecko.com/api/v3/search';
 const COINGECKO_COIN_URL = 'https://api.coingecko.com/api/v3/coins';
 const COINGECKO_TRENDING_URL = 'https://api.coingecko.com/api/v3/search/trending';
 const COINGECKO_TICKERS_URL = 'https://api.coingecko.com/api/v3/coins';
+// Round R5: Global market context — BTC dominance & total market cap
+const COINGECKO_GLOBAL_URL = 'https://api.coingecko.com/api/v3/global';
 
 function createEmptyMarketResult(projectName) {
   return {
@@ -54,6 +56,10 @@ function createEmptyMarketResult(projectName) {
     top_exchanges: [],
     // Round 2 ext: multi-TF momentum classification
     price_momentum_tier: null,
+    // Round R1: 7-day average volume for anomaly detection
+    volume_7d_avg: null,
+    // Round R4: stablecoin flag propagated from scoring for downstream checks
+    is_stablecoin: false,
     error: null,
   };
 }
@@ -75,11 +81,12 @@ export async function collectMarket(projectName) {
 
     const coinUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}?localization=false&tickers=false&community_data=true&developer_data=false&sparkline=true&price_change_percentage=1h%2C24h%2C7d%2C14d%2C30d%2C60d%2C200d%2C1y`;
     const chartUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}/market_chart?vs_currency=usd&days=90&interval=daily`;
-    const [coinData, trendingData, tickersData, chartData] = await Promise.allSettled([
+    const [coinData, trendingData, tickersData, chartData, globalData] = await Promise.allSettled([
       fetchJson(coinUrl),
       fetchJson(COINGECKO_TRENDING_URL),
       fetchJson(`${COINGECKO_TICKERS_URL}/${encodeURIComponent(firstCoin.id)}/tickers?per_page=100`),
       fetchJson(chartUrl),
+      fetchJson(COINGECKO_GLOBAL_URL),
     ]).then((results) => results.map((r) => (r.status === 'fulfilled' ? r.value : null)));
     const marketData = coinData?.market_data || {};
     const communityData = coinData?.community_data || {};
@@ -233,6 +240,17 @@ export async function collectMarket(projectName) {
       top_exchanges: topExchanges,
       sparkline_7d: coinData?.market_data?.sparkline_7d?.price || [],
       price_history_90d: (chartData?.prices || []).map(([ts, price]) => ({ t: ts, p: price })),
+      // Round R1 (AutoResearch batch): 7-day average volume from chart data — enables suspicious spike detection
+      volume_7d_avg: (() => {
+        const vols = (chartData?.total_volumes || []).slice(-7).map(([, v]) => Number(v)).filter(Number.isFinite);
+        return vols.length >= 3 ? Math.round(vols.reduce((s, v) => s + v, 0) / vols.length) : null;
+      })(),
+      // Round R5: Global market context — BTC dominance, total mcap, macro trend
+      btc_dominance: globalData?.data?.market_cap_percentage?.btc != null
+        ? parseFloat(Number(globalData.data.market_cap_percentage.btc).toFixed(2))
+        : null,
+      total_market_cap_usd: globalData?.data?.total_market_cap?.usd ?? null,
+      market_cap_change_pct_24h_global: globalData?.data?.market_cap_change_percentage_24h_usd ?? null,
       error: null,
     };
   } catch (error) {

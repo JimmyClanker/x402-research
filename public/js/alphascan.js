@@ -902,11 +902,29 @@
         });
       }
 
+      // Round R18: Copy report as text button
+      const copyReportBtn = document.createElement('button');
+      copyReportBtn.textContent = '📋 Copy as Text';
+      copyReportBtn.className = 'rescan-btn';
+      copyReportBtn.title = 'Copy report as plain text (Ctrl+Shift+C)';
+      copyReportBtn.addEventListener('click', () => {
+        const textContent = reportBox.innerText || reportBox.textContent || '';
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(textContent).then(
+            () => { if (window.showToast) showToast('Report copied to clipboard!', 'success'); },
+            () => { if (window.showToast) showToast('Copy failed', 'error'); }
+          );
+        } else {
+          if (window.showToast) showToast('Clipboard API not available in this browser', 'error');
+        }
+      });
+
       // Rescan button — wired via event delegation (no inline handlers)
       const rescanBtn = document.createElement('button');
       rescanBtn.textContent = '🔄 Rescan this project';
       rescanBtn.className = 'rescan-btn';
       rescanBtn.addEventListener('click', () => runScan(_persistedKey ? 'full' : 'quick'));
+      reportBox.insertBefore(copyReportBtn, reportBox.firstChild);
       reportBox.insertBefore(rescanBtn, reportBox.firstChild);
       resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       // Round 89: focus management for screen readers
@@ -1469,6 +1487,47 @@
       { threshold: 0.10, rootMargin: '0px 0px -30px 0px' }
     );
     document.querySelectorAll('.scanner-fade-in, .fade-in:not(.visible)').forEach(el => fadeObserver.observe(el));
+
+    // ── Round R24: Fetch and display trending coins ───────────────────────────────
+    (async () => {
+      try {
+        const res = await fetch('/api/alpha/trending');
+        if (!res.ok) return;
+        const data = await res.json();
+        const coins = data?.trending ?? [];
+        if (coins.length === 0) return;
+        const list = document.getElementById('trending-coins-list');
+        const section = document.getElementById('trending-bar-section');
+        if (!list || !section) return;
+        list.innerHTML = coins.map(c => {
+          const name = escapeHtml(c.symbol?.toUpperCase() || c.name || '?');
+          return `<button class="trending-coin-chip" data-coin="${escapeHtml(c.name || c.symbol || '')}" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:var(--bg2);color:var(--fg);font-size:0.75rem;cursor:pointer;font-weight:600;" title="Quick scan ${escapeHtml(c.name || '')}">${name}</button>`;
+        }).join('');
+        list.querySelectorAll('.trending-coin-chip').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const coin = btn.dataset.coin;
+            if (coin) { input.value = coin; runScan('quick'); }
+          });
+        });
+        section.style.display = '';
+      } catch (_) { /* silently fail */ }
+    })();
+
+    // ── Round R19: Global keyboard shortcut — Ctrl+Shift+C to copy report ────────
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        const reportBox = document.getElementById('report');
+        if (!reportBox || !reportBox.textContent.trim()) return;
+        const text = reportBox.innerText || reportBox.textContent || '';
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).then(
+            () => { if (window.showToast) showToast('Report copied! (Ctrl+Shift+C)', 'success'); },
+            () => {}
+          );
+        }
+        e.preventDefault();
+      }
+    });
 
     // ── Live stats: fetch /api/health ────────────────────────────────
     (async () => {

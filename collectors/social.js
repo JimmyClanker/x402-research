@@ -5,6 +5,11 @@ const BULLISH_KEYWORDS = [
   // Round 1: expanded bullish vocabulary
   'upgrade', 'mainnet', 'milestone', 'record', 'volume', 'inflow', 'tvl growth',
   'ecosystem', 'grant', 'v2', 'v3', 'institutional', 'demand', 'whale buy',
+  // Round R9: 2025 narrative-driven bullish signals
+  'etf approval', 'spot etf', 'restaking', 'real world asset', 'rwa', 'tokenization',
+  'ai agent', 'depin', 'sovereign wealth', 'strategic reserve', 'nation state',
+  'treasury allocation', 'buyback', 'revenue share', 'fee switch', 'hyperliquid',
+  'superchain', 'layer 2 expansion', 'chain abstraction', 'intents', 'solvers',
 ];
 const BEARISH_KEYWORDS = [
   'bearish', 'selloff', 'dump', 'decline', 'risk', 'downside', 'lawsuit',
@@ -13,6 +18,11 @@ const BEARISH_KEYWORDS = [
   // Round 1: expanded bearish vocabulary
   'outflow', 'bridge hack', 'vulnerability', 'exploit', 'shutdown', 'delisting',
   'regulatory', 'ban', 'conviction', 'fraud', 'ponzi', 'exit liquidity',
+  // Round R8: new threat patterns (2025 crypto threat landscape)
+  'sec subpoena', 'doj investigation', 'emergency pause', 'oracle manipulation',
+  'flash loan attack', 'governance attack', 'admin key', 'multisig compromise',
+  'infinite mint', 'drain', 'stolen funds', 'protocol exploit', 'critical bug',
+  'mass exodus', 'whale dump', 'token unlock', 'vesting cliff',
 ];
 const NEUTRAL_KEYWORDS = ['neutral', 'mixed', 'sideways', 'watchlist', 'monitor', 'range', 'unclear', 'consolidation'];
 
@@ -21,6 +31,12 @@ const TRUSTED_DOMAINS = new Set([
   'coindesk.com', 'cointelegraph.com', 'theblock.co', 'decrypt.co',
   'blockworks.co', 'dlnews.com', 'cryptobriefing.com', 'messari.io',
   'defipulse.com', 'rekt.news', 'delphi.digital', 'galaxy.com',
+  // Round R7: expanded high-trust crypto domains
+  'unchainedcrypto.com', 'bankless.com', 'defiant.io', 'protos.com',
+  'restofworld.org', 'ft.com', 'reuters.com', 'bloomberg.com', 'wsj.com',
+  'wired.com', 'techcrunch.com', 'forbes.com', 'fortune.com',
+  'a16zcrypto.com', 'paradigm.xyz', 'multicoin.capital',
+  'coinmetrics.io', 'glassnode.com', 'dune.com', 'nansen.ai',
 ]);
 
 function getDomainTrustScore(url) {

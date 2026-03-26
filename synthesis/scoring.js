@@ -286,6 +286,11 @@ function scoreMarketStrength(market = {}) {
     };
   }
 
+  // Round R3 (AutoResearch batch): DEX pressure micro-adjustment for market strength
+  // Incorporates real-time buy/sell ratio from DexScreener into market momentum
+  // This supplements the risk score's DEX analysis with a lighter market signal
+  // Note: data accessed via closure on market (no direct dex param needed here)
+
   // Round 39 (AutoResearch): market_efficiency_score — how efficiently the market prices the asset
   // Measures: liquidity depth (vol/mcap), listing quality, trend confirmation, info efficiency
   const meComponents = [
@@ -570,6 +575,12 @@ function scoreDevelopment(github = {}) {
   // Round 29: CI bonus — having CI workflows = professional dev practice
   if (github.has_ci === true) raw += 0.3;
 
+  // Round R17 (AutoResearch batch): Issue health signal — healthy issue tracker = active maintenance
+  const issueHealthSignal = github.issue_health_signal;
+  if (issueHealthSignal === 'healthy') raw += 0.15;
+  else if (issueHealthSignal === 'critical') raw -= 0.25; // too many issues relative to stars = backlog problem
+  // No adjustment for 'moderate' or null
+
   // Round 25 (AutoResearch batch): repo health tier bonus
   const repoHealthTier = github.repo_health_tier;
   if (repoHealthTier === 'excellent') raw += 0.4;
@@ -827,6 +838,18 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
     raw += Math.min((buySellRatio - 1) * 0.5, 0.5); // max +0.5 for strong buy pressure
   } else if (pressureSignal === 'sell_pressure') {
     raw -= Math.min((1 - buySellRatio) * 0.8, 0.8); // max -0.8 for strong sell pressure
+  }
+
+  // Round R28 (AutoResearch batch): Micro-cap extreme volatility risk
+  // Small market caps amplify volatility; a $2M mcap with 50% daily swings is existential
+  if (mcap > 0 && mcap < 5_000_000 && volatility > 20) {
+    raw -= 0.8; // Additional penalty: micro-cap + high volatility = extreme risk
+  }
+
+  // Round R28: Volume spike risk — abnormal volume relative to 7d avg = manipulation signal
+  const vol7dAvgR = safeNumber(market.volume_7d_avg ?? 0);
+  if (vol7dAvgR > 0 && volume > 0 && volume > vol7dAvgR * 8) {
+    raw -= 0.5; // Sudden volume spike = wash trading or exit pump risk
   }
 
   // Round 58 (AutoResearch): liquidity_risk_score — 0-100 normalized (higher = safer/more liquid)

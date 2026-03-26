@@ -114,9 +114,16 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
         stack: error?.stack,
         cause: error?.cause?.stack || error?.cause?.message || null,
       });
-      return res.status(502).json({
+      // Round R22: Classify error type for better client handling
+      const isTimeout = message.includes('timeout') || message.includes('AbortError') || message.includes('abort');
+      const isRateLimit = message.includes('429') || message.includes('rate limit') || message.includes('Too Many');
+      const statusCode = isRateLimit ? 429 : isTimeout ? 504 : 502;
+      if (isRateLimit) res.set('Retry-After', '60');
+      return res.status(statusCode).json({
         error: `Alpha analysis failed during ${stage}`,
         detail: message,
+        error_type: isRateLimit ? 'rate_limited' : isTimeout ? 'timeout' : 'upstream_error',
+        retry_after_seconds: isRateLimit ? 60 : isTimeout ? 10 : null,
       });
     }
   }
@@ -201,6 +208,7 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
           liquidity_health: r.raw_data?.dex?.liquidity_health_score ?? null,
           news_momentum: r.raw_data?.social?.news_momentum ?? null,
           report_quality_grade: r.report_quality?.grade ?? null,
+          scan_duration_ms: r.scan_duration_ms ?? null,
           cache: r.cache,
         };
       }
@@ -375,6 +383,27 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
       });
     } catch (err) {
       return res.status(500).json({ status: 'error', error: err.message });
+    }
+  });
+
+  // ── Round R23: /alpha/trending — return CoinGecko trending coins with quick scores ──
+  router.get('/alpha/trending', async (req, res) => {
+    try {
+      const trendingUrl = 'https://api.coingecko.com/api/v3/search/trending';
+      const resp = await fetch(trendingUrl, { headers: { 'User-Agent': 'alpha-scanner/6.0.0' }, signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) throw new Error(`CoinGecko trending: HTTP ${resp.status}`);
+      const data = await resp.json();
+      const coins = (data?.coins || []).slice(0, 7).map((entry) => ({
+        name: entry?.item?.name,
+        symbol: entry?.item?.symbol,
+        coin_id: entry?.item?.id,
+        market_cap_rank: entry?.item?.market_cap_rank,
+        thumb: entry?.item?.thumb,
+        score: entry?.item?.score,
+      })).filter((c) => c.name);
+      return res.json({ trending: coins, count: coins.length, generated_at: new Date().toISOString() });
+    } catch (err) {
+      return res.status(502).json({ error: 'Failed to fetch trending: ' + err.message });
     }
   });
 
