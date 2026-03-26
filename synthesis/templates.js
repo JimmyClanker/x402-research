@@ -25,6 +25,12 @@ function fmtNumber(value, decimals = 2) {
   return `$${n.toFixed(decimals)}`;
 }
 
+function fmtPct(value, decimals = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 'n/a';
+  return `${n > 0 ? '+' : ''}${n.toFixed(decimals)}%`;
+}
+
 // Round 26: format trade setup for text reports
 function renderTradeSetup(tradeSetup) {
   if (!tradeSetup || !tradeSetup.entry_zone) return null;
@@ -68,6 +74,8 @@ function extractKeyMetrics(rawData, scores) {
   const tvl = Number(onchain.tvl ?? 0);
   const volume24h = Number(market.total_volume ?? market.volume_24h ?? 0);
   const overallScore = Number(scores?.overall?.score ?? 0);
+  const priceChange24h = market.price_change_percentage_24h != null ? Number(market.price_change_percentage_24h) : null;
+  const priceChange7d = market.price_change_percentage_7d != null ? Number(market.price_change_percentage_7d) : null;
 
   // Round 8: DEX pressure + TVL stickiness context
   const dexPressure = dex.pressure_signal ?? null;
@@ -80,11 +88,15 @@ function extractKeyMetrics(rawData, scores) {
     tvl: tvl > 0 ? tvl : null,
     volume_24h: volume24h > 0 ? volume24h : null,
     overall_score: overallScore,
+    price_change_24h: priceChange24h,
+    price_change_7d: priceChange7d,
     price_fmt: price > 0 ? fmtNumber(price, price < 0.01 ? 6 : price < 1 ? 4 : 2) : 'n/a',
     market_cap_fmt: marketCap > 0 ? fmtNumber(marketCap) : 'n/a',
     tvl_fmt: tvl > 0 ? fmtNumber(tvl) : 'n/a',
     volume_24h_fmt: volume24h > 0 ? fmtNumber(volume24h) : 'n/a',
     overall_score_fmt: `${overallScore.toFixed(1)}/10`,
+    price_change_24h_fmt: priceChange24h != null ? fmtPct(priceChange24h) : 'n/a',
+    price_change_7d_fmt: priceChange7d != null ? fmtPct(priceChange7d) : 'n/a',
     dex_pressure: dexPressure,
     dex_buy_sell_ratio: dexBuySellRatio,
     tvl_stickiness: tvlStickiness,
@@ -188,6 +200,8 @@ const json = {
     '',
     '💎 Key Metrics',
     `- Price: ${keyMetrics.price_fmt}`,
+    ...(keyMetrics.price_change_24h != null ? [`- 24h Change: ${keyMetrics.price_change_24h_fmt}`] : []),
+    ...(keyMetrics.price_change_7d != null ? [`- 7d Change: ${keyMetrics.price_change_7d_fmt}`] : []),
     `- Market Cap: ${keyMetrics.market_cap_fmt}`,
     `- TVL: ${keyMetrics.tvl_fmt}`,
     `- 24h Volume: ${keyMetrics.volume_24h_fmt}`,
@@ -283,6 +297,11 @@ const json = {
             <div style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Price</div>
             <div style="font-size:18px;font-weight:700;color:#e8e8e8;">${escapeHtml(keyMetrics.price_fmt)}</div>
           </div>
+          ${keyMetrics.price_change_24h != null ? `
+          <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:10px 16px;min-width:120px;text-align:center;">
+            <div style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">24h Change</div>
+            <div style="font-size:18px;font-weight:700;color:${keyMetrics.price_change_24h >= 0 ? '#22c55e' : '#ef4444'};">${escapeHtml(keyMetrics.price_change_24h_fmt)}</div>
+          </div>` : ''}
           <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:10px 16px;min-width:120px;text-align:center;">
             <div style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Market Cap</div>
             <div style="font-size:18px;font-weight:700;color:#e8e8e8;">${escapeHtml(keyMetrics.market_cap_fmt)}</div>
@@ -299,6 +318,12 @@ const json = {
             <div style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Overall Score</div>
             <div style="font-size:18px;font-weight:700;color:#a8e6cf;">${escapeHtml(keyMetrics.overall_score_fmt)}</div>
           </div>
+          ${rawData?.conviction ? `
+          <div style="background:rgba(0,0,0,0.3);border-radius:12px;padding:10px 16px;min-width:120px;text-align:center;">
+            <div style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Conviction</div>
+            <div style="font-size:18px;font-weight:700;color:#ffd3b6;">${escapeHtml(rawData.conviction.score)}/100</div>
+            <div style="color:#888;font-size:10px;margin-top:2px;">${escapeHtml(rawData.conviction.label)}</div>
+          </div>` : ''}
         </div>
       </section>
 
@@ -370,10 +395,22 @@ const json = {
         <ul style="margin:0;padding-left:18px;line-height:1.8;">${renderList(llmAnalysis?.key_findings)}</ul>
       </section>
 
+      ${rawData?.elevator_pitch ? `
+      <section style="margin-bottom:20px;padding:16px;background:linear-gradient(135deg,rgba(255,211,182,0.08),rgba(168,230,207,0.08));border:1px dashed rgba(255,211,182,0.3);border-radius:18px;">
+        <h2 style="font-family:'Caveat',cursive;font-size:28px;margin:0 0 8px;color:#ffd3b6;">💡 Elevator Pitch</h2>
+        <p style="margin:0;line-height:1.7;font-size:15px;color:#e8e8e8;">${escapeHtml(rawData.elevator_pitch)}</p>
+      </section>` : ''}
+
       <section>
         <h2 style="font-family:'Caveat',cursive;font-size:32px;margin:0 0 8px;color:#b5c7d3;">📝 Analysis</h2>
         <p style="margin:0;line-height:1.9;white-space:pre-wrap;">${escapeHtml(llmAnalysis?.analysis_text || 'n/a')}</p>
       </section>
+
+      ${rawData?.trade_setup?.entry_zone ? `
+      <section style="margin-top:20px;padding:16px;background:rgba(255,255,255,0.03);border:1px dashed rgba(181,199,211,0.28);border-radius:18px;">
+        <h2 style="font-family:'Caveat',cursive;font-size:32px;margin:0 0 8px;color:#ffd3b6;">📐 Trade Setup</h2>
+        <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(renderTradeSetup(rawData.trade_setup) || 'n/a')}</p>
+      </section>` : ''}
     </article>
   `;
 
@@ -512,6 +549,44 @@ export function formatPlainText(projectName, rawData, scores, llmAnalysis) {
 export function formatAgentJSON(projectName, rawData, scores, llmAnalysis) {
   const keyMetrics = extractKeyMetrics(rawData, scores);
 
+  // Calculate composite_alpha_index (same logic as formatReport)
+  const collectorMeta = rawData?.metadata?.collectors ?? {};
+  const totalCollectors = Object.keys(collectorMeta).length;
+  const okCollectors = Object.values(collectorMeta).filter((c) => c?.ok !== false && !c?.error).length;
+  const dataQualityTier = (() => {
+    const cov = totalCollectors > 0 ? okCollectors / totalCollectors : 0;
+    if (cov >= 0.8 && (scores?.overall?.completeness ?? 0) >= 70) return 'high';
+    if (cov >= 0.5 && (scores?.overall?.completeness ?? 0) >= 40) return 'medium';
+    return 'low';
+  })();
+  const compositeAlphaIndex = (() => {
+    const overallScore = scores?.overall?.score ?? 5;
+    const alphaSignalCount = Math.min(Array.isArray(rawData?.alpha_signals) ? rawData.alpha_signals.length : 0, 5);
+    const qualityBonus = dataQualityTier === 'high' ? 20 : dataQualityTier === 'medium' ? 10 : 0;
+    const convictionScore = rawData?.thesis?.conviction_score ?? 50;
+    return Math.round(
+      (overallScore / 10) * 50 +
+      alphaSignalCount * 3 +
+      qualityBonus +
+      (convictionScore / 100) * 15
+    );
+  })();
+
+  // Build red_flags_summary (same logic as formatReport)
+  const flags = Array.isArray(rawData?.red_flags) ? rawData.red_flags : [];
+  const critical = flags.filter((f) => f.severity === 'critical');
+  const warnings = flags.filter((f) => f.severity === 'warning');
+  const infos = flags.filter((f) => f.severity === 'info');
+  const worst = critical[0] ?? warnings[0] ?? infos[0] ?? null;
+  const redFlagsSummary = {
+    total: flags.length,
+    critical: critical.length,
+    warnings: warnings.length,
+    info: infos.length,
+    worst_flag: worst ? { flag: worst.flag, severity: worst.severity } : null,
+    risk_level: critical.length >= 2 ? 'critical' : critical.length >= 1 ? 'high' : warnings.length >= 3 ? 'elevated' : warnings.length >= 1 ? 'moderate' : 'low',
+  };
+
   return {
     project_name: projectName,
     generated_at: new Date().toISOString(),
@@ -519,6 +594,9 @@ export function formatAgentJSON(projectName, rawData, scores, llmAnalysis) {
     headline: llmAnalysis?.headline ?? null,
     overall_score: scores?.overall?.score ?? null,
     conviction: rawData?.conviction ?? null,
+    composite_alpha_index: compositeAlphaIndex,
+    elevator_pitch: rawData?.elevator_pitch ?? null,
+    red_flags_summary: redFlagsSummary,
     key_metrics: keyMetrics,
     scores: Object.fromEntries(
       ['market_strength', 'onchain_health', 'social_momentum', 'development', 'tokenomics_health', 'distribution', 'risk'].map(dim => [

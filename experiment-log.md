@@ -1358,3 +1358,51 @@
 - **Change:** Aggiunte 3 thesis cards (bull/bear/neutral) nell'HTML dopo competitor comparison. Grid responsive.
 - **Files:** synthesis/templates.js
 - **Tests:** 177/177 pass
+
+### Round 241 — Commit R232-241
+- **Commit:** c9aebab. Pushed to main. Tests: 177/177.
+
+### Round 242 — templates.js: conviction meter nelle key metrics HTML cards
+- **Change:** Aggiunta conviction card nelle key metrics HTML (score/100 + label) se disponibile.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 243 — templates.js: trade setup section nell'HTML
+- **Change:** Aggiunta sezione Trade Setup nell'HTML dopo Analysis, usando renderTradeSetup().
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 244 — templates.js: elevator pitch section nell'HTML
+- **Change:** Aggiunto banner Elevator Pitch nell'HTML prima di Analysis. Gradient background per visibilità.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 245 — templates.js: fmtPct() helper + price_change in extractKeyMetrics
+- **Change:** Aggiunto helper fmtPct(). Aggiunti price_change_24h/7d e i relativi _fmt in extractKeyMetrics.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 246 — templates.js: price_change card nell'HTML key metrics
+- **Change:** Aggiunta card 24h Change nelle key metrics HTML con colore verde/rosso dinamico.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 247 — templates.js: price_change nel text report key metrics
+- **Change:** Aggiunte righe 24h Change e 7d Change nei Key Metrics del text report.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 248 — templates.js: formatAgentJSON — aggiungi composite_alpha_index, elevator_pitch, red_flags_summary
+- **Change:** Calcolo composite_alpha_index e red_flags_summary in formatAgentJSON, aggiunti campi elevator_pitch, composite_alpha_index, red_flags_summary nell'output JSON.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 249 — routes/alpha-history.js: /alpha/export — aggiungi conviction + composite_alpha_index + data_quality
+- **Change:** Aggiunti conviction, composite_alpha_index, data_quality nell'exportPayload di /alpha/export.
+- **Files:** routes/alpha-history.js
+- **Tests:** 177/177 pass
+
+### Round 250 — routes/alpha-history.js: /alpha/export — formatted_metrics + thesis_summary
+- **Change:** Aggiunti formatted_metrics (price_fmt, market_cap_fmt, ecc) e thesis_summary (one_liner, bull/bear case) nell'exportPayload.
+- **Files:** routes/alpha-history.js
+- **Tests:** 177/177 pass
