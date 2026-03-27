@@ -728,6 +728,24 @@
       letter-spacing: -0.04em; line-height: 1.1;
     }
     .verdict-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .report-kicker {
+      display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;
+      margin-bottom: 10px;
+    }
+    .project-title-stack {
+      display:grid; gap:10px; min-width:0;
+    }
+    .score-pill {
+      display:inline-flex; align-items:center; gap:8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted2);
+      font-size: 0.82rem;
+      font-family: 'IBM Plex Mono', monospace;
+      width: fit-content;
+    }
     .verdict-meta {
       color: var(--muted); font-size: 0.72rem;
       letter-spacing: 0.14em; text-transform: uppercase;

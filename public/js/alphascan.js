@@ -601,16 +601,16 @@
 
       if (!summary && !category) return '';
 
-      return `<div class="project-intro-panel" style="margin:18px 0;">
-        <div class="project-intro-card">
-          <div class="project-intro-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      return `<div class="project-intro-panel" style="margin:22px 0 10px;">
+        <div class="project-intro-card" style="padding:20px 22px;background:linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:16px;">
+          <div class="project-intro-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:0.98rem;">
             <span>📋 What is ${escapeHtml(projectName)}?</span>
             ${ticker}
             ${mcapChip}
             ${websiteLink}
           </div>
-          ${summary ? `<div class="project-intro-text" style="margin-top:10px;">${formatAnalysisText(summary)}</div>` : ''}
-          ${category ? `<div class="project-intro-meta" style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--muted);font-size:0.78rem;">Category</span> <span class="project-category-badge">${escapeHtml(category)}</span></div>` : ''}
+          ${summary ? `<div class="project-intro-text" style="margin-top:12px;font-size:0.98rem;line-height:1.82;color:#dddddd;max-width:76ch;">${formatAnalysisText(summary)}</div>` : ''}
+          ${category ? `<div class="project-intro-meta" style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="color:var(--muted);font-size:0.76rem;text-transform:uppercase;letter-spacing:0.08em;">Category</span> <span class="project-category-badge">${escapeHtml(category)}</span></div>` : ''}
         </div>
       </div>`;
     }
@@ -793,14 +793,17 @@
       // ── Panel 1: Header + Verdict + Analysis ─────────────────────
       const panel1 = `<section class="panel">
         <div class="header-row">
-          <div>
-            <div class="footnote">${escapeHtml(payload?.mode||'full')} scan</div>
+          <div class="project-title-stack">
+            <div class="report-kicker">
+              <span class="footnote">${escapeHtml(payload?.mode||'full')} scan</span>
+              ${payload?.project_category ? `<span class="project-category-badge">${escapeHtml(payload.project_category)}</span>` : ''}
+            </div>
             <h1 class="project-name">${escapeHtml(payload?.project_name||'Unknown')}</h1>
+            <div class="score-pill">Score <strong class="${verdictClass(verdict)}" style="font-size:1rem;">${avgScore!==null?`${avgScore.toFixed(1)}/10`:'n/a'}</strong></div>
           </div>
           <div class="verdict-wrap">
             <div class="verdict-meta">Research verdict</div>
             <div class="verdict ${verdictClass(verdict)}">${verdictEmoji(verdict)} ${escapeHtml(verdict)}</div>
-            <div class="overall-score ${verdictClass(verdict)}">${avgScore!==null?`${avgScore.toFixed(1)}/10`:'n/a'}</div>
             ${(()=>{
               // Round 106: volatility badge — softer colors, better contrast
               const v=payload?.volatility;
