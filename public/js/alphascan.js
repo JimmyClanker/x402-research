@@ -265,9 +265,8 @@
     }
 
     // ── Radar chart ─────────────────────────────────────────────────
-    // Round 74: improved radar with clearer labels, score ticks, aria title
     function renderRadar(scores) {
-      const size = 380, center = size/2, radius = 100, levels = 5;
+      const size = 340, center = size/2, radius = 92, levels = 5;
       const keys = SCORE_META.map(([k])=>k), labels = SCORE_META.map(([,l])=>l);
       const values = keys.map(k=>Number(scores?.[k]?.score||0));
       const points = values.map((v,i)=>{
@@ -276,24 +275,19 @@
         return [center+Math.cos(angle)*radius*scale, center+Math.sin(angle)*radius*scale];
       });
       const polygon = points.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-      // Grid levels with score labels only at specific levels
       const grid = Array.from({length:levels},(_,i)=>{
         const l=i+1, lr=radius*(l/levels);
         const lp=labels.map((_,j)=>{
           const a=(-Math.PI/2)+(j*Math.PI*2/labels.length);
           return `${(center+Math.cos(a)*lr).toFixed(1)},${(center+Math.sin(a)*lr).toFixed(1)}`;
         }).join(' ');
-        // Show score tick on the top axis (upward direction)
-        const tickX=(center+0.5).toFixed(1);
-        const tickY=(center-lr-3).toFixed(1);
-        const scoreLabel=l*2; // 2,4,6,8,10
-        return `<polygon points="${lp}" fill="none" stroke="rgba(232,232,232,${0.08+l*0.03})" stroke-dasharray="${l===5?'none':'3 5'}" stroke-width="${l===5?'1.5':'1'}" />${l%2===0?`<text x="${tickX}" y="${tickY}" fill="rgba(232,232,232,0.5)" font-size="10" text-anchor="middle">${scoreLabel}</text>`:''}`;
+        return `<polygon points="${lp}" fill="none" stroke="rgba(232,232,232,${0.08+l*0.025})" stroke-dasharray="${l===5?'none':'3 5'}" stroke-width="${l===5?'1.25':'1'}" />`;
       }).join('');
       // Axes + labels
       const axes = labels.map((label,i)=>{
         const a=(-Math.PI/2)+(i*Math.PI*2/labels.length);
         const x=(center+Math.cos(a)*radius).toFixed(1), y=(center+Math.sin(a)*radius).toFixed(1);
-        const tx=(center+Math.cos(a)*(radius+38)).toFixed(1), ty=(center+Math.sin(a)*(radius+38)).toFixed(1);
+        const tx=(center+Math.cos(a)*(radius+30)).toFixed(1), ty=(center+Math.sin(a)*(radius+30)).toFixed(1);
         const anchor=Math.cos(a)>0.25?'start':Math.cos(a)<-0.25?'end':'middle';
         const score = values[i];
         const scoreColor = SCORE_META[i][2];
@@ -304,13 +298,12 @@
       return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="${escapeHtml(ariaLabel)}" style="max-width:100%;margin:0 auto;display:block;">
         <title>Score Radar Chart</title>
         <defs>
-          <filter id="radar-glow-r74"><feGaussianBlur stdDeviation="4" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
-          <radialGradient id="radarFill" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(212,88,10,0.2)"/><stop offset="100%" stop-color="rgba(212,88,10,0.06)"/></radialGradient>
+          <radialGradient id="radarFill" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(212,88,10,0.18)"/><stop offset="100%" stop-color="rgba(212,88,10,0.04)"/></radialGradient>
         </defs>
         ${grid}${axes}
-        <circle cx="${center}" cy="${center}" r="2.5" fill="rgba(255,255,255,0.25)" />
-        <polygon points="${polygon}" fill="url(#radarFill)" stroke="#D4580A" stroke-width="2" filter="url(#radar-glow-r74)" />
-        ${points.map(([x,y],i)=>`<g role="img" aria-label="${SCORE_META[i][1]}: ${values[i].toFixed(1)}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="rgba(10,10,10,0.92)" stroke="${SCORE_META[i][2]}" stroke-width="2" /><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${SCORE_META[i][2]}" /></g>`).join('')}
+        <circle cx="${center}" cy="${center}" r="2" fill="rgba(255,255,255,0.18)" />
+        <polygon points="${polygon}" fill="url(#radarFill)" stroke="#D4580A" stroke-width="2" />
+        ${points.map(([x,y],i)=>`<g role="img" aria-label="${SCORE_META[i][1]}: ${values[i].toFixed(1)}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.5" fill="rgba(10,10,10,0.92)" stroke="${SCORE_META[i][2]}" stroke-width="1.8" /><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${SCORE_META[i][2]}" /></g>`).join('')}
       </svg>`;
     }
 
@@ -363,7 +356,6 @@
 
     function metricRows(raw) {
       const mp = raw?.market?.current_price ?? raw?.market?.price ?? raw?.market?.price_usd;
-      // Round 233 (AutoResearch nightly): compute P/TVL ratio client-side for display
       const ptvlRaw = (() => {
         const mcap = raw?.market?.market_cap;
         const tvl = raw?.onchain?.tvl;
@@ -374,66 +366,13 @@
         ['Price','price',mp,null],
         ['Market cap','market_cap',raw?.market?.market_cap,null],
         ['24h volume','total_volume',raw?.market?.total_volume,null],
-        ['FDV','fdv',raw?.market?.fully_diluted_valuation ?? raw?.market?.fdv,null],
         ['TVL','tvl',raw?.onchain?.tvl,null],
         ['P/TVL ratio','ptvl_ratio',ptvlRaw != null ? ptvlRaw + 'x' : null,null],
-        ['7d TVL %','tvl_change_7d',raw?.onchain?.tvl_change_7d,'change'],
-        ['30d TVL %','tvl_change_30d',raw?.onchain?.tvl_change_30d,'change'],
         ['Fees 7d','fees_7d',raw?.onchain?.fees_7d,null],
-        ['Revenue 7d','revenue_7d',raw?.onchain?.revenue_7d,null],
-        ['Mentions','mentions',raw?.social?.mentions,null],
         ['Commits 90d','commits_90d',raw?.github?.commits_90d,null],
-        ['Contributors','contributors',raw?.github?.contributors,null],
         ['Pct circulating','pct_circulating',raw?.tokenomics?.pct_circulating,null],
-        ['Inflation rate','inflation_rate',raw?.tokenomics?.inflation_rate,null],
         ['DEX liquidity','dex_liquidity_usd',raw?.dex?.dex_liquidity_usd,null],
         ['DEX buy/sell','buy_sell_ratio',raw?.dex?.buy_sell_ratio,null],
-        ['Coin age (days)','coin_age_days',raw?.market?.coin_age_days,null],
-        ['Community score','community_score',raw?.market?.community_score != null ? `${raw.market.community_score}/100` : null,null],
-        ['Realized vol 90d','realized_vol_90d',raw?.market?.realized_vol_90d,'pct'],
-        // Round 233 (AutoResearch nightly): new diagnostic metrics
-        ['Sentiment quality','sentiment_credibility_score',raw?.social?.sentiment_credibility_score,null],
-        ['Issue health','issue_health_score',raw?.github?.issue_health_score,null],
-        ['Momentum divergence','momentum_divergence',raw?.market?.momentum_divergence,null],
-        // Round 234 (AutoResearch): new market quality metrics
-        ['Volume trend 7d','volume_trend_7d',raw?.market?.volume_trend_7d,null],
-        ['Daily fee rate (ann.)','daily_fee_rate_annualized',raw?.onchain?.daily_fee_rate_annualized != null ? `${raw.onchain.daily_fee_rate_annualized.toFixed(3)}%` : null,null],
-        ['Commit consistency','commit_consistency_score',raw?.github?.commit_consistency_score,null],
-        ['Liq depth score','liquidity_depth_score',raw?.dex?.liquidity_depth_score,null],
-        ['Fee revenue accel.','fee_revenue_acceleration',raw?.onchain?.fee_revenue_acceleration,null],
-        ['Contrib. growth','contributor_growth_rate',raw?.github?.contributor_growth_rate,null],
-        // Round 236 (AutoResearch): 52-week range context
-        ['52w range tier','price_vs_52w_tier', raw?.market?.price_vs_52w?.tier ?? null, null],
-        ['52w high dist.','pct_from_52w_high', raw?.market?.price_vs_52w?.pct_from_52w_high != null ? `${raw.market.price_vs_52w.pct_from_52w_high.toFixed(1)}%` : null, null],
-        ['Commits/contributor','commits_per_contributor',raw?.github?.commits_per_contributor,null],
-        ['Median DEX liq/pair','median_liquidity_per_pair',raw?.dex?.median_liquidity_per_pair,null],
-        // Round 237 (AutoResearch nightly): new engagement and quality metrics
-        ['Holder engagement','holder_engagement_score',raw?.market?.holder_engagement_score != null ? `${raw.market.holder_engagement_score}/100` : null,null],
-        ['Reddit activity','reddit_activity_score',raw?.reddit?.reddit_activity_score != null ? `${raw.reddit.reddit_activity_score}/100` : null,null],
-        ['Bus factor score','bus_factor_score',raw?.github?.bus_factor_score != null ? `${raw.github.bus_factor_score}/100` : null,null],
-        ['Sell wall risk','sell_wall_risk',raw?.dex?.sell_wall_risk,null],
-        ['Rev/active user','revenue_per_active_user',raw?.onchain?.revenue_per_active_user != null ? `$${raw.onchain.revenue_per_active_user.toFixed(4)}/user/day` : null,null],
-        // Round 381 (AutoResearch): new diagnostic metrics
-        ['Days since ATH','days_since_ath', raw?.market?.days_since_ath != null ? `${raw.market.days_since_ath}d` : null, null],
-        ['MCap/Volume ratio','market_cap_to_volume_ratio', raw?.market?.market_cap_to_volume_ratio != null ? `${raw.market.market_cap_to_volume_ratio.toFixed(1)}x` : null, null],
-        ['Wash trading risk','wash_trading_risk', raw?.dex?.wash_trading_risk !== 'low' ? raw?.dex?.wash_trading_risk : null, null],
-        ['Avg trade size','median_trade_size_usd', raw?.dex?.median_trade_size_usd != null ? `$${raw.dex.median_trade_size_usd.toFixed(2)}` : null, null],
-        ['Dev velocity tier','github_velocity_tier', raw?.github?.github_velocity_tier, null],
-        ['Narrative freshness','narrative_freshness_score', raw?.social?.narrative_freshness_score != null ? `${raw.social.narrative_freshness_score}/100` : null, null],
-        // Round 382 (AutoResearch): new diagnostic metrics
-        ['Reddit quality','subreddit_quality', raw?.reddit?.subreddit_quality, null],
-        ['Article quality','avg_article_quality_score', raw?.social?.avg_article_quality_score != null ? `${raw.social.avg_article_quality_score.toFixed(2)}x` : null, null],
-        ['Critical issue ratio','critical_issue_ratio', raw?.github?.critical_issue_ratio != null && raw.github.critical_issue_ratio > 10 ? `${raw.github.critical_issue_ratio.toFixed(1)} issues/dev` : null, null],
-        // Round R10 (AutoResearch nightly): new diagnostic metrics
-        ['H1 momentum','h1_momentum_pct', raw?.dex?.h1_momentum_pct != null ? `${raw.dex.h1_momentum_pct.toFixed(0)}%` : null, null],
-        ['Net buy pressure','net_buy_pressure_pct', raw?.dex?.net_buy_pressure_pct != null ? `${raw.dex.net_buy_pressure_pct.toFixed(1)}%` : null, null],
-        ['Tier-1 articles','top_tier_source_count', raw?.social?.top_tier_source_count != null ? `${raw.social.top_tier_source_count}` : null, null],
-        ['Holder engagement','holder_engagement_score', raw?.market?.holder_engagement_score != null ? `${raw.market.holder_engagement_score}/100` : null, null],
-        ['Coin age','coin_age_days', raw?.market?.coin_age_days != null ? (raw.market.coin_age_days < 365 ? `${Math.round(raw.market.coin_age_days/30)}mo` : `${(raw.market.coin_age_days/365).toFixed(1)}yr`) : null, null],
-        // Round 384 (AutoResearch batch): 90d price range context
-        ['90d range pos','price_range_90d_position', raw?.market?.price_range_90d?.position_in_range != null ? `${(raw.market.price_range_90d.position_in_range*100).toFixed(0)}% (${raw.market.price_range_90d.tier?.replace('_',' ')??''})` : null, null],
-        ['90d range width','price_range_90d_width', raw?.market?.price_range_90d?.range_width_pct != null ? `${raw.market.price_range_90d.range_width_pct.toFixed(0)}%` : null, null],
-        ['TVL 90d range pos','tvl_range_90d_position', raw?.onchain?.tvl_range_90d?.position_in_range != null ? `${(raw.onchain.tvl_range_90d.position_in_range*100).toFixed(0)}% of 90d range` : null, null],
       ];
       return rows.filter(([,,value])=> value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== 'n/a').map(([label,key,value,type])=>{
         const cls=type==='change'?` class="${changeClass(value)}"`:''
@@ -790,6 +729,9 @@
       // Trigger smooth reveal animation (Round 2)
       reportBox.classList.add('results-reveal');
 
+      const mr = metricRows(raw);
+      const gc = renderGithubCard(raw?.github);
+
       // ── Panel 1: Header + Verdict + Analysis ─────────────────────
       const panel1 = `<section class="panel">
         <div class="header-row">
@@ -877,26 +819,24 @@
           </div>
         </div>
         ${renderProjectIntro(payload, analysis, raw)}
-        <div class="analysis ${hasAnalysis ? '' : 'analysis-error-state'}">${hasAnalysis ? formatAnalysisText(analysis.analysis_text) : '<p style="margin:0;line-height:1.8;">Oops, something went wrong — we couldn\'t generate the analysis for this project. Try again.</p>'}</div>
-      </section>`;
-
-      // ── Panel 2: Score Radar + Market Board (2-col grid) ─────────
-      const mr = metricRows(raw);
-      const gc = renderGithubCard(raw?.github);
-      const panel2 = `<section class="panel" style="margin-top:18px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="radar-market-grid">
-          <div>
-            <div class="section-label">Score Radar</div>
-            ${renderRadar(scores)}
-            <div class="score-list">${renderScoreBars(scores)}</div>
-          </div>
-          <div>
-            ${mr||gc ? `<div class="section-label">Market Board</div>
-            ${mr?`<table class="table"><tbody>${mr}</tbody></table>`:''}
-            ${gc}` : '<div class="section-label" style="color:var(--muted);">No market data</div>'}
-          </div>
+        <div class="report-main-grid">
+          <div class="analysis ${hasAnalysis ? '' : 'analysis-error-state'}">${hasAnalysis ? formatAnalysisText(analysis.analysis_text) : '<p style="margin:0;line-height:1.8;">Oops, something went wrong — we couldn\'t generate the analysis for this project. Try again.</p>'}</div>
+          <aside class="report-side-stack">
+            <div>
+              <div class="section-label">Score Radar</div>
+              ${renderRadar(scores)}
+              <div class="score-list">${renderScoreBars(scores)}</div>
+            </div>
+            <div>
+              ${mr||gc ? `<div class="section-label">Market Board</div>
+              ${mr?`<table class="table"><tbody>${mr}</tbody></table>`:''}
+              ${gc}` : '<div class="section-label" style="color:var(--muted);">No market data</div>'}
+            </div>
+          </aside>
         </div>
       </section>`;
+
+      const panel2 = ``;
 
       // ── Panel 3: Bull Case / Bear Case ───────────────────────────
       const llmBull = analysis?.bull_case;
