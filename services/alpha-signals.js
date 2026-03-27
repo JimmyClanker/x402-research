@@ -1026,6 +1026,16 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // Round R10 (AutoResearch nightly): Wire in new R10 detectors
+  const topTierCovSig = detectTopTierCoverage(rawData);
+  if (topTierCovSig) signals.push(topTierCovSig);
+
+  const momDivSig = detectMomentumDivergenceAlpha(rawData);
+  if (momDivSig) signals.push(momDivSig);
+
+  const liqQualSig = detectHighQualityLiquiditySetup(rawData);
+  if (liqQualSig) signals.push(liqQualSig);
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {
@@ -1360,6 +1370,69 @@ export function detectLowFloatMomentum(rawData = {}) {
       strength: pctCirculating < 15 ? 'strong' : 'moderate',
       detail: `Only ${pctCirculating.toFixed(1)}% of supply circulating with ${momentum} momentum — low-float structure amplifies price moves. Volume velocity ${velPct.toFixed(1)}% of MCap.`,
     };
+  }
+  return null;
+}
+
+// ─── Round R10 (AutoResearch nightly): New alpha signal detectors ─────────────
+
+/**
+ * Top-tier media coverage signal: multiple Tier-1 sources covering the project.
+ * CoinDesk/Bloomberg/Blockworks coverage is a strong legitimacy + interest signal.
+ */
+export function detectTopTierCoverage(rawData = {}) {
+  const social = rawData.social ?? {};
+  const topTierCount = Number(social.top_tier_source_count ?? 0);
+  if (topTierCount >= 3) {
+    return {
+      signal: 'top_tier_media_coverage',
+      strength: topTierCount >= 5 ? 'strong' : 'moderate',
+      detail: `${topTierCount} articles from Tier-1 crypto news sources (CoinDesk/Bloomberg/Blockworks etc.) — institutional-grade coverage signals legitimacy and market awareness.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Momentum divergence alpha: short-term momentum significantly stronger than long-term.
+ * Positive divergence (24h accelerating vs 30d trend) = fresh catalyst driving price.
+ */
+export function detectMomentumDivergenceAlpha(rawData = {}) {
+  const market = rawData.market ?? {};
+  const divergence = Number(market.momentum_divergence ?? NaN);
+  const priceChange24h = Number(market.price_change_pct_24h ?? 0);
+  if (!Number.isFinite(divergence)) return null;
+  // Strong positive divergence + actual positive 24h move = fresh momentum
+  if (divergence > 500 && priceChange24h > 5) {
+    return {
+      signal: 'short_term_momentum_acceleration',
+      strength: divergence > 2000 ? 'strong' : 'moderate',
+      detail: `Momentum divergence: +${divergence.toFixed(0)} — 24h momentum accelerating well above 30d trend (${priceChange24h.toFixed(1)}% today vs ${(market.price_change_pct_30d ?? 0).toFixed(1)}% 30d). Fresh catalyst driving price discovery.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Detect liquidity trap avoidance: deep liquidity + low concentration + buy pressure.
+ * This combination means you can enter AND exit without moving the market against you.
+ */
+export function detectHighQualityLiquiditySetup(rawData = {}) {
+  const dex = rawData.dex ?? {};
+  const market = rawData.market ?? {};
+  const liq = Number(dex.dex_liquidity_usd ?? 0);
+  const topPairLiqPct = Number(dex.top_pair_liquidity_pct ?? 100);
+  const buySellRatio = Number(dex.buy_sell_ratio ?? 1);
+  const mcap = Number(market.market_cap ?? 0);
+  if (liq >= 1_000_000 && topPairLiqPct < 70 && buySellRatio > 1.1 && mcap > 0) {
+    const liqToMcapPct = (liq / mcap) * 100;
+    if (liqToMcapPct >= 2) {
+      return {
+        signal: 'high_quality_liquidity',
+        strength: liq >= 5_000_000 ? 'strong' : 'moderate',
+        detail: `$${(liq / 1e6).toFixed(1)}M DEX liquidity across multiple pools (largest pool ${topPairLiqPct.toFixed(0)}%), buy pressure ${buySellRatio.toFixed(2)}x. High liquidity-to-MCap ratio ${liqToMcapPct.toFixed(1)}% enables position entry/exit without slippage.`,
+      };
+    }
   }
   return null;
 }

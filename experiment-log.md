@@ -2910,3 +2910,63 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Tests:** 177/177 pass
 - **Result:** kept
 
+### Round 501 — Button Active Press States
+- **Change:** Improved button :active states with scale(0.97) for better press feel across all buttons
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 502 — Smooth Transition Timing
+- **Change:** Improved transition timing with spring easing cubic-bezier(0.16, 1, 0.3, 1) on primary/secondary buttons
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 503 — Focus Ring Polish
+- **Change:** Added smooth transition animation to focus-visible ring with spring easing
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 504 — Card Hover Improvements
+- **Change:** Improved card and card-panel hover transitions with spring easing for smoother feel
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 505 — Input Focus States Polish
+- **Change:** Enhanced input focus with spring easing transition and subtle shadow glow on focus
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 506 — Loading Skeleton Animation Polish
+- **Change:** Improved skeleton shimmer animation with softer easing and increased brightness
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 507 — Link Hover Underline Animation
+- **Change:** Added slide-in underline animation on hover for text links using spring easing
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 508 — Icon Hover Animations
+- **Change:** Added scale and rotate animation to how-num icons on step card hover
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 509 — Scroll Behavior Improvements
+- **Change:** Added scroll-padding-top for sticky header and smooth scroll to dropdown
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+
+### Round 510 — Nav Link Transition Polish
+- **Change:** Added spring easing and subtle translateY on hover to nav links
+- **Files:** public/alphascan.html
+- **Tests:** 177/177 pass
+- **Result:** kept
+

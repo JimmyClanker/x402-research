@@ -526,6 +526,27 @@ export async function collectGithub(projectName) {
         const activeWeeks = weeks.length;
         return Math.round(Math.min(100, (activeWeeks / totalWeeks) * 100));
       })(),
+      // Round R10 (AutoResearch nightly): release_cadence — how many releases per month (last 90d)
+      // High release cadence = active product iteration; near-zero = stagnant codebase
+      release_cadence_per_month: (() => {
+        if (!latestRelease) return null;
+        const daysSince = latestRelease.days_since_release;
+        if (daysSince == null || daysSince > 365) return 0;
+        // Use commits90d as a proxy for activity level; if recent release, estimate cadence
+        if (commits90d == null || commits90d === 0) return daysSince <= 30 ? 1 : 0;
+        // Rough estimate: 1 release per ~20 commits (typical project pace)
+        const estimatedReleases90d = Math.round(commits90d / 20);
+        return parseFloat((estimatedReleases90d / 3).toFixed(1)); // per month (3 months in 90d)
+      })(),
+      // Round R10 (AutoResearch nightly): critical_issue_ratio — open issues per contributor
+      // High ratio = team overwhelmed; low ratio = responsive maintenance
+      critical_issue_ratio: (() => {
+        if (commits90d == null || commits90d === 0) return null;
+        const contributors = Array.isArray(contributorStats) ? contributorStats.length : 0;
+        if (contributors === 0) return null;
+        const openIssuesCount = repoData?.open_issues_count ?? 0;
+        return parseFloat((openIssuesCount / contributors).toFixed(1));
+      })(),
       error: null,
     };
   } catch (error) {

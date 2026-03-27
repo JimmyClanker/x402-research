@@ -92,6 +92,26 @@ const CATEGORY_ALIASES = {
   'wallet': 'Infrastructure',
   'privacy coin': 'Privacy',
   'privacy': 'Privacy',
+  // Round R10 (AutoResearch nightly): 2026 emerging category aliases
+  'ai infrastructure': 'AI',
+  'ai agent': 'AI',
+  'on-chain ai': 'AI',
+  'decentralized ai': 'AI',
+  'zkml': 'AI',
+  'decentralized compute': 'DePIN',
+  'compute marketplace': 'DePIN',
+  'storage': 'DePIN',
+  'wireless': 'DePIN',
+  'sensor networks': 'DePIN',
+  'tokenized equity': 'RWA',
+  'tokenized bonds': 'RWA',
+  'tokenized real estate': 'RWA',
+  'liquid restaking': 'Liquid Staking',
+  'lrt': 'Liquid Staking',
+  'erc-4337': 'Infrastructure',
+  'account abstraction': 'Infrastructure',
+  'based rollup': 'Layer 2',
+  'appchain': 'Layer 2',
 };
 
 function normalizeCategory(category) {

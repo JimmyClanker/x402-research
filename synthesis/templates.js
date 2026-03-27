@@ -216,6 +216,27 @@ function extractKeyMetrics(rawData, scores) {
       if (q >= 0.9) return `${q.toFixed(2)}x (average)`;
       return `${q.toFixed(2)}x (low quality)`;
     })(),
+    // Round R10 (AutoResearch nightly): New metric additions
+    top_tier_source_count: rawData?.social?.top_tier_source_count ?? null,
+    h1_momentum_pct: rawData?.dex?.h1_momentum_pct ?? null,
+    h1_momentum_fmt: (() => {
+      const v = rawData?.dex?.h1_momentum_pct;
+      if (v == null) return 'n/a';
+      if (v > 200) return `${v.toFixed(0)}% (breakout hour)`;
+      if (v > 120) return `${v.toFixed(0)}% (elevated activity)`;
+      if (v > 60) return `${v.toFixed(0)}% (above avg)`;
+      return `${v.toFixed(0)}% (quiet)`;
+    })(),
+    net_buy_pressure_pct: rawData?.dex?.net_buy_pressure_pct ?? null,
+    holder_engagement_score: rawData?.market?.holder_engagement_score ?? null,
+    coin_age_days: rawData?.market?.coin_age_days ?? null,
+    coin_age_fmt: (() => {
+      const d = rawData?.market?.coin_age_days;
+      if (d == null) return 'n/a';
+      if (d < 90) return `${d}d (very new)`;
+      if (d < 365) return `${Math.round(d / 30)}mo`;
+      return `${(d / 365).toFixed(1)}yr`;
+    })(),
   };
 }
 

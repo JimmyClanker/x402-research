@@ -200,6 +200,25 @@ function buildFactRegistry(rawData = {}) {
   push('contract.is_proxy', rawData?.contract?.is_proxy);
   push('contract.audited', rawData?.contract?.audited);
 
+  // Round R10 (AutoResearch nightly): New high-value facts for better LLM context
+  push('social.top_tier_source_count', rawData?.social?.top_tier_source_count);
+  push('social.airdrop_mentions', rawData?.social?.airdrop_mentions);
+  push('social.hack_exploit_mentions', rawData?.social?.hack_exploit_mentions);
+  push('market.holder_engagement_score', rawData?.market?.holder_engagement_score);
+  push('market.ath_recency', rawData?.market?.ath_recency);
+  push('market.days_since_ath', rawData?.market?.days_since_ath);
+  push('market.coin_age_days', rawData?.market?.coin_age_days);
+  push('market.community_score', rawData?.market?.community_score);
+  push('dex.h1_momentum_pct', rawData?.dex?.h1_momentum_pct);
+  push('dex.net_buy_pressure_pct', rawData?.dex?.net_buy_pressure_pct);
+  push('dex.wash_trading_risk', rawData?.dex?.wash_trading_risk);
+  push('tokenomics.unlock_risk_label', rawData?.tokenomics?.unlock_risk_label);
+  push('tokenomics.vesting_launch_date', rawData?.tokenomics?.vesting_info?.launch_date);
+  push('tokenomics.team_allocation_pct', rawData?.tokenomics?.vesting_info?.team_allocation_pct);
+  push('onchain.revenue_per_active_user', rawData?.onchain?.revenue_per_active_user);
+  push('onchain.fee_revenue_acceleration', rawData?.onchain?.fee_revenue_acceleration);
+  push('onchain.protocol_maturity', rawData?.onchain?.protocol_maturity);
+
   return facts;
 }
 
@@ -2042,6 +2061,18 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '8. CHECK VERDICT: does your narrative actually justify the verdict? If you say HOLD but your evidence is all positive, recalibrate.',
     '9. TOKENOMICS SANITY CHECK: if unlock_risk_label is "critical" or "high", this MUST appear in your bear case risks array and your analysis_text risk paragraph. Do not ignore critical tokenomics red flags.',
     '10. INFLATION AWARENESS: if annual inflation rate > 30%, explicitly address dilution timeline in the bear case. High-yield protocols with high inflation require yield > inflation to be net positive for holders.',
+    '11. TOP-TIER COVERAGE AWARENESS: if top_tier_source_count >= 3 (in FACT_REGISTRY), mention the institutional-grade media attention in your analysis as a legitimacy signal. If top_tier_source_count = 0 despite >$50M MCap, flag the information vacuum risk.',
+    '12. AIRDROP NOISE FILTER: if airdrop_mentions >= 5 (in FACT_REGISTRY), treat social sentiment with heightened skepticism — much of the community engagement may be farming activity rather than long-term conviction.',
+    '## 2026 NARRATIVE CONTEXT (Round R10)',
+    'These are the dominant 2026 crypto investment themes. When project data aligns with these themes, mention the thesis alignment:',
+    '- Bitcoin treasury strategy (corporate BTC reserves): bullish for BTC and broader crypto market',
+    '- Tokenized RWA (real-world assets): institutional capital inflow to on-chain equities, bonds, real estate',
+    '- AI x Crypto convergence: on-chain AI inference, agent economy, ZKML, decentralized compute',
+    '- Stablecoin regulation (US stablecoin bill): legitimacy boost for USD-pegged stablecoins and their ecosystems',
+    '- EVM account abstraction (ERC-4337/EIP-7702): better UX, paymaster economics, bundler revenue models',
+    '- Restaking / liquid restaking (LRT): additional yield layer for ETH stakers, new risk surface',
+    '- Based rollups & preconfirmations: Ethereum L2 competitive dynamics evolving',
+    'Only mention narrative alignment when the project data actually supports it.',
   ].join('\n\n');
 
   // Round R179: Build composite indexes block from scoring output

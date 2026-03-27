@@ -535,6 +535,33 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
     });
   }
 
+  // Round R10 (AutoResearch nightly): Airdrop dump circuit breaker
+  // When airdrop_mentions is high AND volume spike AND negative price → strong distribution signal
+  // Prevents BUY ratings during what is effectively a farming-exit event
+  const airdropMentionsCB = safeNum(rawData?.social?.airdrop_mentions ?? 0);
+  const volSpikeCB = rawData?.market?.volume_spike_flag;
+  const price24hCB = safeNum(rawData?.market?.price_change_pct_24h ?? 0);
+  if (airdropMentionsCB >= 5 && volSpikeCB === 'extreme_spike' && price24hCB < -15) {
+    breakers.push({
+      cap: 3.5,
+      reason: `Airdrop dump pattern: ${airdropMentionsCB} airdrop mentions + extreme volume spike + ${price24hCB.toFixed(1)}% 24h drop. Classic post-airdrop distribution — active exit event in progress.`,
+      severity: 'critical',
+    });
+  }
+
+  // Round R10 (AutoResearch nightly): No-coverage large-cap concern
+  // A project >$100M MCap with ZERO tier-1 news coverage is informationally opaque
+  // Cannot recommend BUY without basic institutional coverage/information validation
+  const topTierCB = Number(rawData?.social?.top_tier_source_count ?? -1);
+  const mcapCB = safeNum(rawData?.market?.market_cap ?? 0);
+  if (topTierCB === 0 && mcapCB > 100_000_000 && overallScore > 7.5) {
+    breakers.push({
+      cap: 7.5,
+      reason: `$${(mcapCB / 1e6).toFixed(0)}M MCap project with zero tier-1 news coverage — information vacuum prevents high-conviction BUY rating.`,
+      severity: 'warning',
+    });
+  }
+
   // Applica il cap più restrittivo
   if (breakers.length === 0) {
     return { score: overallScore, breakers: [], capped: false };

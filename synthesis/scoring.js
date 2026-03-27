@@ -789,6 +789,22 @@ function scoreSocialMomentum(social = {}) {
     raw -= 0.1; // Stale narrative + low volume = signal exhaustion
   }
 
+  // Round R10 (AutoResearch nightly): top_tier_source_count bonus
+  // Tier-1 media coverage (Bloomberg/CoinDesk/Blockworks) is independent, hard to fabricate,
+  // and signals the project has crossed an institutional awareness threshold
+  const topTierSourceCount = safeNumber(social.top_tier_source_count ?? 0);
+  if (topTierSourceCount >= 5) raw += 0.45;       // Comprehensive tier-1 coverage
+  else if (topTierSourceCount >= 3) raw += 0.25;  // Meaningful tier-1 presence
+  else if (topTierSourceCount >= 1) raw += 0.1;   // At least some credible coverage
+
+  // Round R10 (AutoResearch nightly): market.community_score supplement
+  // The CoinGecko community score (twitter + telegram + reddit normalized) provides a
+  // broader, slower-moving signal than the current-window social mentions.
+  // Cross-checking with it helps validate whether social activity is a spike or a trend.
+  // Note: community_score is in rawData.market, not in social — access via social collector context
+  // (this function receives rawData.social, so cross-reference via side channel below)
+  // community_score is applied in calculateScores() after individual dimension calls
+
   // Round 48 (AutoResearch): social_health_index — 0-100 normalized composite
   // Measures community health: volume, sentiment quality, narrative depth, engagement quality
   const shiComponents = [
@@ -1099,6 +1115,26 @@ function scoreDistribution(tokenomics = {}, market = {}) {
 
   // Distribution data availability bonus
   if (dist) { raw += 0.3; parts.push('distribution data available'); }
+
+  // Round R10 (AutoResearch nightly): vesting launch_date cliff timing
+  // A protocol that launched <1 year ago has its first major cliff approaching — unlock risk is live
+  const vestingInfo = tokenomics.vesting_info;
+  if (vestingInfo?.launch_date) {
+    const launchMs = Date.now() - new Date(vestingInfo.launch_date).getTime();
+    const launchMonths = launchMs / (1000 * 60 * 60 * 24 * 30.44);
+    if (Number.isFinite(launchMonths) && launchMonths > 0) {
+      if (launchMonths < 6 && unlockOverhang != null && unlockOverhang > 30) {
+        raw -= 0.8; // Very early stage with large locked supply = cliff imminent
+        parts.push(`launch_age ${launchMonths.toFixed(0)}mo, cliff imminent (-0.8)`);
+      } else if (launchMonths >= 6 && launchMonths < 18 && unlockOverhang != null && unlockOverhang > 40) {
+        raw -= 0.5; // Mid-stage unlock cliff (typical 12-18m team vest)
+        parts.push(`launch_age ${launchMonths.toFixed(0)}mo, team cliff zone (-0.5)`);
+      } else if (launchMonths > 36 && dilutionRisk === 'low') {
+        raw += 0.3; // Mature project with low remaining unlock = safe distribution
+        parts.push(`launch_age ${launchMonths.toFixed(0)}mo, mature distribution (+0.3)`);
+      }
+    }
+  }
 
   return {
     score: clampScore(raw),
@@ -1427,6 +1463,16 @@ export function calculateScores(data) {
     social_momentum.score = clampScore(social_momentum.score + redditAdj);
   }
 
+  // Round R10 (AutoResearch nightly): Airdrop farming penalty for social momentum
+  // When airdrop buzz is high + volume spike → much of the "social momentum" is farming noise, not conviction
+  const airdropMentions = safeNumber(data?.social?.airdrop_mentions ?? 0);
+  const volumeSpikeFlag = data?.market?.volume_spike_flag;
+  if (airdropMentions >= 5 && (volumeSpikeFlag === 'extreme_spike' || volumeSpikeFlag === 'spike')) {
+    const airdropPenalty = airdropMentions >= 8 ? 0.6 : 0.3;
+    social_momentum.score = clampScore(social_momentum.score - airdropPenalty);
+    social_momentum.reasoning += ` | Airdrop farming noise: ${airdropMentions} airdrop mentions + volume spike = discounted social signal (-${airdropPenalty}).`;
+  }
+
   // Round 9: Reddit supplement to social momentum
   social_momentum.score = applyRedditSupplement(social_momentum.score, data?.reddit);
 
@@ -1446,6 +1492,25 @@ export function calculateScores(data) {
     social_momentum.score = Math.min(10, parseFloat((social_momentum.score + 0.3).toFixed(1)));
   } else if (newsMom === 'declining') {
     social_momentum.score = Math.max(1, parseFloat((social_momentum.score - 0.15).toFixed(1)));
+  }
+
+  // Round R10 (AutoResearch nightly): community_score cross-validation supplement
+  // CoinGecko community_score (twitter+telegram+reddit normalized, 0-100) provides a
+  // longer-window community size signal that validates whether social activity is structural.
+  // High community_score + positive sentiment = trend; low community + positive sentiment = spike.
+  const communityScore = safeNumber(data?.market?.community_score ?? null);
+  if (communityScore !== null && communityScore > 0) {
+    const socialSentScore = safeNumber(data?.social?.sentiment_score ?? 0);
+    if (communityScore >= 70 && socialSentScore > 0.3) {
+      social_momentum.score = clampScore(social_momentum.score + 0.35);
+      social_momentum.reasoning += ` | Large community (score ${communityScore}/100) validates positive sentiment (+0.35).`;
+    } else if (communityScore >= 40 && socialSentScore > 0.2) {
+      social_momentum.score = clampScore(social_momentum.score + 0.15);
+    } else if (communityScore < 15 && socialSentScore > 0.5) {
+      // Tiny community with very positive mentions = pump/shill signal, discount
+      social_momentum.score = clampScore(social_momentum.score - 0.2);
+      social_momentum.reasoning += ` | Tiny community (score ${communityScore}/100) discounts positive sentiment spike (-0.2).`;
+    }
   }
 
   // Round 29 (AutoResearch batch): narrative momentum supplement

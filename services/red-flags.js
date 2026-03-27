@@ -669,6 +669,13 @@ export function detectRedFlags(rawData = {}, scores = {}) {
   const mercenaryWhaleFlag = detectMercenaryTvlConcentration(rawData);
   if (mercenaryWhaleFlag) flags.push(mercenaryWhaleFlag);
 
+  // Round R10 (AutoResearch nightly): Wire in new R10 detectors
+  const airdropDumpFlag = detectAirdropFarmingRisk(rawData);
+  if (airdropDumpFlag) flags.push(airdropDumpFlag);
+
+  const noCoverageFlag = detectNoCoverageRisk(rawData);
+  if (noCoverageFlag) flags.push(noCoverageFlag);
+
   // Deduplicate flags by flag key (keep highest severity)
   const severityOrder = { critical: 3, warning: 2, info: 1 };
   const flagMap = new Map();
@@ -940,6 +947,57 @@ export function detectMercenaryTvlConcentration(rawData = {}) {
       flag: 'mercenary_tvl_whale_concentration',
       severity: tvlPerUser > 20_000_000 ? 'critical' : 'warning',
       detail: `Average TVL per active user is $${(tvlPerUser / 1_000_000).toFixed(1)}M — TVL is dominated by a small number of whale depositors, not organic user adoption. Withdrawal of one whale could crater TVL.`,
+    };
+  }
+  return null;
+}
+
+// ─── Round R10 (AutoResearch nightly): New red flag detectors ─────────────────
+
+/**
+ * Detect when a token has only airdrop-farming activity (no organic use).
+ * Many airdrops attract farmers who dump immediately after claim.
+ */
+export function detectAirdropFarmingRisk(rawData = {}) {
+  const social = rawData.social ?? {};
+  const market = rawData.market ?? {};
+  const airdropMentions = Number(social.airdrop_mentions ?? 0);
+  const volumeSpikeFlag = market.volume_spike_flag;
+  const change24h = Number(market.price_change_pct_24h ?? 0);
+  // High airdrop buzz + volume spike + negative price = dump pattern post-claim
+  if (airdropMentions >= 3 && volumeSpikeFlag === 'extreme_spike' && change24h < -10) {
+    return {
+      flag: 'airdrop_dump_risk',
+      severity: 'critical',
+      detail: `Airdrop mentioned ${airdropMentions} times with extreme volume spike and ${change24h.toFixed(1)}% price drop — classic post-airdrop dump pattern detected. Farmers likely selling claims.`,
+    };
+  }
+  if (airdropMentions >= 5 && (volumeSpikeFlag === 'spike' || volumeSpikeFlag === 'extreme_spike')) {
+    return {
+      flag: 'airdrop_farming_risk',
+      severity: 'warning',
+      detail: `High airdrop activity (${airdropMentions} mentions) with volume spike — large fraction of holders may be farmers with no long-term conviction. Sell pressure likely post-claim window.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Detect top-tier source absence: low-cap project with zero tier-1 news coverage.
+ * If only blog posts and unknown sites cover a project, information asymmetry risk is high.
+ */
+export function detectNoCoverageRisk(rawData = {}) {
+  const social = rawData.social ?? {};
+  const market = rawData.market ?? {};
+  const topTierCount = Number(social.top_tier_source_count ?? 0);
+  const filteredMentions = Number(social.filtered_mentions ?? social.mentions ?? 0);
+  const mcap = Number(market.market_cap ?? 0);
+  // >$50M mcap project with 0 tier-1 coverage despite having mentions = information vacuum
+  if (mcap > 50_000_000 && filteredMentions >= 5 && topTierCount === 0) {
+    return {
+      flag: 'no_tier1_coverage',
+      severity: 'warning',
+      detail: `$${(mcap / 1e6).toFixed(0)}M market cap project has ${filteredMentions} mentions but zero coverage from tier-1 crypto news sources. Information vacuum risk — harder to verify claims.`,
     };
   }
   return null;

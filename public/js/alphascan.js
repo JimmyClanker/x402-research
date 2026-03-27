@@ -29,9 +29,20 @@
     }
     function verdictClass(verdict) {
       const v = String(verdict || '').toUpperCase();
+      if (v === 'STRONG BUY') return 'strong-buy';
       if (v.includes('BUY'))  return 'buy';
       if (v.includes('HOLD')) return 'hold';
+      if (v === 'STRONG AVOID') return 'strong-avoid';
       return 'avoid';
+    }
+    // Round R10: verdict emoji for quick scanning on mobile
+    function verdictEmoji(verdict) {
+      const v = String(verdict || '').toUpperCase();
+      if (v === 'STRONG BUY') return '🚀';
+      if (v.includes('BUY'))  return '✅';
+      if (v.includes('HOLD')) return '⏸️';
+      if (v === 'STRONG AVOID') return '🚫';
+      return '❌';
     }
     function formatCompactNumber(value) {
       const num = Number(value);
@@ -325,9 +336,14 @@
         const confBadge = confLabel && confLabel !== 'High'
           ? `<span style="font-size:0.6rem;padding:1px 5px;border-radius:999px;background:rgba(255,255,255,0.06);color:${confLabel==='Unreliable'?'#f87171':confLabel==='Low'?'#fdba74':'#fbbf24'};margin-left:4px;">${confLabel}</span>`
           : '';
+        // Round R10 (AutoResearch nightly): raw_score vs confidence-weighted score comparison
+        const rawScoreV = Number(dim.raw_score ?? v);
+        const confidenceHint = (rawScoreV !== v && Math.abs(rawScoreV - v) > 0.2)
+          ? `<span style="font-size:0.58rem;color:#888;margin-left:3px;" title="Raw score ${rawScoreV.toFixed(1)}, pulled toward neutral by confidence weight">raw ${rawScoreV.toFixed(1)}</span>`
+          : '';
         return `<div class="score-row"${tooltip}>
           <div class="score-label">
-            <strong>${label}</strong>${confBadge}
+            <strong>${label}</strong>${confBadge}${confidenceHint}
             <span style="color:${t.color};font-size:0.65rem;background:${t.bg};border:1px solid ${t.border};border-radius:999px;padding:1px 6px;display:inline-flex;align-items:center;gap:3px;font-weight:600;">${t.icon} ${t.label}</span>
           </div>
           <div class="bar">
@@ -366,7 +382,7 @@
         ['DEX liquidity','dex_liquidity_usd',raw?.dex?.dex_liquidity_usd,null],
         ['DEX buy/sell','buy_sell_ratio',raw?.dex?.buy_sell_ratio,null],
         ['Coin age (days)','coin_age_days',raw?.market?.coin_age_days,null],
-        ['Community score','community_score',raw?.market?.community_score,null],
+        ['Community score','community_score',raw?.market?.community_score != null ? `${raw.market.community_score}/100` : null,null],
         ['Realized vol 90d','realized_vol_90d',raw?.market?.realized_vol_90d,'pct'],
         // Round 233 (AutoResearch nightly): new diagnostic metrics
         ['Sentiment quality','sentiment_credibility_score',raw?.social?.sentiment_credibility_score,null],
@@ -401,6 +417,12 @@
         ['Reddit quality','subreddit_quality', raw?.reddit?.subreddit_quality, null],
         ['Article quality','avg_article_quality_score', raw?.social?.avg_article_quality_score != null ? `${raw.social.avg_article_quality_score.toFixed(2)}x` : null, null],
         ['Critical issue ratio','critical_issue_ratio', raw?.github?.critical_issue_ratio != null && raw.github.critical_issue_ratio > 10 ? `${raw.github.critical_issue_ratio.toFixed(1)} issues/dev` : null, null],
+        // Round R10 (AutoResearch nightly): new diagnostic metrics
+        ['H1 momentum','h1_momentum_pct', raw?.dex?.h1_momentum_pct != null ? `${raw.dex.h1_momentum_pct.toFixed(0)}%` : null, null],
+        ['Net buy pressure','net_buy_pressure_pct', raw?.dex?.net_buy_pressure_pct != null ? `${raw.dex.net_buy_pressure_pct.toFixed(1)}%` : null, null],
+        ['Tier-1 articles','top_tier_source_count', raw?.social?.top_tier_source_count != null ? `${raw.social.top_tier_source_count}` : null, null],
+        ['Holder engagement','holder_engagement_score', raw?.market?.holder_engagement_score != null ? `${raw.market.holder_engagement_score}/100` : null, null],
+        ['Coin age','coin_age_days', raw?.market?.coin_age_days != null ? (raw.market.coin_age_days < 365 ? `${Math.round(raw.market.coin_age_days/30)}mo` : `${(raw.market.coin_age_days/365).toFixed(1)}yr`) : null, null],
       ];
       return rows.filter(([,,value])=> value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== 'n/a').map(([label,key,value,type])=>{
         const cls=type==='change'?` class="${changeClass(value)}"`:''
@@ -742,6 +764,14 @@
       const avgScore  = overallScore(scores);
       const hasAnalysis = !!String(analysis?.analysis_text || '').trim();
 
+      // Round R10 (AutoResearch nightly): Update page title for SEO + browser sharing
+      const projectNameForTitle = raw?.market?.name || payload?.project || 'Unknown';
+      const scoreForTitle = avgScore != null ? `${avgScore.toFixed(1)}/10` : 'n/a';
+      document.title = `${verdictEmoji(verdict)} ${projectNameForTitle} ${verdict} ${scoreForTitle} | Alpha Scanner — Clawnkers`;
+      // Also update og:description meta for social sharing
+      const descMeta = document.querySelector('meta[property="og:description"]');
+      if (descMeta) descMeta.setAttribute('content', `${projectNameForTitle}: ${verdict} (${scoreForTitle}) — Clawnkers Alpha Scanner`);
+
       resultsSection.classList.add('visible');
       errorBox.classList.add('hidden');
       reportBox.classList.remove('hidden');
@@ -757,7 +787,7 @@
           </div>
           <div class="verdict-wrap">
             <div class="verdict-meta">Research verdict</div>
-            <div class="verdict ${verdictClass(verdict)}">${escapeHtml(verdict)}</div>
+            <div class="verdict ${verdictClass(verdict)}">${verdictEmoji(verdict)} ${escapeHtml(verdict)}</div>
             <div class="overall-score ${verdictClass(verdict)}">${avgScore!==null?`${avgScore.toFixed(1)}/10`:'n/a'}</div>
             ${(()=>{
               // Round 106: volatility badge — softer colors, better contrast

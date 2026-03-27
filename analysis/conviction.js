@@ -256,7 +256,20 @@ export function calculateConviction(rawData, scores, enrichment = {}) {
     return 0;
   })();
 
-  const total = Math.min(100, Math.max(0, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus + range52wBonus + holderEngBonus + sellWallConvPenalty + washTradingPenalty + athConvictionBonus + articleQualityBonus + organicVolumeBonus + inflationConvPenalty + lowFloatMomentumBonus));
+  // Round R10 (AutoResearch nightly): Top-tier source coverage conviction boost
+  // When multiple tier-1 outlets cover a project, the information quality is higher,
+  // reducing the risk of acting on biased/fake news. This boosts analyst conviction.
+  const topTierCoverageBonus = (() => {
+    const topTierCount = Number(rawData?.social?.top_tier_source_count ?? 0);
+    if (topTierCount >= 5) return 4;   // Bloomberg/Blockworks/CoinDesk all covering = credible
+    if (topTierCount >= 3) return 2;
+    if (topTierCount >= 1) return 1;
+    const mcap = safeNumber(rawData?.market?.market_cap ?? 0);
+    if (topTierCount === 0 && mcap > 50_000_000) return -2; // large MCap with no coverage = information vacuum
+    return 0;
+  })();
+
+  const total = Math.min(100, Math.max(0, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus + range52wBonus + holderEngBonus + sellWallConvPenalty + washTradingPenalty + athConvictionBonus + articleQualityBonus + organicVolumeBonus + inflationConvPenalty + lowFloatMomentumBonus + topTierCoverageBonus));
   const label = convictionLabel(total);
 
   const reasoning = [

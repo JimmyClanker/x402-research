@@ -283,6 +283,23 @@ export function scoreReportQuality(rawData, scores, analysis) {
     score = Math.max(0, score - 10);
   }
 
+  // Round R10 (AutoResearch nightly): information vacuum check
+  // Large-cap project with no tier-1 coverage = higher information asymmetry risk
+  const socialForQuality = rawData?.social ?? {};
+  const topTierCount = Number(socialForQuality.top_tier_source_count ?? -1);
+  const mcapForQuality = Number(rawData?.market?.market_cap ?? 0);
+  if (topTierCount === 0 && mcapForQuality > 50_000_000) {
+    issues.push(`No tier-1 coverage despite $${(mcapForQuality / 1e6).toFixed(0)}M MCap — information vacuum reduces report reliability. Data may be based on low-quality or biased sources only.`);
+    score = Math.max(0, score - 4);
+  }
+
+  // Round R10 (AutoResearch nightly): airdrop noise quality check
+  const airdropMentionsForQuality = Number(socialForQuality.airdrop_mentions ?? 0);
+  if (airdropMentionsForQuality >= 5) {
+    issues.push(`High airdrop activity (${airdropMentionsForQuality} mentions) — social sentiment likely inflated by farming activity. True community conviction may be lower than scores suggest.`);
+    score = Math.max(0, score - 3);
+  }
+
   return {
     quality_score: Math.max(0, Math.min(100, score)),
     grade,

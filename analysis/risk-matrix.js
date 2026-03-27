@@ -76,6 +76,12 @@ const FLAG_CATEGORY_MAP = {
   falling_social_velocity: 'market',
   zombie_token_no_dex: 'market',
 
+  // Round R10 (AutoResearch nightly): new risk categories
+  airdrop_dump_risk: 'market',
+  airdrop_farming_risk: 'market',
+  no_tier1_coverage: 'operational',
+  mercenary_tvl_whale_concentration: 'concentration',
+
   // Other/mixed
   young_project: 'operational',
   bearish_sentiment: 'market',

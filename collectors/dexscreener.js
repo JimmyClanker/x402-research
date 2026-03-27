@@ -259,6 +259,11 @@ export async function collectDexScreener(projectName) {
       h6_volume_pct_of_24h: (h6Vol > 0 && h24Vol > 0)
         ? parseFloat(((h6Vol / h24Vol) * 100).toFixed(1))
         : null,
+      // Round R10 (AutoResearch nightly): h1 volume annualized as % of 24h — intraday momentum metric
+      // If h1 annualized >> h24 actual, current hour has much more activity than daily avg = breakout forming
+      h1_momentum_pct: (h1Vol > 0 && h24Vol > 0)
+        ? parseFloat(((h1Vol * 24 / h24Vol) * 100).toFixed(1))
+        : null,
       dex_price_change_m5: dexPriceChangeM5,
       dex_price_change_h1: dexPriceChangeH1,
       dex_price_change_h24: dexPriceChangeH24,

@@ -58,7 +58,9 @@ export async function collectReddit(projectName) {
   const fallback = createEmptyRedditResult(projectName);
 
   try {
-    const url = `${REDDIT_SEARCH_URL}?q=${encodeURIComponent(projectName + ' crypto')}&sort=new&limit=25&t=week`;
+    // Round R10 (AutoResearch nightly): Use 'hot' sort for fresh content + broader search window
+    // 'hot' returns the most upvoted recent posts — higher signal than pure 'new' (which includes spam)
+    const url = `${REDDIT_SEARCH_URL}?q=${encodeURIComponent(projectName + ' crypto')}&sort=hot&limit=30&t=month`;
     // Reddit JSON endpoint — use a browser-like UA to reduce 429 probability
     const data = await fetchJson(url, {
       timeoutMs: 10000,

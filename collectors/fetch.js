@@ -2,11 +2,15 @@ const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 800;
 
-// Round 4 (AutoResearch batch): rotate user-agents to reduce bot-filter false positives
+// Round R10 (AutoResearch nightly): rotate user-agents to reduce bot-filter false positives
+// Expanded pool with more realistic browser-style UAs to reduce 403/429 on aggressive APIs
 const USER_AGENTS = [
   'AlphaScanner/2.0 (research; +https://clawnkers.com)',
   'CryptoResearch/1.5 (+https://clawnkers.com/alphascan)',
   'Mozilla/5.0 (compatible; AlphaBot/1.0; +https://clawnkers.com)',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 ];
 let _uaIdx = 0;
 function nextUserAgent() {

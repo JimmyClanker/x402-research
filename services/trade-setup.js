@@ -57,7 +57,23 @@ export function generateTradeSetup(rawData, scores) {
 
   // Entry zone: volatility-adjusted (base ±5%, expand if 7d volatility >20%)
   let entrySpread = 0.05; // default 5%
-  if (priceChange7d > 20) {
+  // Round R10 (AutoResearch nightly): Use 90-day realized volatility for better ATR estimate
+  // This is more robust than 7d price change alone, which can be distorted by recent events
+  const realizedVol90d = safeNum(rawData?.market?.realized_vol_90d ?? null, null);
+  if (realizedVol90d !== null && Number.isFinite(realizedVol90d)) {
+    // Annualized vol → daily vol → weekly vol as entry spread basis
+    const dailyVol = realizedVol90d / Math.sqrt(365);
+    const weeklyVolPct = dailyVol * Math.sqrt(7);
+    if (weeklyVolPct > 20) {
+      entrySpread = Math.min(0.12, weeklyVolPct / 100 * 0.5); // use 0.5x weekly vol as spread
+      notes.push(`Entry zone based on 90d realized vol (${realizedVol90d.toFixed(0)}% ann.): ±${(entrySpread * 100).toFixed(0)}%.`);
+    } else if (weeklyVolPct < 8) {
+      entrySpread = 0.03;
+      notes.push(`Low 90d realized vol (${realizedVol90d.toFixed(0)}% ann.): entry zone tightened to ±3%.`);
+    } else {
+      notes.push(`90d realized vol ${realizedVol90d.toFixed(0)}% ann. (daily ${dailyVol.toFixed(1)}%): entry spread ±${(entrySpread * 100).toFixed(0)}%.`);
+    }
+  } else if (priceChange7d > 20) {
     entrySpread = 0.08; // expand to ±8% for volatile tokens
     notes.push(`Entry zone expanded to ±8% due to high 7d volatility (${priceChange7d.toFixed(1)}%).`);
   } else if (priceChange7d < 5) {
@@ -221,10 +237,10 @@ export function generateTradeSetup(rawData, scores) {
   }
 
   // Round 236 (AutoResearch): realized_vol_90d annotation — educate user on structural volatility
-  const realizedVol90d = safeNum(rawData?.market?.realized_vol_90d, null);
-  if (realizedVol90d !== null) {
-    const volTier = realizedVol90d > 200 ? 'extreme' : realizedVol90d > 100 ? 'high' : realizedVol90d > 50 ? 'moderate' : 'low';
-    notes.push(`90-day realized volatility: ${realizedVol90d.toFixed(0)}% annualized (${volTier}) — size positions accordingly.`);
+  const realizedVol90dNote = safeNum(rawData?.market?.realized_vol_90d, null);
+  if (realizedVol90dNote !== null) {
+    const volTier = realizedVol90dNote > 200 ? 'extreme' : realizedVol90dNote > 100 ? 'high' : realizedVol90dNote > 50 ? 'moderate' : 'low';
+    notes.push(`90-day realized volatility: ${realizedVol90dNote.toFixed(0)}% annualized (${volTier}) — size positions accordingly.`);
     // For high realized vol assets, widen TP gap to capture larger moves
     if (realizedVol90d > 150 && takeProfitTargets.length > 0) {
       notes.push('High realized volatility suggests wider TP targets may be needed to avoid premature exit.');

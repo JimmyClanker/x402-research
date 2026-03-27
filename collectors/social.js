@@ -10,6 +10,13 @@ const BULLISH_KEYWORDS = [
   'ai agent', 'depin', 'sovereign wealth', 'strategic reserve', 'nation state',
   'treasury allocation', 'buyback', 'revenue share', 'fee switch', 'hyperliquid',
   'superchain', 'layer 2 expansion', 'chain abstraction', 'intents', 'solvers',
+  // Round R10 (AutoResearch nightly): 2026 emerging narratives
+  'btc treasury', 'bitcoin reserve', 'stablecoin bill', 'tokenized equity', 'tokenized bonds',
+  'ai inference', 'agent economy', 'on-chain ai', 'decentralized ai', 'zkml',
+  'modular blockchain', 'based rollup', 'preconfirmation', 'sequencer auction',
+  'parallel evm', 'appchain', 'gas abstraction', 'account abstraction',
+  'liquid restaking', 'lrt', 'erc-4337', 'eip-7702', 'validator sets',
+  'paymaster', 'bundler', 'social graph', 'farcaster', 'lens protocol',
 ];
 const BEARISH_KEYWORDS = [
   'bearish', 'selloff', 'dump', 'decline', 'risk', 'downside', 'lawsuit',
@@ -23,6 +30,11 @@ const BEARISH_KEYWORDS = [
   'flash loan attack', 'governance attack', 'admin key', 'multisig compromise',
   'infinite mint', 'drain', 'stolen funds', 'protocol exploit', 'critical bug',
   'mass exodus', 'whale dump', 'token unlock', 'vesting cliff',
+  // Round R10 (AutoResearch nightly): 2026 threat patterns
+  'sandwich attack', 'mev exploit', 'maximal extractable value attack', 'front-run',
+  'nonce manipulation', 'price manipulation', 'liquidity removal', 'liquidity drain',
+  'emergency withdrawal', 'protocol pause', 'circuit breaker triggered', 'depeg risk',
+  'contagion', 'counterparty risk', 'insolvency risk', 'treasury depleted',
 ];
 const NEUTRAL_KEYWORDS = ['neutral', 'mixed', 'sideways', 'watchlist', 'monitor', 'range', 'unclear', 'consolidation'];
 
@@ -37,6 +49,11 @@ const TRUSTED_DOMAINS = new Set([
   'wired.com', 'techcrunch.com', 'forbes.com', 'fortune.com',
   'a16zcrypto.com', 'paradigm.xyz', 'multicoin.capital',
   'coinmetrics.io', 'glassnode.com', 'dune.com', 'nansen.ai',
+  // Round R10 (AutoResearch nightly): additional 2025-2026 high-signal domains
+  'beincrypto.com', 'cryptoslate.com', 'crypto.news', 'ambcrypto.com',
+  'zerion.io', 'tokenterminal.com', 'artemis.xyz', 'defillama.com',
+  'ethresear.ch', 'research.lido.fi', 'forum.arbitrum.foundation', 'gov.uniswap.org',
+  'mirror.xyz', 'substack.com',
 ]);
 
 function getDomainTrustScore(url) {
