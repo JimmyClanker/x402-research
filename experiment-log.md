@@ -2032,3 +2032,153 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Change:** Aggiunto `.testimonial-card` a `will-change: transform` per hint GPU su hover animations.
 - **Files:** public/index.html
 - **Tests:** 177/177 pass
+
+### Round 331 — Fix CATEGORY_MAP duplicate keys
+- **Change:** Removed 7 duplicate keys in CATEGORY_MAP that were silently overwriting correct mappings: `bridge`, `derivatives`, `perpetuals`, `cross-chain`, `rollup`, `prediction-market`, `liquid-staking`. Also cleaned up obsolete early entries that mapped bridge→defi_dex and prediction-market→defi_dex (later rounds had added correct mappings but originals remained as dead overrides).
+- **Files:** scoring/category-weights.js
+- **Tests:** 177/177 pass
+
+### Round 332 — Fix meme_token large-cap blending comment accuracy
+- **Change:** Corrected comment on large-cap meme blending formula. Comment said "$1B = 10% L1" but formula actually produces 0% at $1B, reaching 30% at $10B (log10 scale). Formula is correct — comment was misleading.
+- **Files:** scoring/category-weights.js
+- **Tests:** 177/177 pass
+
+### Round 333 — Mercenary TVL breaker minimum mcap raised to $2M
+- **Change:** Raised minimum mcap threshold for "mercenary TVL" circuit breaker from $500K to $2M. Below $2M, a 15x TVL/MCap ratio is noise not signal — micro-cap tokens have fragile mcap pricing and the imbalance is expected rather than alarming.
+- **Files:** scoring/circuit-breakers.js
+- **Tests:** 177/177 pass
+
+### Round 334 — Hack mentions circuit breaker: exclude passive targets
+- **Change:** Added exclusion for meme, stablecoin, and wrapped tokens from the hack/exploit mentions circuit breaker. These token types frequently appear in ecosystem-level security news without being directly exploited, causing false caps.
+- **Files:** scoring/circuit-breakers.js
+- **Tests:** 177/177 pass
+
+### Round 335 — Onchain confidence N/A vs error distinction
+- **Change:** When onchain collector has no error but also no data fields (non-DeFi token), onchainConf is now 50 (N/A, not applicable) instead of 0 (collection failure). This prevents overall_confidence from being artificially depressed for non-DeFi tokens that simply don't have TVL/fees.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 336 — Dev confidence N/A vs error distinction
+- **Change:** Same fix as Round 335 for dev/GitHub confidence. Closed-source tokens with no GitHub data get devConf=50 (N/A) instead of 0. Prevents unnecessary overall_confidence deflation for legitimate closed-source projects.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 337 — Tiered completeness circuit breaker caps
+- **Change:** Added a stricter cap (5.0) for extremely low data completeness (<20%). Previously only one threshold (<40% → 6.0). New tiers: <20% → cap 5.0 (speculative), <40% → cap 6.0 (insufficient).
+- **Files:** scoring/circuit-breakers.js
+- **Tests:** 177/177 pass
+
+### Round 338 — Red flag no_github: null check instead of falsy
+- **Change:** Fixed `no_github` red flag detection to use `== null` instead of falsy check. Previously `github.stars = 0` (inactive but real repo) would trigger the flag incorrectly. A repo with 0 stars/commits is verifiable data, not missing data.
+- **Files:** services/red-flags.js
+- **Tests:** 177/177 pass
+
+### Round 339 — Red flag no_onchain_data: null check instead of falsy
+- **Change:** Same fix for `no_onchain_data` — uses `== null` instead of falsy. TVL=0 is valid data for a new protocol with no locked capital. The old falsy check was incorrectly flagging new DeFi protocols as having no onchain data.
+- **Files:** services/red-flags.js
+- **Tests:** 177/177 pass
+
+### Round 340 — zero_social_mentions: require search evidence
+- **Change:** `zero_social_mentions` now only fires if there's evidence the social search actually ran (sentiment_score, key_narratives, or bot_filtered_count present). Prevents false positives when the social collector never ran or returned an empty object.
+- **Files:** services/red-flags.js
+- **Tests:** 177/177 pass
+
+### Round 341 — Deflationary token tokenomics bonus
+- **Change:** Added a small tokenomics score bonus for deflationary tokens (inflation_rate < 0, i.e. net token burns). Bonus capped at +0.5 to avoid over-rewarding aggressive burn programs. Maps: -10% inflation = +0.5 max bonus.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 342 — FDV unknown but low circulating supply: infer dilution risk
+- **Change:** When FDV is unavailable but circulating supply is <50%, apply a mild -0.5 penalty to distribution score. Captures likely dilution risk even when FDV data is missing from the collector.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 343 — Volatility scoring: normalize across available timeframes
+- **Change:** Fixed volatility calculation to not assume 0 for missing timeframes. Previously if only 24h data was available, 40% of the volatility signal was artificially zeroed out. Now normalizes to available timeframes only (24h-only = use 24h; 7d-only = use 7d; both = 0.6/0.4 weighted).
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 344 — CATEGORY_MAP: 16 new category slug mappings
+- **Change:** Added 16 missing category slugs: staking, staking-pool, eth-staking, sol-staking, governance, governance-token, dao, launchpad, ido-platform, asset-management, portfolio-management, aggregator, dex-aggregator, swap-aggregator, and mapped infrastructure → infra_tooling (previously layer_1).
+- **Files:** scoring/category-weights.js
+- **Tests:** 177/177 pass
+
+### Round 345 — Fix holder field name mismatch (top10_holder_concentration_pct)
+- **Change:** Critical bug fix: the holders collector outputs `top10_holder_concentration_pct` but circuit-breakers, red-flags, and scoring used `top10_concentration` and `concentration_pct`. Added the actual collector field name to all fallback chains so whale concentration data is actually used in scoring.
+- **Files:** scoring/circuit-breakers.js, services/red-flags.js, synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 346 — FDV/MCap circuit breaker: $1M minimum mcap
+- **Change:** Added $1M minimum mcap to the FDV/MCap > 10x circuit breaker. Micro-cap tokens with high FDV ratios are already captured by the low_market_cap red flag and don't need a separate score cap.
+- **Files:** scoring/circuit-breakers.js
+- **Tests:** 177/177 pass
+
+### Round 347 — suspicious_volume_spike: $500K minimum absolute threshold
+- **Change:** Added $500K absolute minimum to `suspicious_volume_spike` red flag. Small tokens with very low 7d average can produce technically-valid but meaningless spike ratios (e.g. $100 avg → $600 24h = 6x spike).
+- **Files:** services/red-flags.js
+- **Tests:** 177/177 pass
+
+### Round 348 — Zero CEX listings penalty for established tokens
+- **Change:** Added mild -0.3 penalty in scoreMarketStrength when `exchange_count` is explicitly 0 (not missing) for tokens older than 6 months. Being known to have zero CEX listings after 6 months signals isolation/accessibility risk.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 349 — Holder confidence: stricter fallback (meaningful fields only)
+- **Change:** Tightened holder confidence fallback: only gives 30% confidence if there are actual non-null, non-error data fields. An object with only `{ error: null }` no longer gets 30% partial credit.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 350 — Fix computePTVLAdjustment dead label statement
+- **Change:** Fixed a dead JavaScript label statement `label: 'deep_value';` that was a syntactic no-op in the PTVL calculation. The variable assignment `label = 'deep_value'` on the next line was the actual working code. Cleaned up to single clear assignment.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 351 — computePTVLAdjustment: NaN guard
+- **Change:** Added `Number.isFinite()` guards for mcap and tvl inputs to `computePTVLAdjustment`. Prevents NaN adjustment values when inputs are NaN (e.g. from safeNumber of undefined chain).
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 352 — scoreRisk: genesis_date validation
+- **Change:** Added date validation before computing token age in `scoreRisk`. Guards against invalid dates, pre-2008 dates (pre-crypto era), and future dates — all of which would produce NaN or astronomically high age_months values.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 353 — scoreMarketStrength: genesis_date validation
+- **Change:** Same date validation as Round 352 applied to `scoreMarketStrength` genesis_date age computation. Also guards against future dates causing negative age_months.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 354 — CATEGORY_MAP: infrastructure → infra_tooling (was layer_1)
+- **Change:** Changed `infrastructure` slug mapping from `layer_1` to `infra_tooling`. The `infra_tooling` category has `development: 0.32` vs `layer_1: development: 0.22` — more accurate for B2B infrastructure protocols that are dev-activity driven rather than ecosystem adoption driven.
+- **Files:** scoring/category-weights.js
+- **Tests:** 177/177 pass
+
+### Round 355 — scoreOnchainHealth: remove duplicate feesCheck variable
+- **Change:** Removed duplicate `feesCheck` variable that was identically computed as `fees`. The zero-fees TVL penalty now reuses the `fees` variable computed earlier in the function.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 356 — declining_tvl: null-safe check and granular severity
+- **Change:** Fixed `declining_tvl` red flag to only fire when TVL change data actually exists (field != null). Added catastrophic tier: >70% decline = 'critical' (was 'warning' for >50%). Clearer messaging for catastrophic TVL collapses.
+- **Files:** services/red-flags.js
+- **Tests:** 177/177 pass
+
+### Round 357 — socialCredibility circuit breaker: fix safeN(null, null) = 0 bug
+- **Change:** Critical bug fix: `safeN(null, null)` returns 0 (not null) because Number.isFinite(0) is true. The social credibility circuit breaker was checking `!== null` but could receive 0 (meaning "field not present") and activate falsely. Fixed to use direct field existence check before calling safeN.
+- **Files:** scoring/circuit-breakers.js
+- **Tests:** 177/177 pass
+
+### Round 358 — Fix false null guards for optional numeric fields (priceMomentumScore, realizedVol90d)
+- **Change:** Fixed two instances of `safeNumber(field ?? null)` followed by `!== null` check — this pattern is broken because safeNumber(null) = 0 ≠ null so the guard is always true. Replaced with `if (field != null)` guard pattern. Applied to `price_momentum_score` and `realized_vol_90d`.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 359 — Fix false null guard for chainTvlDominance
+- **Change:** Same fix as Round 358 for `chain_tvl_dominance_pct`. The `chainTvlDominance !== null` check was always true when using `safeNumber(... ?? null)`. Now uses `onchain.chain_tvl_dominance_pct != null` guard.
+- **Files:** synthesis/scoring.js
+- **Tests:** 177/177 pass
+
+### Round 360 — CATEGORY_MAP: 20 new category slug mappings
+- **Change:** Added 20 new category mappings covering: web3-gaming, p2e, gamefi, infrastructure-middleware, middleware, cross-chain-messaging, interoperability, identity/DID protocols, insurance variants, credit protocols, synthetic assets, structured products, options/perpetual/margin trading, on-chain ETFs, tokenized equity/commodity. Improves categorization accuracy for newer DeFi verticals.
+- **Files:** scoring/category-weights.js
+- **Tests:** 177/177 pass

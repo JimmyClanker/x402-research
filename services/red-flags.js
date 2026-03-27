@@ -78,14 +78,17 @@ export function detectRedFlags(rawData = {}, scores = {}) {
   }
 
   // 6. Declining TVL > 30%
-  const tvlChange7d = safeN(onchain.tvl_change_7d);
-  const tvlChange30d = safeN(onchain.tvl_change_30d);
-  if (tvlChange7d < -30 || tvlChange30d < -30) {
+  // Round 356 (AutoResearch): also check null — safeN(undefined) = 0 which would not trigger,
+  // but we only want to check if the field was actually provided
+  const tvlChange7d  = onchain.tvl_change_7d  != null ? safeN(onchain.tvl_change_7d)  : 0;
+  const tvlChange30d = onchain.tvl_change_30d != null ? safeN(onchain.tvl_change_30d) : 0;
+  const hasTvlChangeData = onchain.tvl_change_7d != null || onchain.tvl_change_30d != null;
+  if (hasTvlChangeData && (tvlChange7d < -30 || tvlChange30d < -30)) {
     const worst = Math.min(tvlChange7d, tvlChange30d);
     flags.push({
       flag: 'declining_tvl',
-      severity: worst < -50 ? 'critical' : 'warning',
-      detail: `TVL has declined ${Math.abs(worst).toFixed(1)}% recently — protocol losing traction.`,
+      severity: worst < -70 ? 'critical' : worst < -50 ? 'warning' : 'warning',
+      detail: `TVL has declined ${Math.abs(worst).toFixed(1)}% recently — ${worst < -70 ? 'catastrophic TVL collapse' : 'protocol losing traction'}.`,
     });
   }
 

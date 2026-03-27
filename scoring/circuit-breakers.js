@@ -336,7 +336,9 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
   // Round 233 (AutoResearch nightly): Social credibility collapse breaker
   // High sentiment_credibility_score (>60) acts as a positive signal, but very low (<15)
   // with many mentions indicates coordinated noise — cap to prevent false signals driving scores up
-  const socialCredibility = safeN(rawData?.social?.sentiment_credibility_score ?? null, null);
+  // Round 357 (AutoResearch): safeN(null, null) returns 0 not null — use direct field check instead
+  const _rawSocialCredibility = rawData?.social?.sentiment_credibility_score;
+  const socialCredibility = _rawSocialCredibility != null ? safeN(_rawSocialCredibility) : null;
   const socialMentionsForCB = safeN(rawData?.social?.filtered_mentions ?? rawData?.social?.mentions ?? 0);
   if (socialCredibility !== null && socialCredibility < 15 && socialMentionsForCB >= 10) {
     breakers.push({

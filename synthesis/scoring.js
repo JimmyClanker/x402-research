@@ -156,7 +156,8 @@ export function calculateConfidence(rawData = {}) {
  * @returns {{ adjustment: number, ptvl: number|null, label: string }}
  */
 export function computePTVLAdjustment(mcap, tvl) {
-  if (!mcap || !tvl || tvl <= 0) return { adjustment: 0, ptvl: null, label: 'n/a' };
+  // Round 351 (AutoResearch): guard against NaN inputs (safeNumber of NaN-producing expressions)
+  if (!mcap || !tvl || tvl <= 0 || !Number.isFinite(mcap) || !Number.isFinite(tvl)) return { adjustment: 0, ptvl: null, label: 'n/a' };
   const ptvl = mcap / tvl;
   let adjustment = 0;
   let label;
@@ -290,8 +291,9 @@ function scoreMarketStrength(market = {}) {
 
   // Round 236 (AutoResearch): price_momentum_score (0-100) — fine-grained composite momentum
   // This is a sigmoid-normalized composite that's more nuanced than tier labels
-  const priceMomentumScore = safeNumber(market.price_momentum_score ?? null);
-  if (priceMomentumScore !== null) {
+  // Round 358 (AutoResearch): use direct null check — safeNumber(null) returns 0, not null
+  if (market.price_momentum_score != null) {
+    const priceMomentumScore = safeNumber(market.price_momentum_score);
     // Map 0-100 score to ±0.3 adjustment (centered at 50)
     const momentumAdj = ((priceMomentumScore - 50) / 100) * 0.6;
     raw += momentumAdj;
@@ -313,21 +315,25 @@ function scoreMarketStrength(market = {}) {
   }
 
   // Round 13: Time-decay factor — very new projects get a small uncertainty penalty
+  // Round 353 (AutoResearch): validate genesis_date before computing age to avoid NaN/Infinity
   let isNewProject = false;
   let age_months = null;
   const genesisDate = market.genesis_date;
   if (genesisDate) {
-    const ageMs = Date.now() - new Date(genesisDate).getTime();
-    age_months = ageMs / (1000 * 60 * 60 * 24 * 30.44);
-    isNewProject = age_months < 3;
-    if (age_months < 1) {
-      raw -= 1.0; // Very new: significant uncertainty
-    } else if (age_months < 3) {
-      raw -= 0.5; // New: mild uncertainty penalty
-    } else if (age_months > 24) {
-      raw += 0.2; // Proven longevity bonus (2+ years)
+    const gd = new Date(genesisDate);
+    const ageMs = Date.now() - gd.getTime();
+    // Guard: invalid date, pre-2008 date (before crypto), or future date
+    if (Number.isFinite(ageMs) && ageMs > 0 && ageMs < 20 * 365.25 * 24 * 3600 * 1000) {
+      age_months = ageMs / (1000 * 60 * 60 * 24 * 30.44);
+      isNewProject = age_months < 3;
+      if (age_months < 1) {
+        raw -= 1.0; // Very new: significant uncertainty
+      } else if (age_months < 3) {
+        raw -= 0.5; // New: mild uncertainty penalty
+      } else if (age_months > 24) {
+        raw += 0.2; // Proven longevity bonus (2+ years)
+      }
     }
-    // No bonus for age — longevity is already captured in momentum history
   }
 
   // Round 34: twitter/telegram followers as social proof for market strength
@@ -461,11 +467,11 @@ function scoreOnchainHealth(onchain = {}, rawData = {}) {
   let raw = 4;
   // Round 149 (AutoResearch): Zero fees penalty for established DeFi protocols
   // A protocol with significant TVL but zero fees = no value capture → token has no fundamental backing
+  // Round 355 (AutoResearch): reuse `fees` var (already computed identically above) — remove duplicate
   const tvlForFees = safeNumber(onchain.tvl ?? 0);
-  const feesCheck = onchain.fees_7d != null ? safeNumber(onchain.fees_7d) : (safeNumber(onchain.fees_30d) / 4);
-  if (tvlForFees > 10_000_000 && feesCheck === 0) {
+  if (tvlForFees > 10_000_000 && fees === 0) {
     raw -= 1.5; // Significant TVL but zero fee generation = speculative/mercenary capital
-  } else if (tvlForFees > 1_000_000 && feesCheck === 0) {
+  } else if (tvlForFees > 1_000_000 && fees === 0) {
     raw -= 0.7; // Smaller TVL, still concerning
   }
 
@@ -493,8 +499,9 @@ function scoreOnchainHealth(onchain = {}, rawData = {}) {
 
   // Round 232 (AutoResearch nightly): chain TVL concentration penalty
   // A protocol on 3+ chains but with 95%+ on one chain is effectively single-chain
-  const chainTvlDominance = safeNumber(onchain.chain_tvl_dominance_pct ?? null);
-  if (chainTvlDominance !== null && chainCount >= 2) {
+  // Round 359 (AutoResearch): use field != null guard — safeNumber(null) returns 0 not null
+  if (onchain.chain_tvl_dominance_pct != null && chainCount >= 2) {
+    const chainTvlDominance = safeNumber(onchain.chain_tvl_dominance_pct);
     if (chainTvlDominance > 95) raw -= 0.2;    // almost entirely on one chain despite multi-chain claim
     else if (chainTvlDominance < 60) raw += 0.15; // genuinely diversified across chains
   }
@@ -1046,11 +1053,14 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
 
   // Round 156 (AutoResearch): 90-day realized annualized volatility supplement
   // High realized vol = structural risk; low realized vol = mature, stable asset
-  const realizedVol90d = safeNumber(market.realized_vol_90d ?? null);
-  if (realizedVol90d > 0) {
-    if (realizedVol90d > 300) raw -= 0.8;       // annualized >300% = extreme structural volatility
-    else if (realizedVol90d > 150) raw -= 0.4;  // annualized >150% = high
-    else if (realizedVol90d < 40) raw += 0.3;   // annualized <40% = mature/stable
+  // Round 358 (AutoResearch): use field != null guard — safeNumber(null) returns 0 not null
+  if (market.realized_vol_90d != null) {
+    const realizedVol90d = safeNumber(market.realized_vol_90d);
+    if (realizedVol90d > 0) {
+      if (realizedVol90d > 300) raw -= 0.8;       // annualized >300% = extreme structural volatility
+      else if (realizedVol90d > 150) raw -= 0.4;  // annualized >150% = high
+      else if (realizedVol90d < 40) raw += 0.3;   // annualized <40% = mature/stable
+    }
   }
 
   // 2. Liquidity depth: use DEX data if available, otherwise volume/mcap proxy
@@ -1084,12 +1094,18 @@ function scoreRisk(market = {}, onchain = {}, tokenomics = {}, dexData = {}, hol
   else if (topConcentration > 0 && topConcentration <= 15) raw += 0.5; // Well distributed
 
   // 4. Age risk: very new projects carry more uncertainty
+  // Round 352 (AutoResearch): validate date string before use — invalid dates produce Infinity/NaN age
   const genesisDate = market.genesis_date ?? tokenomics.genesis_date;
   if (genesisDate) {
-    const ageMonths = (Date.now() - new Date(genesisDate).getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-    if (ageMonths < 2)  raw -= 1.5;
-    else if (ageMonths < 6)  raw -= 0.8;
-    else if (ageMonths > 36) raw += 0.5; // Battle-tested
+    const gd = new Date(genesisDate);
+    const ageMs = Date.now() - gd.getTime();
+    // Guard: invalid date OR date from before 2008 (crypto didn't exist) OR future date
+    if (Number.isFinite(ageMs) && ageMs > 0 && ageMs < 20 * 365.25 * 24 * 3600 * 1000) {
+      const ageMonths = ageMs / (1000 * 60 * 60 * 24 * 30.44);
+      if (ageMonths < 2)  raw -= 1.5;
+      else if (ageMonths < 6)  raw -= 0.8;
+      else if (ageMonths > 36) raw += 0.5; // Battle-tested
+    }
   }
 
   // 5. FDV/MCap extreme ratio = token unlock risk

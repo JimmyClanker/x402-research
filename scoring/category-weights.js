@@ -155,7 +155,8 @@ export const CATEGORY_MAP = {
   oracle: 'oracle',               // Round R27: oracles get dedicated weights
   'oracle-network': 'oracle',
   'data-oracle': 'oracle',
-  infrastructure: 'layer_1',      // generic infra → treat like L1 (dev-heavy)
+  // Round 354 (AutoResearch): infrastructure → infra_tooling (more precise: dev=0.32 vs layer_1 dev=0.22)
+  infrastructure: 'infra_tooling',  // generic infra → infra_tooling (B2B infrastructure, dev-heavy)
   privacy: 'privacy_protocol',    // Round R27: privacy protocols get dedicated weights
   'privacy-coins': 'privacy_protocol',
   'privacy-protocol': 'privacy_protocol',
@@ -195,6 +196,31 @@ export const CATEGORY_MAP = {
   'data-availability': 'layer_2',
   'rollup': 'layer_2',
   'rollup-as-a-service': 'layer_2',
+  // Round 360 (AutoResearch): Additional category mappings for broader coverage
+  'web3-gaming': 'nft_gaming',
+  'web3-game': 'nft_gaming',
+  'p2e': 'nft_gaming',
+  'gamefi': 'nft_gaming',
+  'infrastructure-middleware': 'infra_tooling',
+  'middleware': 'infra_tooling',
+  'cross-chain-messaging': 'cross_chain_bridge',
+  'interoperability': 'cross_chain_bridge',
+  'identity': 'infra_tooling',       // on-chain identity = infra/tooling (dev-heavy)
+  'did': 'infra_tooling',
+  'decentralized-identity': 'infra_tooling',
+  'insurance-protocol': 'defi_lending', // insurance is risk/onchain heavy
+  'crop-insurance': 'defi_lending',
+  'credit-protocol': 'defi_lending',
+  'synthetic-assets': 'derivatives',   // synthetic assets = derivatives category
+  'synths': 'derivatives',
+  'structured-products': 'derivatives',
+  'options-protocol': 'derivatives',
+  'perpetual-protocol': 'derivatives',
+  'margin-trading': 'derivatives',
+  'etf': 'rwa',                        // on-chain ETFs are effectively tokenized assets
+  'tokenized-fund': 'rwa',
+  'tokenized-equity': 'rwa',
+  'tokenized-commodity': 'rwa',
   // Round 233: payments category mappings
   'payments': 'payments',
   'payment': 'payments',
