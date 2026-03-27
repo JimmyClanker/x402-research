@@ -210,12 +210,49 @@ export async function getBtcPrice() {
   }
 }
 
+/**
+ * Attempt to fetch current price from CoinGecko as fallback.
+ * @param {string} projectName - CoinGecko ID or project name
+ * @returns {Promise<number|null>}
+ */
+async function fetchPriceFallback(projectName) {
+  if (!projectName) return null;
+  // Normalize: CoinGecko IDs are lowercase, hyphenated
+  const cgId = String(projectName).toLowerCase().trim();
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(cgId)}&vs_currencies=usd`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.[cgId]?.usd ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function storeScanSnapshot(projectName, rawData = {}, scores = {}) {
   const db = getCalibrationDb();
   const btcPrice = await getBtcPrice();
   const universe = extractUniverseRecord(projectName, rawData);
   const snapshot = extractSnapshotRecord(projectName, rawData, btcPrice);
   snapshot.data_completeness = snapshot.data_completeness ?? toNumber(scores?.overall?.completeness);
+
+  // Critical: if price is missing, try CoinGecko fallback before saving
+  if (snapshot.price == null || snapshot.price === 0) {
+    const coingeckoId = universe.coingecko_id || projectName;
+    const fallbackPrice = await fetchPriceFallback(coingeckoId);
+    if (fallbackPrice != null && fallbackPrice > 0) {
+      snapshot.price = fallbackPrice;
+    }
+  }
+
+  // If still no price after fallback, skip this snapshot (it's useless for calibration)
+  if (snapshot.price == null || snapshot.price === 0) {
+    console.warn(`[snapshot-store] Skipped ${projectName} — no price available (not useful for calibration)`);
+    return null;
+  }
 
   const scoreRecord = extractScoreRecord(rawData, scores);
   scoreRecord.verdict = scoreRecord.verdict ?? rawData?.verdict ?? null;

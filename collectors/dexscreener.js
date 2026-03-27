@@ -130,10 +130,18 @@ export async function collectDexScreener(projectName) {
 
     // Round 3: price changes from top pair
     // Round 238 (AutoResearch): also capture 5m change for ultra-short-term momentum signal
-    const dexPriceChangeH1 = topPair?.priceChange?.h1 != null ? Number(topPair.priceChange.h1) : null;
-    const dexPriceChangeH24 = topPair?.priceChange?.h24 != null ? Number(topPair.priceChange.h24) : null;
-    const dexPriceChangeH6 = topPair?.priceChange?.h6 != null ? Number(topPair.priceChange.h6) : null;
-    const dexPriceChangeM5 = topPair?.priceChange?.m5 != null ? Number(topPair.priceChange.m5) : null;
+    // Round 562 (AutoResearch): sanitize — guard NaN/Infinity and cap extreme values (>1000% = suspect)
+    const sanitizePriceChange = (v) => {
+      if (v == null) return null;
+      const n = Number(v);
+      if (!Number.isFinite(n)) return null;
+      if (Math.abs(n) > 1000) return null; // > 1000% in any timeframe is almost certainly bad data
+      return parseFloat(n.toFixed(2));
+    };
+    const dexPriceChangeH1 = sanitizePriceChange(topPair?.priceChange?.h1);
+    const dexPriceChangeH24 = sanitizePriceChange(topPair?.priceChange?.h24);
+    const dexPriceChangeH6 = sanitizePriceChange(topPair?.priceChange?.h6);
+    const dexPriceChangeM5 = sanitizePriceChange(topPair?.priceChange?.m5);
 
     // Round 3: top pair liquidity concentration (how dominant the top pair is)
     const topPairLiq = Number(topPair?.liquidity?.usd || 0);
@@ -265,6 +273,12 @@ export async function collectDexScreener(projectName) {
       // Can detect MCap discrepancies between CoinGecko and on-chain DEX data
       dex_fdv: dexFdv,
       dex_mcap: dexMcap,
+      // Round 581 (AutoResearch): DEX liquidity / market cap — float support on-chain
+      liquidity_to_mcap_ratio: (() => {
+        if (totalLiquidity <= 0 || dexMcap == null || dexMcap <= 0) return null;
+        const ratio = totalLiquidity / dexMcap;
+        return Number.isFinite(ratio) ? parseFloat(ratio.toFixed(4)) : null;
+      })(),
       // Round 211 (AutoResearch): net_buy_pressure_pct — % of transactions that are buys
       // Simple but effective: >55% buys = net accumulation, <45% = net distribution
       net_buy_pressure_pct: hasTxnData && (totalBuys24h + totalSells24h) > 0

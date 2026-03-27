@@ -10,7 +10,7 @@
 
 import { getCalibrationDb } from './db.js';
 
-const CHECKPOINT_DAYS = [7, 14, 30, 60, 90];
+const CHECKPOINT_DAYS = [3, 7, 14, 30, 60, 90];
 const TOLERANCE_DAYS = 1;
 
 // Cache BTC price to avoid repeated calls

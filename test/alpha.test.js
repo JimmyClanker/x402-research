@@ -217,6 +217,60 @@ test('alpha quick works without xAI key and remains free when full alpha is gate
   }
 });
 
+test('alpha batch deduplicates repeated projects and reports invalid counts', async () => {
+  let calls = 0;
+  const { app, services } = createTestApp({
+    collectAllFn: async (projectName) => {
+      calls += 1;
+      return createRawData({ project_name: projectName });
+    },
+  });
+
+  const server = app.listen(0);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/alpha/batch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projects: ['Bitcoin', 'Bitcoin', 'Ethereum', 'javascript:bad'] }),
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.count, 2);
+    assert.equal(payload.unique_projects, 2);
+    assert.equal(payload.duplicates_removed, 1);
+    assert.equal(payload.invalid_projects, 1);
+    assert.equal(calls, 2);
+  } finally {
+    server.close();
+    services.signals.close();
+  }
+});
+
+test('collector health endpoint returns diagnostics payload', async () => {
+  const { app, services } = createTestApp({
+    collectAllFn: async (projectName) => createRawData({ project_name: projectName }),
+  });
+
+  const server = app.listen(0);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/api/collector-health`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.status, 'ok');
+    assert.equal(typeof payload.domains_tracked, 'number');
+    assert.ok(payload.stats && typeof payload.stats === 'object');
+    assert.ok(Array.isArray(payload.cooling_down_domains));
+    assert.ok(Array.isArray(payload.rate_limited_domains));
+  } finally {
+    server.close();
+    services.signals.close();
+  }
+});
+
 test('scoring penalizes empty collector data below 5 overall', () => {
   const emptyData = {
     project_name: 'Empty',

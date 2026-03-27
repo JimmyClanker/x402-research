@@ -194,6 +194,18 @@ export function fetchJson(url, opts = {}) {
   return _fetchJsonImpl(url, opts);
 }
 
+// Round 560 (AutoResearch): Export domain cache clear function for health endpoint reset
+// Allows ops to manually clear cooldown state if a previously failing API recovers
+export function clearDomainFailCache(domain) {
+  if (domain) {
+    domainFailCache.delete(domain);
+    domainRateLimitUntil.delete(domain);
+  } else {
+    domainFailCache.clear();
+    domainRateLimitUntil.clear();
+  }
+}
+
 // Round 233 (AutoResearch nightly): Export domain failure stats for health diagnostics
 // Allows health endpoint to surface which domains are currently in cooldown
 // Round 537 (AutoResearch): also includes rate-limit windows

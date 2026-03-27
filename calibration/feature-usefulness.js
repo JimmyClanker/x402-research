@@ -7,7 +7,7 @@ import { getCalibrationDb } from './db.js';
 const DAYS = Number(process.argv.find((v, i, a) => a[i - 1] === '--days') || 30);
 const OUT = process.argv.includes('--out')
   ? resolve(process.cwd(), process.argv[process.argv.indexOf('--out') + 1])
-  : resolve(process.cwd(), 'ops', 'feature-usefulness-2026-03-27.md');
+  : resolve(process.cwd(), 'ops', `feature-usefulness-${new Date().toISOString().split('T')[0]}.md`);
 
 const DIMENSIONS = [
   ['market_score', 'Market'],

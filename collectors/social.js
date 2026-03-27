@@ -209,12 +209,20 @@ export async function collectSocial(projectName, exaService) {
 
     const rawItems = [];
     const seen = new Set();
+    // Round 553 (AutoResearch): also dedup by normalized title prefix (first 60 chars)
+    // Syndicated content appears on multiple domains with identical or near-identical titles
+    // Without title dedup, the same news story inflates mention counts and sentiment
+    const seenTitles = new Set();
 
     for (const item of items) {
       const normalizedTitle = normalizeToken(item?.title || '');
-      const key = item?.url || `${normalizedTitle}-${item?.publishedDate || ''}`;
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
+      const urlKey = item?.url || `${normalizedTitle}-${item?.publishedDate || ''}`;
+      if (!urlKey || seen.has(urlKey)) continue;
+      // Title dedup: use first 50 chars of normalized title as fingerprint
+      const titleKey = normalizedTitle.slice(0, 50);
+      if (titleKey && titleKey.length > 10 && seenTitles.has(titleKey)) continue;
+      seen.add(urlKey);
+      if (titleKey && titleKey.length > 10) seenTitles.add(titleKey);
       rawItems.push({
         title: item?.title || 'Untitled',
         url: item?.url || null,
@@ -353,6 +361,23 @@ export async function collectSocial(projectName, exaService) {
       return parseFloat((total / uniqueNews.length).toFixed(3));
     })();
 
+    // Round 574/575/576 (AutoResearch): source diversity metrics
+    const uniqueDomains = new Set(
+      uniqueNews
+        .map((item) => {
+          try { return item.url ? new URL(item.url).hostname.replace(/^www\./, '') : null; } catch { return null; }
+        })
+        .filter(Boolean)
+    );
+    const sourceDiversityCount = uniqueDomains.size;
+    const sourceDiversityScore = uniqueNews.length > 0
+      ? Math.min(100, Math.round((sourceDiversityCount / Math.min(uniqueNews.length, 8)) * 100))
+      : 0;
+    const recentTrustedSourceCount = uniqueNews.filter((item) => {
+      const ts = new Date(item.date || 0).getTime();
+      return ts > Date.now() - 3 * 24 * 60 * 60 * 1000 && getDomainTrustScore(item.url) >= 1.4;
+    }).length;
+
     // Round 12 (AutoResearch nightly): recent news momentum — more news in last 3 days vs full window
     const now = Date.now();
     const recentCutoff3d = now - 3 * 24 * 60 * 60 * 1000;
@@ -402,6 +427,9 @@ export async function collectSocial(projectName, exaService) {
       airdrop_mentions: airdropMentions,
       hack_exploit_mentions: hackExploitMentions,
       avg_article_quality_score: avgArticleQualityScore,
+      source_diversity_count: sourceDiversityCount,
+      source_diversity_score: sourceDiversityScore,
+      recent_trusted_source_count: recentTrustedSourceCount,
       // Round 12 (AutoResearch nightly): news recency signals
       very_recent_news_count: veryRecentCount,
       news_momentum: newsMomentum,

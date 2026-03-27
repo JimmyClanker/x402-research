@@ -235,6 +235,7 @@ export function createRestRouter({ config, exaService, signalsService }) {
         'GET /fetch?url=<url>': 'URL content extraction',
         'POST /mcp': 'MCP server — tool discovery and invocation',
         'GET /api/health': 'This endpoint — service status and API reference',
+        'GET /api/collector-health': 'Collector cooldown/rate-limit diagnostics',
         'GET /api/signals': 'Query stored trading signals',
       },
 
@@ -343,6 +344,24 @@ export function createRestRouter({ config, exaService, signalsService }) {
           'new contract security + inflation fact registry entries (R383)',
         ],
       },
+    });
+  });
+
+  // Round 582 (AutoResearch): collector health snapshot for ops + debugging
+  router.get('/api/collector-health', (_req, res) => {
+    const domainStats = (() => {
+      try { return getDomainFailStats(); } catch { return {}; }
+    })();
+    const entries = Object.entries(domainStats);
+    const coolingDown = entries.filter(([, entry]) => entry?.cooling_down).map(([domain]) => domain);
+    const rateLimited = entries.filter(([, entry]) => entry?.rate_limited).map(([domain]) => domain);
+    return res.json({
+      status: 'ok',
+      domains_tracked: entries.length,
+      cooling_down_domains: coolingDown,
+      rate_limited_domains: rateLimited,
+      stats: domainStats,
+      generated_at: new Date().toISOString(),
     });
   });
 

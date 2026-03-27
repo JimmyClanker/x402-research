@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-03-27T18:21:25.926Z",
+  "snapshots": 2295,
+  "scores": 2295,
+  "outcomes": 0,
+  "relative_samples": {
+    "d7": 0,
+    "d30": 0,
+    "d90": 0
+  },
+  "thresholds": {
+    "first_review_trigger": 100,
+    "production_reweight_trigger": 300
+  },
+  "status": {
+    "first_review_ready": false,
+    "production_reweight_ready": false
+  },
+  "summary": "Not ready yet: only 0 7d relative-return samples. Target is 100."
+}
