@@ -99,13 +99,14 @@ export async function trackOutcomes({
   db: injectedDb,
   fetchPriceFn,
   fetchBtcFn,
+  rateLimitMs = 1500,
 } = {}) {
   const db = injectedDb || getCalibrationDb();
 
   const fetchPrice = fetchPriceFn || fetchCurrentPrice;
   const fetchBtc = fetchBtcFn || fetchBtcPrice;
 
-  // Get all snapshots within the age window
+  // Only get snapshots that have a price (others are useless for outcome tracking)
   const snapshots = db.prepare(`
     SELECT
       s.id AS snapshot_id,
@@ -117,21 +118,61 @@ export async function trackOutcomes({
     FROM token_snapshots s
     LEFT JOIN token_universe u ON u.id = s.token_id
     WHERE datetime(s.snapshot_at) >= datetime('now', ?)
+      AND s.price IS NOT NULL AND s.price > 0
     ORDER BY datetime(s.snapshot_at) ASC
   `).all(`-${maxAgeDays} days`);
 
   if (snapshots.length === 0) {
-    console.log('[outcome-tracker] No snapshots found within age window');
+    console.log('[outcome-tracker] No snapshots with price found within age window');
     return { updated: 0, skipped: 0, errors: 0 };
   }
 
-  console.log(`[outcome-tracker] Found ${snapshots.length} snapshots to check`);
-
-  // Check which outcomes already exist
+  // Filter to only snapshots needing outcomes at current checkpoints
   const existingOutcomesStmt = db.prepare(`
     SELECT snapshot_id, days_forward FROM token_outcomes
     WHERE snapshot_id = ? AND days_forward = ?
   `);
+
+  const pendingWork = [];
+  let skipped = 0;
+  for (const snap of snapshots) {
+    const ageDays = getAgeDays(snap.snapshot_at);
+    if (ageDays < 0) continue;
+    const checkpoints = matchingCheckpoints(ageDays);
+    for (const cp of checkpoints) {
+      if (existingOutcomesStmt.get(snap.snapshot_id, cp)) {
+        skipped++;
+      } else {
+        pendingWork.push({ ...snap, checkpoint: cp });
+      }
+    }
+  }
+
+  if (pendingWork.length === 0) {
+    console.log(`[outcome-tracker] Found ${snapshots.length} snapshots to check`);
+    console.log(`[outcome-tracker] Done — updated: 0, skipped: ${skipped}, errors: 0`);
+    return { updated: 0, skipped, errors: 0 };
+  }
+
+  console.log(`[outcome-tracker] Found ${snapshots.length} snapshots, ${pendingWork.length} outcomes to calculate`);
+
+  // Batch price fetch: one fetch per unique token, not per snapshot
+  const uniqueTokens = [...new Set(pendingWork.map(w => (w.coingecko_id || w.project_name).toLowerCase()))];
+  console.log(`[outcome-tracker] Fetching prices for ${uniqueTokens.length} unique tokens...`);
+
+  const priceCache = new Map();
+  let fetchCount = 0;
+  for (const tokenId of uniqueTokens) {
+    const price = await fetchPrice(tokenId);
+    if (price != null) priceCache.set(tokenId, price);
+    fetchCount++;
+    if (fetchCount % 5 === 0 && fetchCount < uniqueTokens.length) {
+      await new Promise(r => setTimeout(r, rateLimitMs));
+    }
+  }
+
+  const btcNow = await fetchBtc();
+  console.log(`[outcome-tracker] Got prices for ${priceCache.size}/${uniqueTokens.length} tokens, BTC=$${btcNow ?? 'n/a'}`);
 
   const insertOutcome = db.prepare(`
     INSERT OR IGNORE INTO token_outcomes
@@ -140,50 +181,31 @@ export async function trackOutcomes({
   `);
 
   let updated = 0;
-  let skipped = 0;
   let errors = 0;
 
-  for (const snap of snapshots) {
-    const ageDays = getAgeDays(snap.snapshot_at);
-    if (ageDays < 0) continue;
+  const tx = db.transaction(() => {
+    for (const work of pendingWork) {
+      const tokenKey = (work.coingecko_id || work.project_name).toLowerCase();
+      const priceNow = priceCache.get(tokenKey);
 
-    const checkpoints = matchingCheckpoints(ageDays);
-    if (checkpoints.length === 0) continue;
-
-    for (const checkpoint of checkpoints) {
-      // Check if already recorded
-      const existing = existingOutcomesStmt.get(snap.snapshot_id, checkpoint);
-      if (existing) {
-        skipped++;
+      if (priceNow == null) {
+        errors++;
         continue;
       }
 
       try {
-        // Fetch current prices
-        const coingeckoId = snap.coingecko_id || snap.project_name;
-        const [priceNow, btcNow] = await Promise.all([
-          fetchPrice(coingeckoId),
-          fetchBtc(),
-        ]);
-
-        if (priceNow == null) {
-          console.warn(`[outcome-tracker] No current price for ${snap.project_name} — skipping`);
-          errors++;
-          continue;
-        }
-
-        const returnPct = calcReturn(snap.price_then, priceNow);
-        const btcReturnPct = calcReturn(snap.btc_price_then, btcNow);
+        const returnPct = calcReturn(work.price_then, priceNow);
+        const btcReturnPct = calcReturn(work.btc_price_then, btcNow);
         const relativeReturnPct =
           returnPct != null && btcReturnPct != null ? returnPct - btcReturnPct : null;
 
         insertOutcome.run(
-          snap.snapshot_id,
-          checkpoint,
+          work.snapshot_id,
+          work.checkpoint,
           new Date().toISOString(),
-          snap.price_then,
+          work.price_then,
           priceNow,
-          snap.btc_price_then,
+          work.btc_price_then,
           btcNow,
           returnPct,
           btcReturnPct,
@@ -191,17 +213,19 @@ export async function trackOutcomes({
         );
 
         console.log(
-          `[outcome-tracker] ✓ ${snap.project_name} snapshot #${snap.snapshot_id} — ` +
-          `${checkpoint}d: ${returnPct != null ? returnPct.toFixed(1) + '%' : 'n/a'} ` +
+          `[outcome-tracker] ✓ ${work.project_name} #${work.snapshot_id} — ` +
+          `${work.checkpoint}d: ${returnPct != null ? returnPct.toFixed(1) + '%' : 'n/a'} ` +
           `(vs BTC: ${relativeReturnPct != null ? relativeReturnPct.toFixed(1) + '%' : 'n/a'})`
         );
         updated++;
       } catch (err) {
-        console.error(`[outcome-tracker] Error for snapshot #${snap.snapshot_id} checkpoint ${checkpoint}d: ${err.message}`);
+        console.error(`[outcome-tracker] Error for #${work.snapshot_id} ${work.checkpoint}d: ${err.message}`);
         errors++;
       }
     }
-  }
+  });
+
+  tx();
 
   console.log(`[outcome-tracker] Done — updated: ${updated}, skipped: ${skipped}, errors: ${errors}`);
   return { updated, skipped, errors };
