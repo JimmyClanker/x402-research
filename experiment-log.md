@@ -2337,3 +2337,203 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Files:** synthesis/templates.js
 - **Tests:** 177/177 pass
 
+
+### Round 391 — renderScoreLine: consistent 1 decimal score
+- **Change:** Score always rendered as `X.X/10` (1 decimal). Confidence label shown when available.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 392 — fmtPlain(): non-dollar number formatter
+- **Change:** Added `fmtPlain(value, decimals)` for formatting counts, ratios, commits without $ prefix. Supports B/M/K suffixes.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 393 — text report: headline + project_summary in header
+- **Change:** Header line now shows `Verdict | Alpha Index | Conviction` in one line. Headline and project_summary appear as separate lines below. Data quality summary collapsed to single line.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 394 — text report: FDV/mcap ratio + circulating supply % + ATH distance
+- **Change:** Added FDV/MCap ratio, circulating supply %, and ATH distance in key metrics text block.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 395 — text report: thesis one_liner + time horizons + conviction score
+- **Change:** Investment Thesis section now shows one_liner, conviction_score, and time_horizon_short/medium fields.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 396 — HTML: project_summary + headline panel
+- **Change:** Added summary panel between header and key metrics — shows headline in bold + project_summary text.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 397 — HTML: 7d price change + FDV/mcap ratio metric cards
+- **Change:** Added 7d change card (with directional color) and FDV/MCap ratio card (with risk color coding: red >5x, yellow >2x) to key metrics section.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 398 — HTML: alpha signals section
+- **Change:** Added alpha signals section after key findings — shows up to 6 signals with strength color coding (green=strong, yellow=moderate, grey=weak).
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 399 — HTML: narrative strength section
+- **Change:** Added narrative strength section with strength label + score badge before elevator pitch.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 400 — HTML: trade setup as flex card layout
+- **Change:** Trade setup section replaced inline text with flex cards (Entry Zone, Stop Loss, TP1, TP2, R/R, Quality) — more scannable.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 401 — HTML: footer with engine version + data quality badge
+- **Change:** Added footer bar showing engine version, quality tier (color-coded), coverage %, completeness %.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 402 — JSON: tl_dr field
+- **Change:** Added `tl_dr` to main JSON output — one-sentence summary: `ProjectName: VERDICT (X.X/10) — elevator pitch`.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 403 — JSON: risk_profile object
+- **Change:** Added `risk_profile` to main JSON — consolidates risk_level, critical_flags, circuit_breakers_active, volatility_regime, supply_unlock_risk, fdv_overhang, wash_trading_risk.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 404 — formatAgentJSON: tl_dr + alpha_index_label
+- **Change:** Added `tl_dr` and `alpha_index_label` (exceptional/strong/moderate/weak/poor) to agent JSON format.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 405 — formatAgentJSON: risk_profile block
+- **Change:** Added `risk_profile` consolidated block to agent JSON — mirrors main JSON structure.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 406 — /alpha/export: tl_dr + risk_profile + narrative_strength
+- **Change:** Export endpoint now includes `tl_dr`, `risk_profile` (with volatility/supply/fdv_overhang), and `narrative_strength` fields.
+- **Files:** routes/alpha-history.js
+- **Tests:** 177/177 pass
+
+### Round 407 — MCP alpha_research: richer preamble
+- **Change:** MCP alpha_research preamble now shows TL;DR, alpha_index_label, risk profile summary, and data quality tier.
+- **Files:** routes/mcp.js
+- **Tests:** 177/177 pass
+
+### Round 408 — MCP get_oracle_signals: severity grouping + emoji
+- **Change:** Oracle signals now grouped by severity (critical→high→medium→low) with emoji indicators and count per group.
+- **Files:** routes/mcp.js
+- **Tests:** 177/177 pass
+
+### Round 409 — MCP x_sentiment: emoji score bar + structured sections
+- **Change:** X sentiment response now shows sentiment emoji, ASCII score bar `[████░░░░░░]`, and structured Narratives/KOL/Trending sections.
+- **Files:** routes/mcp.js
+- **Tests:** 177/177 pass
+
+### Round 410 — formatPlainText: alpha index + risk level in header
+- **Change:** Plain text header now shows `⚡alphaIndex/100 🛡️riskLevel` alongside verdict and score.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 411 — formatMarkdown: alpha index + risk level + tl_dr in header
+- **Change:** Markdown header shows score, alpha index, risk level in one line. Elevator pitch rendered as blockquote.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 412 — formatMarkdown: alpha signals section
+- **Change:** Added Alpha Signals section to markdown with `[STRENGTH]` labels.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 413 — JSON: opportunity_snapshot field
+- **Change:** Added `opportunity_snapshot` to main JSON — {verdict, score, alpha_index, risk_level, action_bias: enter_large|enter_moderate|watch|stay_out|exit_if_held}.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 414 — formatAgentJSON: opportunity_snapshot + alpha_signals_top3
+- **Change:** Agent JSON now includes `opportunity_snapshot` (5-field decision helper) and `alpha_signals_top3` (strong/moderate signals only).
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 415 — /alpha/export: opportunity_snapshot + alpha_signals_top3
+- **Change:** Export now includes opportunity_snapshot and alpha_signals_top3 for fast agent consumption.
+- **Files:** routes/alpha-history.js
+- **Tests:** 177/177 pass
+
+### Round 416 — MCP trading_signals: structured header + R:R emoji labels
+- **Change:** Signals response now shows bullish/bearish bias header, per-signal R:R emoji (🔥≥3, ✅≥2, ⚠️≥1, ❌<1).
+- **Files:** routes/mcp.js
+- **Tests:** 177/177 pass
+
+### Round 417 — HTML: supply unlock + volatility regime badges in risk summary
+- **Change:** Risk summary now shows volatility regime and supply unlock badges as colored pills.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 418 — HTML: data quality coverage/completeness/tier in header
+- **Change:** Replaced plain "Collector failures" text with structured coverage %, completeness %, and quality tier (color-coded) in report header.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 419 — text report: onchain context section
+- **Change:** Added ⛓️ Onchain Context section showing TVL 7d change, fee revenue 30d, active addresses 7d, P/TVL ratio.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 420 — HTML: scores as visual bar chart
+- **Change:** Score section rebuilt as grid with per-dimension progress bars (color-coded by score level) replacing plain list items.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 421 — formatReportMulti: new 'agent' format
+- **Change:** Added `format=agent` to formatReportMulti — compact structured text for AI consumption. Includes TL;DR, opportunity snapshot, risk profile, top signals, all key sections.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 422 — /alpha/export: ?format= param routing
+- **Change:** `/alpha/export` now supports `?format=agent|md|text|json|html` via formatReportMulti. Falls back to default JSON if format is unrecognized.
+- **Files:** routes/alpha-history.js
+- **Tests:** 177/177 pass
+
+### Round 423 — JSON: score_snapshot flat map
+- **Change:** Added `score_snapshot` to main JSON — flat `{dim: score}` map for quick parsing (all 8 dims, 1 decimal).
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 424 — formatAgentJSON: score_snapshot
+- **Change:** Added `score_snapshot` to agent JSON with same structure.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 425 — text report: richer X sentiment block
+- **Change:** X sentiment section now shows structured sentiment score + KOL sentiment + engagement level + narratives before LLM summary.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 426 — HTML: X sentiment with sentiment badge + KOL + narratives
+- **Change:** HTML X sentiment section now shows sentiment badge (green/red/yellow), KOL sentiment pill, engagement level, key narratives inline.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 427 — JSON: filter empty validation_warnings
+- **Change:** validation_warnings array now filters null/empty strings for cleaner output.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 428 — formatAgentJSON: data_quality block
+- **Change:** Added `data_quality` block to agent JSON — {total_collectors, ok_collectors, failed_collectors, coverage_pct, completeness_pct, quality_tier}.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 429 — HTML: thesis section one_liner pull quote + conviction score
+- **Change:** Thesis section now shows one_liner as styled italic pull quote and conviction_score above the bull/bear/neutral grid.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
+### Round 430 — Engine version bump to r64-2026-03-27
+- **Change:** Bumped engine_version to r64-2026-03-27 marking the Report Templates & Output Quality batch completion.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
