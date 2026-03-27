@@ -160,6 +160,7 @@
     // ── Skeleton loading state (Round 2) ────────────────────────────
     function showSkeleton() {
       resultsSection.classList.add('visible');
+      document.body.classList.add('scan-has-results');
       reportBox.classList.remove('hidden');
       errorBox.classList.add('hidden');
       reportBox.classList.remove('results-reveal');
@@ -783,6 +784,7 @@
       if (descMeta) descMeta.setAttribute('content', `${projectNameForTitle}: ${verdict} (${scoreForTitle}) — Clawnkers Alpha Scanner`);
 
       resultsSection.classList.add('visible');
+      document.body.classList.add('scan-has-results');
       errorBox.classList.add('hidden');
       reportBox.classList.remove('hidden');
       // Trigger smooth reveal animation (Round 2)
@@ -1091,11 +1093,14 @@
         });
       }
 
-      // Round R18: Copy report as text button
+      // Compact report toolbar (copy tools only; scan button now acts as rescan)
+      const toolbar = document.createElement('div');
+      toolbar.className = 'report-toolbar';
+
       const copyReportBtn = document.createElement('button');
-      copyReportBtn.textContent = '📋 Copy as Text';
+      copyReportBtn.textContent = 'Copy text';
       copyReportBtn.className = 'rescan-btn';
-      copyReportBtn.title = 'Copy report as plain text (Ctrl+Shift+C)';
+      copyReportBtn.title = 'Copy report as plain text';
       copyReportBtn.addEventListener('click', () => {
         const textContent = reportBox.innerText || reportBox.textContent || '';
         if (navigator.clipboard?.writeText) {
@@ -1108,15 +1113,11 @@
         }
       });
 
-      // Round 238 (AutoResearch): Copy JSON button — for agent/developer consumers
       const copyJsonBtn = document.createElement('button');
-      copyJsonBtn.textContent = '{ } Copy JSON';
+      copyJsonBtn.textContent = 'Copy JSON';
       copyJsonBtn.className = 'rescan-btn';
-      copyJsonBtn.title = 'Copy full scan data as JSON (for agent/developer use)';
-      copyJsonBtn.style.fontFamily = 'IBM Plex Mono, monospace';
-      copyJsonBtn.style.fontSize = '0.72rem';
+      copyJsonBtn.title = 'Copy full scan data as JSON';
       copyJsonBtn.addEventListener('click', () => {
-        // data is available via closure from the calling scope (lastScanData or similar)
         const jsonData = window._lastScanResult || {};
         const jsonStr = JSON.stringify(jsonData, null, 2);
         if (navigator.clipboard?.writeText) {
@@ -1129,14 +1130,9 @@
         }
       });
 
-      // Rescan button — wired via event delegation (no inline handlers)
-      const rescanBtn = document.createElement('button');
-      rescanBtn.textContent = '🔄 Rescan this project';
-      rescanBtn.className = 'rescan-btn';
-      rescanBtn.addEventListener('click', () => runScan(_persistedKey ? 'full' : 'quick'));
-      reportBox.insertBefore(copyJsonBtn, reportBox.firstChild);   // Round 238: JSON copy for devs
-      reportBox.insertBefore(copyReportBtn, reportBox.firstChild);
-      reportBox.insertBefore(rescanBtn, reportBox.firstChild);
+      toolbar.appendChild(copyReportBtn);
+      toolbar.appendChild(copyJsonBtn);
+      reportBox.insertBefore(toolbar, reportBox.firstChild);
       resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       // Round 89: focus management for screen readers
       setTimeout(() => {
@@ -1147,6 +1143,7 @@
 
     function showError(msg, hint) {
       resultsSection.classList.add('visible');
+      document.body.classList.add('scan-has-results');
       errorBox.classList.remove('hidden');
       // Round 104: improved error layout with hint + action links
       const hintHtml = hint ? `<div class="error-hint">${escapeHtml(hint)}</div>` : '';
