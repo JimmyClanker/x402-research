@@ -820,17 +820,21 @@
         </div>
         ${renderProjectIntro(payload, analysis, raw)}
         <div class="report-main-grid">
-          <div class="analysis ${hasAnalysis ? '' : 'analysis-error-state'}">${hasAnalysis ? formatAnalysisText(analysis.analysis_text) : '<p style="margin:0;line-height:1.8;">Oops, something went wrong — we couldn\'t generate the analysis for this project. Try again.</p>'}</div>
+          <div>
+            <div class="analysis ${hasAnalysis ? '' : 'analysis-error-state'}">${hasAnalysis ? formatAnalysisText(analysis.analysis_text) : '<p style="margin:0;line-height:1.8;">Oops, something went wrong — we couldn\'t generate the analysis for this project. Try again.</p>'}</div>
+            ${mr||gc ? `<div style="margin-top:22px;display:grid;gap:16px;">
+              ${mr ? `<div>
+                <div class="section-label">Market Board</div>
+                <table class="table"><tbody>${mr}</tbody></table>
+              </div>` : ''}
+              ${gc || ''}
+            </div>` : ''}
+          </div>
           <aside class="report-side-stack">
             <div>
               <div class="section-label">Score Radar</div>
               ${renderRadar(scores)}
               <div class="score-list">${renderScoreBars(scores)}</div>
-            </div>
-            <div>
-              ${mr||gc ? `<div class="section-label">Market Board</div>
-              ${mr?`<table class="table"><tbody>${mr}</tbody></table>`:''}
-              ${gc}` : '<div class="section-label" style="color:var(--muted);">No market data</div>'}
             </div>
           </aside>
         </div>
