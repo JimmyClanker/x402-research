@@ -26,6 +26,22 @@ const domainFailCache = new Map();
 const DOMAIN_COOLDOWN_MS = Number(process.env.DOMAIN_COOLDOWN_MS) || 60_000; // default 1 minute
 const DOMAIN_FAIL_THRESHOLD = Number(process.env.DOMAIN_FAIL_THRESHOLD) || 3; // default 3 failures
 
+// Round 536 (AutoResearch): per-domain 429 backoff state
+// Tracks when a domain's rate-limit window expires to avoid hammering on 429 responses
+const domainRateLimitUntil = new Map();
+function setDomainRateLimit(url, retryAfterMs) {
+  const domain = extractDomain(url);
+  const existing = domainRateLimitUntil.get(domain) || 0;
+  const until = Math.max(existing, Date.now() + retryAfterMs);
+  domainRateLimitUntil.set(domain, until);
+}
+function getDomainRateLimitWait(url) {
+  const domain = extractDomain(url);
+  const until = domainRateLimitUntil.get(domain) || 0;
+  const remaining = until - Date.now();
+  return remaining > 0 ? remaining : 0;
+}
+
 function extractDomain(url) {
   try { return new URL(url).hostname; } catch { return url; }
 }
@@ -85,6 +101,13 @@ async function _fetchJsonImpl(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, re
   const _reqStart = Date.now(); // Round 203: track request start time
   let lastError;
 
+  // Round 536 (AutoResearch): check domain-level rate limit before first attempt
+  const rateLimitWait = getDomainRateLimitWait(url);
+  if (rateLimitWait > 0) {
+    // If rate limit window is still active, wait it out (capped at 8s)
+    await new Promise((r) => setTimeout(r, Math.min(rateLimitWait, 8000)));
+  }
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -103,11 +126,14 @@ async function _fetchJsonImpl(url, { timeoutMs = DEFAULT_TIMEOUT_MS, headers, re
       });
 
       // Rate limit — respect Retry-After if present, then retry
+      // Round 536 (AutoResearch): also record domain-level rate limit to protect all future requests
       if (response.status === 429 && attempt < retries) {
         const retryAfterSec = Number(response.headers.get('retry-after') || 0);
         const delayMs = retryAfterSec > 0
           ? Math.min(retryAfterSec * 1000, 10000)
           : jitterMs(RETRY_BASE_DELAY_MS * Math.pow(2, attempt)); // Round 19: jitter
+        setDomainRateLimit(url, delayMs); // record for future requests
+        clearTimeout(timeout);
         await new Promise((r) => setTimeout(r, delayMs));
         lastError = new Error(`HTTP 429 rate-limited for ${url}`);
         continue;
@@ -170,6 +196,7 @@ export function fetchJson(url, opts = {}) {
 
 // Round 233 (AutoResearch nightly): Export domain failure stats for health diagnostics
 // Allows health endpoint to surface which domains are currently in cooldown
+// Round 537 (AutoResearch): also includes rate-limit windows
 export function getDomainFailStats() {
   const now = Date.now();
   const result = {};
@@ -179,7 +206,18 @@ export function getDomainFailStats() {
       fails: entry.fails,
       cooling_down: coolingDown,
       cooldown_remaining_ms: coolingDown ? entry.cooldownUntil - now : 0,
+      rate_limited: false,
+      rate_limit_remaining_ms: 0,
     };
+  }
+  // Merge in rate-limit state (may include domains not in fail cache)
+  for (const [domain, until] of domainRateLimitUntil.entries()) {
+    const remaining = until - now;
+    if (remaining > 0) {
+      if (!result[domain]) result[domain] = { fails: 0, cooling_down: false, cooldown_remaining_ms: 0 };
+      result[domain].rate_limited = true;
+      result[domain].rate_limit_remaining_ms = remaining;
+    }
   }
   return result;
 }

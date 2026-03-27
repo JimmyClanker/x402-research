@@ -188,7 +188,11 @@ export async function collectReddit(projectName) {
       })(),
       // Round 383 (AutoResearch): avg_post_score — average upvotes per post (quality signal)
       // High avg upvotes = community validation; very low avg = noise/spam posts
-      avg_post_score: posts.length > 0 ? Math.round(totalUpvotes / posts.length) : 0,
+      // Round 540 (AutoResearch): guard NaN from edge cases (posts.length=0 race condition)
+      avg_post_score: posts.length > 0 ? (() => {
+        const avg = totalUpvotes / posts.length;
+        return Number.isFinite(avg) ? Math.round(avg) : 0;
+      })() : 0,
       error: null,
     };
   } catch (error) {

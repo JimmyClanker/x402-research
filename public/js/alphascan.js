@@ -341,13 +341,19 @@
         const confidenceHint = (rawScoreV !== v && Math.abs(rawScoreV - v) > 0.2)
           ? `<span style="font-size:0.58rem;color:#888;margin-left:3px;" title="Raw score ${rawScoreV.toFixed(1)}, pulled toward neutral by confidence weight">raw ${rawScoreV.toFixed(1)}</span>`
           : '';
+        // Round 384 (AutoResearch batch): confidence band — dim overlay showing confidence impact
+        const confPct = Number(dim.confidence ?? 100);
+        const confBand = (confPct < 80 && confPct > 0)
+          ? `<div style="position:absolute;right:0;top:0;bottom:0;width:${(100-confPct).toFixed(0)}%;background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.04) 3px,rgba(255,255,255,0.04) 6px);border-left:1px dashed rgba(255,255,255,0.15);border-radius:0 4px 4px 0;pointer-events:none;" title="Low confidence zone: ${confPct.toFixed(0)}% data confidence"></div>`
+          : '';
         return `<div class="score-row"${tooltip}>
           <div class="score-label">
             <strong>${label}</strong>${confBadge}${confidenceHint}
             <span style="color:${t.color};font-size:0.65rem;background:${t.bg};border:1px solid ${t.border};border-radius:999px;padding:1px 6px;display:inline-flex;align-items:center;gap:3px;font-weight:600;">${t.icon} ${t.label}</span>
           </div>
-          <div class="bar">
+          <div class="bar" style="position:relative;">
             <span style="--target-width:${w}; background:${barC}; box-shadow:0 0 8px ${barC}55"></span>
+            ${confBand}
           </div>
           <div class="score-value" style="color:${barC};font-family:'IBM Plex Mono',monospace;font-size:0.92rem;">${v.toFixed(1)}</div>
         </div>`;
@@ -423,6 +429,10 @@
         ['Tier-1 articles','top_tier_source_count', raw?.social?.top_tier_source_count != null ? `${raw.social.top_tier_source_count}` : null, null],
         ['Holder engagement','holder_engagement_score', raw?.market?.holder_engagement_score != null ? `${raw.market.holder_engagement_score}/100` : null, null],
         ['Coin age','coin_age_days', raw?.market?.coin_age_days != null ? (raw.market.coin_age_days < 365 ? `${Math.round(raw.market.coin_age_days/30)}mo` : `${(raw.market.coin_age_days/365).toFixed(1)}yr`) : null, null],
+        // Round 384 (AutoResearch batch): 90d price range context
+        ['90d range pos','price_range_90d_position', raw?.market?.price_range_90d?.position_in_range != null ? `${(raw.market.price_range_90d.position_in_range*100).toFixed(0)}% (${raw.market.price_range_90d.tier?.replace('_',' ')??''})` : null, null],
+        ['90d range width','price_range_90d_width', raw?.market?.price_range_90d?.range_width_pct != null ? `${raw.market.price_range_90d.range_width_pct.toFixed(0)}%` : null, null],
+        ['TVL 90d range pos','tvl_range_90d_position', raw?.onchain?.tvl_range_90d?.position_in_range != null ? `${(raw.onchain.tvl_range_90d.position_in_range*100).toFixed(0)}% of 90d range` : null, null],
       ];
       return rows.filter(([,,value])=> value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== 'n/a').map(([label,key,value,type])=>{
         const cls=type==='change'?` class="${changeClass(value)}"`:''

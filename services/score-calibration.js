@@ -102,6 +102,21 @@ export function calibrateScores(db, rawScores) {
     : null;
   const outliers = calibratedDims.filter((c) => Math.abs(c.z_score) > 2).length;
 
+  // Round 384 (AutoResearch batch): Add calibration quality score
+  // Measures how reliable the calibration is based on n, stddev, and coverage
+  const calibrationQuality = (() => {
+    if (calibratedDims.length === 0) return { score: 0, label: 'uncalibrated' };
+    const avgN = calibratedDims.reduce((s, c) => s + (c.n ?? 0), 0) / calibratedDims.length;
+    const coverage = calibratedDims.length / DIMENSIONS.length;
+    // More data points = more reliable; full coverage = better
+    const nScore = Math.min(50, (avgN / 100) * 50); // 0-50 based on data quantity
+    const coverageScore = coverage * 30;             // 0-30 based on coverage
+    const outlierPenalty = outliers * 5;             // -5 per outlier dimension
+    const qualityScore = Math.max(0, Math.min(100, Math.round(nScore + coverageScore + 20 - outlierPenalty)));
+    const label = qualityScore >= 70 ? 'high' : qualityScore >= 40 ? 'moderate' : 'low';
+    return { score: qualityScore, label, avg_n: Math.round(avgN) };
+  })();
+
   return {
     scores: rawScores,
     calibrated,
@@ -110,6 +125,7 @@ export function calibrateScores(db, rawScores) {
       outlier_dimensions: outliers,
       calibration_coverage: `${calibratedDims.length}/${DIMENSIONS.length}`,
       has_full_calibration: calibratedDims.length === DIMENSIONS.length,
+      calibration_quality: calibrationQuality,
     },
   };
 }

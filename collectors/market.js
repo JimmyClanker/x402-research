@@ -80,7 +80,9 @@ export async function collectMarket(projectName) {
       };
     }
 
-    const coinUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}?localization=false&tickers=false&community_data=true&developer_data=false&sparkline=true&price_change_percentage=1h%2C24h%2C7d%2C14d%2C30d%2C60d%2C200d%2C1y`;
+    // Round 541 (AutoResearch): enable developer_data to extract GitHub commit activity and repo count
+    // CoinGecko provides this for free; useful to cross-check our GitHub collector
+    const coinUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}?localization=false&tickers=false&community_data=true&developer_data=true&sparkline=true&price_change_percentage=1h%2C24h%2C7d%2C14d%2C30d%2C60d%2C200d%2C1y`;
     const chartUrl = `${COINGECKO_COIN_URL}/${encodeURIComponent(firstCoin.id)}/market_chart?vs_currency=usd&days=90&interval=daily`;
     const [coinData, trendingData, tickersData, chartData, globalData] = await Promise.allSettled([
       fetchJson(coinUrl),
@@ -91,6 +93,8 @@ export async function collectMarket(projectName) {
     ]).then((results) => results.map((r) => (r.status === 'fulfilled' ? r.value : null)));
     const marketData = coinData?.market_data || {};
     const communityData = coinData?.community_data || {};
+    // Round 541 (AutoResearch): developer_data from CoinGecko — free cross-check of GitHub activity
+    const developerData = coinData?.developer_data || {};
 
     const price = marketData?.current_price?.usd ?? null;
     const ath = marketData?.ath?.usd ?? null;
@@ -101,19 +105,29 @@ export async function collectMarket(projectName) {
     const totalSupply = marketData?.total_supply ?? null;
 
     // Derived enrichment metrics
-    const athDistancePct = (price != null && ath != null && ath > 0)
-      ? safeNumber(((price - ath) / ath) * 100)
-      : null;
+    // Round 533 (AutoResearch): wrap all derived metrics in isFinite guards to prevent NaN propagation
+    const athDistancePct = (() => {
+      if (price == null || ath == null || ath <= 0) return null;
+      const pct = ((price - ath) / ath) * 100;
+      return Number.isFinite(pct) ? parseFloat(pct.toFixed(2)) : null;
+    })();
     const atl = marketData?.atl?.usd ?? null;
-    const atlDistancePct = (price != null && atl != null && atl > 0 && price > atl)
-      ? safeNumber(((price - atl) / atl) * 100)
-      : null;
-    const circulatingToMaxRatio = (circulatingSupply != null && (maxSupply || totalSupply) > 0)
-      ? safeNumber(circulatingSupply / (maxSupply || totalSupply))
-      : null;
-    const volumeToMcapRatio = (totalVolume != null && marketCap != null && marketCap > 0)
-      ? safeNumber(totalVolume / marketCap)
-      : null;
+    const atlDistancePct = (() => {
+      if (price == null || atl == null || atl <= 0 || price <= atl) return null;
+      const pct = ((price - atl) / atl) * 100;
+      return Number.isFinite(pct) ? parseFloat(pct.toFixed(2)) : null;
+    })();
+    const circulatingToMaxRatio = (() => {
+      const denom = Number(maxSupply || totalSupply || 0);
+      if (circulatingSupply == null || denom <= 0) return null;
+      const ratio = circulatingSupply / denom;
+      return Number.isFinite(ratio) ? parseFloat(Math.min(ratio, 1).toFixed(4)) : null;
+    })();
+    const volumeToMcapRatio = (() => {
+      if (totalVolume == null || marketCap == null || marketCap <= 0) return null;
+      const ratio = totalVolume / marketCap;
+      return Number.isFinite(ratio) ? parseFloat(ratio.toFixed(6)) : null;
+    })();
     // Round 9: price range position (0 = at ATL, 1 = at ATH)
     const priceRangePosition = (price != null && ath != null && atl != null && ath > atl)
       ? Math.max(0, Math.min(1, (price - atl) / (ath - atl)))
@@ -128,10 +142,11 @@ export async function collectMarket(projectName) {
     const genesisDate = coinData?.genesis_date ?? null;
 
     // Round 2 (extended): price momentum tier — classify multi-timeframe trend
-    const p1h  = marketData?.price_change_percentage_1h_in_currency?.usd ?? 0;
-    const p24h = marketData?.price_change_percentage_24h_in_currency?.usd ?? 0;
-    const p7d  = marketData?.price_change_percentage_7d_in_currency?.usd ?? 0;
-    const p30d = marketData?.price_change_percentage_30d_in_currency?.usd ?? 0;
+    // Round 535 (AutoResearch): guard NaN/null in raw API values before comparison
+    const p1h  = (() => { const v = Number(marketData?.price_change_percentage_1h_in_currency?.usd); return Number.isFinite(v) ? v : 0; })();
+    const p24h = (() => { const v = Number(marketData?.price_change_percentage_24h_in_currency?.usd); return Number.isFinite(v) ? v : 0; })();
+    const p7d  = (() => { const v = Number(marketData?.price_change_percentage_7d_in_currency?.usd); return Number.isFinite(v) ? v : 0; })();
+    const p30d = (() => { const v = Number(marketData?.price_change_percentage_30d_in_currency?.usd); return Number.isFinite(v) ? v : 0; })();
     const positiveTfs = [p1h, p24h, p7d, p30d].filter((c) => c > 0).length;
     let priceMomentumTier;
     if (positiveTfs === 4) priceMomentumTier = 'strong_uptrend';
@@ -421,6 +436,25 @@ export async function collectMarket(projectName) {
         : null,
       total_market_cap_usd: globalData?.data?.total_market_cap?.usd ?? null,
       market_cap_change_pct_24h_global: globalData?.data?.market_cap_change_percentage_24h_usd ?? null,
+      // Round 541 (AutoResearch): developer_data from CoinGecko (commit activity, repo count)
+      // Cross-reference with GitHub collector; if GitHub fails, these provide a fallback signal
+      cg_forks: developerData?.forks ?? null,
+      cg_stars: developerData?.stars ?? null,
+      cg_subscribers: developerData?.subscribers ?? null,
+      cg_total_issues: developerData?.total_issues ?? null,
+      cg_closed_issues: developerData?.closed_issues ?? null,
+      cg_pr_merged: developerData?.pull_requests_merged ?? null,
+      cg_pr_contributors: developerData?.pull_request_contributors ?? null,
+      // Commit activity from CoinGecko — last 4 weeks
+      cg_commits_4w: developerData?.commit_count_4_weeks ?? null,
+      // Issue resolution rate derived from CoinGecko developer data
+      cg_issue_resolution_rate: (() => {
+        const closed = developerData?.closed_issues;
+        const total = developerData?.total_issues;
+        if (closed == null || total == null || total === 0) return null;
+        const rate = (closed / total) * 100;
+        return Number.isFinite(rate) ? parseFloat(rate.toFixed(1)) : null;
+      })(),
       // Round 190 (AutoResearch): project description + homepage from CoinGecko
       description: coinData?.description?.en
         ? String(coinData.description.en).replace(/<[^>]+>/g, '').trim().slice(0, 500) || null
@@ -503,6 +537,27 @@ export async function collectMarket(projectName) {
         return {
           required_pct: parseFloat(requiredPctMove.toFixed(1)),
           tier,
+        };
+      })(),
+      // Round 384 (AutoResearch batch): 90-day price high and low from chart data
+      // Provides medium-term range context beyond the 7d range already computed.
+      // Useful for: support/resistance zones, trend directionality over a quarter.
+      price_range_90d: (() => {
+        const prices = (chartData?.prices || []).map(([, p]) => Number(p)).filter(Number.isFinite);
+        if (prices.length < 30) return null;
+        const high90d = Math.max(...prices);
+        const low90d = Math.min(...prices);
+        const lastPrice = prices[prices.length - 1];
+        if (low90d <= 0 || high90d <= 0) return null;
+        const rangeWidth = ((high90d - low90d) / low90d) * 100;
+        const positionInRange = (lastPrice - low90d) / (high90d - low90d); // 0=at low, 1=at high
+        return {
+          high: parseFloat(high90d.toFixed(8)),
+          low: parseFloat(low90d.toFixed(8)),
+          range_width_pct: parseFloat(rangeWidth.toFixed(2)),
+          position_in_range: parseFloat(positionInRange.toFixed(3)),
+          // Tier based on position in 90d range
+          tier: positionInRange >= 0.75 ? 'upper_quartile' : positionInRange >= 0.5 ? 'upper_half' : positionInRange >= 0.25 ? 'lower_half' : 'lower_quartile',
         };
       })(),
       error: null,

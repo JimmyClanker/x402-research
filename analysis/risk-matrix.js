@@ -82,6 +82,10 @@ const FLAG_CATEGORY_MAP = {
   no_tier1_coverage: 'operational',
   mercenary_tvl_whale_concentration: 'concentration',
 
+  // Round 384 (AutoResearch batch): new risk flag mappings
+  high_inflation_rate: 'tokenomics',
+  zero_cex_listings: 'market',
+
   // Other/mixed
   young_project: 'operational',
   bearish_sentiment: 'market',

@@ -111,6 +111,11 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
       if (verdict) res.set('X-Verdict', verdict);
       const scanScore = response?.scores?.overall?.score;
       if (scanScore != null) res.set('X-Alpha-Score', String(scanScore));
+      // Round 384 (AutoResearch batch): expose data completeness and category for API consumers
+      const completeness = response?.scores?.overall?.completeness;
+      if (completeness != null) res.set('X-Data-Completeness', String(completeness));
+      const category = response?.scores?.overall?.category;
+      if (category) res.set('X-Token-Category', category);
       return res.json(response);
     } catch (error) {
       const { stage, message } = extractAlphaErrorDetails(error);

@@ -69,6 +69,28 @@ export function analyzeSupplyUnlockRisk(tokenomics = {}, market = {}) {
     notes.push(`Annual inflation rate ${inflationRate.toFixed(0)}% amplifies dilution risk.`);
   }
 
+  // Round 384 (AutoResearch batch): team vesting cliff detection
+  // Projects <18 months old with >20% team allocation are approaching typical 12-18 month cliff
+  const vestingInfo = tokenomics.vesting_info ?? {};
+  const launchDate = vestingInfo.launch_date ?? tokenomics.launch_date ?? null;
+  const teamAllocationPct = safeNum(vestingInfo.team_allocation_pct ?? null, null);
+  if (launchDate && teamAllocationPct != null && teamAllocationPct > 15) {
+    const launchMs = Date.now() - new Date(launchDate).getTime();
+    const launchMonths = launchMs / (1000 * 60 * 60 * 24 * 30.44);
+    if (Number.isFinite(launchMonths) && launchMonths > 0) {
+      if (launchMonths >= 10 && launchMonths <= 14 && teamAllocationPct > 15) {
+        // Approaching 12-month cliff — common team vesting schedule
+        notes.push(`⏰ Team cliff warning: ${launchMonths.toFixed(0)} months since launch with ${teamAllocationPct.toFixed(0)}% team allocation — approaching typical 12-month team unlock cliff.`);
+        if (riskLevel === 'low' || riskLevel === 'none') riskLevel = 'medium';
+        if (sellPressure === 'minimal') sellPressure = 'mild';
+      } else if (launchMonths >= 22 && launchMonths <= 26 && teamAllocationPct > 15) {
+        // Approaching 24-month cliff
+        notes.push(`⏰ 2-year cliff approaching: ${launchMonths.toFixed(0)} months since launch, ${teamAllocationPct.toFixed(0)}% team allocation — potential unlock event within 2 months.`);
+        if (riskLevel === 'low' || riskLevel === 'none') riskLevel = 'medium';
+      }
+    }
+  }
+
   return {
     risk_level: riskLevel,
     unlock_overhang_pct: overhang !== null ? parseFloat(overhang.toFixed(1)) : null,

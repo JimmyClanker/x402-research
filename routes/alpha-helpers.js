@@ -166,6 +166,12 @@ const INJECTION_PATTERNS = [
   /vbscript:/i,                      // VBScript injection
   /on\w+\s*=/i,                      // inline event handlers (onload=, onclick= etc)
   /expression\s*\(/i,                // CSS expression() injection
+  // Round 384 (AutoResearch batch): additional hardening
+  /\$\{/,                            // template literal injection
+  /\beval\b/i,                       // eval() injection
+  /\bimport\b.*\(/i,                 // dynamic import injection
+  /\bfetch\b.*\(/i,                  // fetch() injection in project name
+  /[\r\n]/,                          // newline injection (HTTP header splitting)
 ];
 
 export function normalizeProject(project) {

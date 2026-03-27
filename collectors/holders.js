@@ -87,10 +87,19 @@ export async function collectHolders(projectName, contractAddress = null) {
       error: null,
     };
   } catch (error) {
+    // Round 549 (AutoResearch): classify Etherscan errors for clearer diagnostics
+    const isTimeout = error.name === 'AbortError' || error.message?.includes('timed out');
+    const isRateLimit = error.message?.includes('429') || error.message?.includes('rate-limited');
+    const isCooldown = error.message?.includes('cooldown');
+    let errorMsg;
+    if (isTimeout) errorMsg = `Etherscan timeout for "${contractAddress}"`;
+    else if (isRateLimit) errorMsg = `Etherscan rate-limited — retry later`;
+    else if (isCooldown) errorMsg = `Etherscan in cooldown — too many recent failures`;
+    else errorMsg = error.message;
     return {
       ...fallback,
       contract_address: contractAddress,
-      error: error.name === 'AbortError' ? 'Etherscan timeout' : error.message,
+      error: errorMsg,
     };
   }
 }

@@ -269,7 +269,33 @@ export function calculateConviction(rawData, scores, enrichment = {}) {
     return 0;
   })();
 
-  const total = Math.min(100, Math.max(0, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus + range52wBonus + holderEngBonus + sellWallConvPenalty + washTradingPenalty + athConvictionBonus + articleQualityBonus + organicVolumeBonus + inflationConvPenalty + lowFloatMomentumBonus + topTierCoverageBonus));
+  // Round 384 (AutoResearch batch): Deflationary tokenomics conviction bonus
+  // Deflationary supply = verifiable on-chain event = reduces uncertainty about future dilution
+  const deflationaryConvBonus = (() => {
+    const inflationRate = Number(rawData?.tokenomics?.inflation_rate ?? NaN);
+    if (!Number.isFinite(inflationRate)) return 0;
+    if (inflationRate < -3) return 3;  // Strong deflation = high predictability
+    if (inflationRate < 0) return 1;   // Mild deflation = marginal conviction boost
+    return 0;
+  })();
+
+  // Round 384: Multi-source sentiment alignment conviction bonus
+  // When Reddit, X/Twitter, and Exa social all agree on sentiment direction, reduce uncertainty
+  const multiSourceSentimentBonus = (() => {
+    const exaSentiment = rawData?.social?.sentiment_score;
+    const xSentScore = rawData?.x_social?.sentiment_score;
+    const redditSentiment = rawData?.reddit?.sentiment;
+    if (exaSentiment == null || xSentScore == null) return 0;
+    const exaDir = exaSentiment > 0.2 ? 'bullish' : exaSentiment < -0.2 ? 'bearish' : 'neutral';
+    const xDir = xSentScore > 0.2 ? 'bullish' : xSentScore < -0.2 ? 'bearish' : 'neutral';
+    const redditDir = redditSentiment === 'bullish' ? 'bullish' : redditSentiment === 'bearish' ? 'bearish' : 'neutral';
+    const sources = [exaDir, xDir, redditDir].filter(d => d !== 'neutral');
+    const allAgree = sources.length >= 2 && sources.every(d => d === sources[0]);
+    if (allAgree && sources.length >= 2) return 3; // Multi-source agreement = more reliable signal
+    return 0;
+  })();
+
+  const total = Math.min(100, Math.max(0, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus + range52wBonus + holderEngBonus + sellWallConvPenalty + washTradingPenalty + athConvictionBonus + articleQualityBonus + organicVolumeBonus + inflationConvPenalty + lowFloatMomentumBonus + topTierCoverageBonus + deflationaryConvBonus + multiSourceSentimentBonus));
   const label = convictionLabel(total);
 
   const reasoning = [

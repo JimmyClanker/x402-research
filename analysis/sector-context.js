@@ -96,6 +96,20 @@ const SECTOR_DEFINITIONS = {
     weights: { market: 0.18, onchain: 0.16, social: 0.10, development: 0.22, tokenomics: 0.14, distribution: 0.12, risk: 0.08 },
     description: 'Privacy protocols — development quality and regulatory risk are key.',
   },
+  // Round 384 (AutoResearch batch): AI infrastructure sector
+  AIInfrastructure: {
+    keywords: ['ai agent', 'on-chain ai', 'decentralized ai', 'ai compute', 'zkml', 'ai inference', 'llm', 'neural', 'machine learning'],
+    keyMetrics: ['development', 'fees_7d', 'social_mentions', 'active_addresses_7d'],
+    weights: { market: 0.16, onchain: 0.16, social: 0.18, development: 0.24, tokenomics: 0.12, distribution: 0.10, risk: 0.04 },
+    description: 'AI infrastructure — development velocity and real usage/API demand are primary.',
+  },
+  // Round 384: DePIN sector
+  DePIN: {
+    keywords: ['depin', 'decentralized physical', 'decentralized infrastructure', 'wireless', 'helium', 'hotspot', 'sensor', 'iot'],
+    keyMetrics: ['development', 'active_addresses_7d', 'fees_7d', 'market_cap'],
+    weights: { market: 0.16, onchain: 0.18, social: 0.14, development: 0.22, tokenomics: 0.14, distribution: 0.10, risk: 0.06 },
+    description: 'DePIN — hardware adoption rate and real network revenue are key. Dev velocity and token economics matter for node incentives.',
+  },
 };
 
 /**

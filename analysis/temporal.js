@@ -153,6 +153,23 @@ export function analyzeTemporalDelta(db, projectName, currentRawData, currentSco
     narrativeParts.push(`Overall score ${dir} by ${Math.abs(overallScoreDelta.delta).toFixed(1)} points`);
   }
 
+  // Round 384 (AutoResearch batch): detect accelerating vs decelerating dimension trends
+  // More than one improving dimension = momentum building; more than one declining = deterioration
+  const improvingDims = scoreDeltas.filter(d => d.dimension !== 'overall' && d.delta !== null && d.delta >= 0.5);
+  const decliningDims = scoreDeltas.filter(d => d.dimension !== 'overall' && d.delta !== null && d.delta <= -0.5);
+  if (improvingDims.length >= 3) {
+    narrativeParts.push(`Broad-based improvement: ${improvingDims.slice(0, 3).map(d => d.dimension.replace(/_/g,' ')).join(', ')} all strengthening`);
+  } else if (decliningDims.length >= 3) {
+    narrativeParts.push(`Broad-based deterioration: ${decliningDims.slice(0, 3).map(d => d.dimension.replace(/_/g,' ')).join(', ')} all weakening`);
+  }
+
+  // Momentum signal: score trend direction from last 3 scans if we have enough history
+  const signals = [];
+  if (overallScoreDelta?.delta !== null) {
+    if (overallScoreDelta.delta > 1.0) signals.push({ type: 'SCORE_MOMENTUM', title: 'Strong upward score momentum', detail: `+${overallScoreDelta.delta.toFixed(1)} overall score since last scan — accelerating improvement`, data_json: { delta: overallScoreDelta.delta } });
+    else if (overallScoreDelta.delta < -1.0) signals.push({ type: 'SCORE_MOMENTUM', title: 'Strong downward score momentum', detail: `${overallScoreDelta.delta.toFixed(1)} overall score since last scan — accelerating deterioration`, data_json: { delta: overallScoreDelta.delta } });
+  }
+
   return {
     has_history: true,
     scan_count: rows.length,
@@ -163,6 +180,7 @@ export function analyzeTemporalDelta(db, projectName, currentRawData, currentSco
     new_red_flags: newFlags,
     resolved_red_flags: resolvedFlags,
     previous_verdict: prevVerdict,
+    signals,
     narrative: narrativeParts.length > 0
       ? narrativeParts.join('. ') + '.'
       : 'No significant changes since last scan.',

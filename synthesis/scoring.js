@@ -612,6 +612,17 @@ function scoreOnchainHealth(onchain = {}, rawData = {}) {
     else raw -= 0.1;                                  // <$0.01 = very low monetization
   }
 
+  // Round 384 (AutoResearch batch): TVL position in 90d range — top quartile = bullish trend
+  // Protocol TVL near 90d high suggests capital inflow momentum; near low = capital flight
+  const tvlRange90d = onchain.tvl_range_90d;
+  if (tvlRange90d != null && Number.isFinite(tvlRange90d.position_in_range)) {
+    const pos = tvlRange90d.position_in_range;
+    if (pos >= 0.75) raw += 0.35;       // Top quartile of 90d range = strong inflow trend
+    else if (pos >= 0.5) raw += 0.1;    // Upper half = constructive
+    else if (pos <= 0.1) raw -= 0.4;    // Near 90d low = capital flight signal
+    else if (pos <= 0.25) raw -= 0.2;   // Lower quartile = cautionary
+  }
+
   // Round 57: Active addresses as a usage signal
   const activeAddresses7d = safeNumber(onchain.active_addresses_7d ?? onchain.unique_users_7d ?? 0);
   if (activeAddresses7d > 50_000) raw += 0.6;

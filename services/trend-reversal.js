@@ -140,6 +140,23 @@ export function detectTrendReversal(rawData = {}) {
     bullishPoints += 2;
   }
 
+  // Round 384 (AutoResearch batch): RSI-like overbought/oversold detection
+  // Using price position in 90d range as a proxy for RSI-like analysis
+  const range90d = rawData?.market?.price_range_90d;
+  if (range90d != null && Number.isFinite(range90d.position_in_range)) {
+    const pos = range90d.position_in_range;
+    // Oversold (near 90d low) with buy pressure = potential reversal entry
+    if (pos <= 0.2 && buySellRatio !== null && buySellRatio > 1.1) {
+      signals.push(`Price at ${(pos * 100).toFixed(0)}% of 90d range (oversold zone) with buy pressure ${buySellRatio.toFixed(2)}x — contrarian reversal setup`);
+      bullishPoints += 2;
+    }
+    // Overbought (near 90d high) with sell pressure = distribution
+    else if (pos >= 0.85 && buySellRatio !== null && buySellRatio < 0.9) {
+      signals.push(`Price at ${(pos * 100).toFixed(0)}% of 90d range (overbought zone) with sell pressure ${buySellRatio.toFixed(2)}x — distribution warning`);
+      bearishPoints += 2;
+    }
+  }
+
   // Determine pattern
   let pattern = 'none';
   let confidence = 'low';

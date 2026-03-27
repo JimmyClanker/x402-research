@@ -117,6 +117,17 @@ export async function collectDexScreener(projectName) {
       }
     }
 
+    // Round 545 (AutoResearch): extract FDV and market cap from top DexScreener pair
+    // DexScreener provides these on each pair — cross-reference with CoinGecko MCap for discrepancy detection
+    const dexFdv = (() => {
+      const v = Number(topPair?.fdv || 0);
+      return v > 0 ? v : null;
+    })();
+    const dexMcap = (() => {
+      const v = Number(topPair?.marketCap || 0);
+      return v > 0 ? v : null;
+    })();
+
     // Round 3: price changes from top pair
     // Round 238 (AutoResearch): also capture 5m change for ultra-short-term momentum signal
     const dexPriceChangeH1 = topPair?.priceChange?.h1 != null ? Number(topPair.priceChange.h1) : null;
@@ -250,6 +261,10 @@ export async function collectDexScreener(projectName) {
       // Round 198 (AutoResearch): top pair identifiers for direct DexScreener linking
       top_pair_address: topPair?.pairAddress || null,
       top_pair_chain: topPair?.chainId || null,
+      // Round 545 (AutoResearch): FDV and market cap from DexScreener top pair
+      // Can detect MCap discrepancies between CoinGecko and on-chain DEX data
+      dex_fdv: dexFdv,
+      dex_mcap: dexMcap,
       // Round 211 (AutoResearch): net_buy_pressure_pct — % of transactions that are buys
       // Simple but effective: >55% buys = net accumulation, <45% = net distribution
       net_buy_pressure_pct: hasTxnData && (totalBuys24h + totalSells24h) > 0
@@ -362,9 +377,18 @@ export async function collectDexScreener(projectName) {
       error: null,
     };
   } catch (error) {
+    // Round 534 (AutoResearch): richer error classification for downstream diagnostics
+    const isTimeout = error.name === 'AbortError' || error.message?.includes('timed out');
+    const isCooldown = error.message?.includes('cooldown');
+    const isRateLimit = error.message?.includes('429') || error.message?.includes('rate-limited');
+    let errorMsg;
+    if (isTimeout) errorMsg = `DexScreener timeout — API slow for "${projectName}"`;
+    else if (isCooldown) errorMsg = `DexScreener in cooldown — too many recent failures`;
+    else if (isRateLimit) errorMsg = `DexScreener rate-limited — retry later`;
+    else errorMsg = error.message;
     return {
       ...fallback,
-      error: error.name === 'AbortError' ? 'DexScreener timeout' : error.message,
+      error: errorMsg,
     };
   }
 }

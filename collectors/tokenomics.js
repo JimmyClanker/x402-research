@@ -131,9 +131,17 @@ export async function collectTokenomics(projectName, coinGeckoId, marketData = n
 
   try {
     const slugs = buildMessariSlugCandidates(projectName, coinGeckoId, marketData);
+    // Round 538 (AutoResearch): use a per-endpoint timeout to prevent one slow endpoint
+    // from blocking the other. Both fetches happen in parallel; each has a 10s timeout.
+    const withEndpointTimeout = (promise, label) => Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Messari ${label} endpoint timeout`)), 10000)
+      ),
+    ]);
     const [profileResult, metricsResult] = await Promise.allSettled([
-      fetchMessariEndpoint(slugs, 'profile'),
-      fetchMessariEndpoint(slugs, 'metrics'),
+      withEndpointTimeout(fetchMessariEndpoint(slugs, 'profile'), 'profile'),
+      withEndpointTimeout(fetchMessariEndpoint(slugs, 'metrics'), 'metrics'),
     ]);
 
     const profileData = profileResult.status === 'fulfilled' ? profileResult.value?.data : null;
@@ -167,16 +175,22 @@ export async function collectTokenomics(projectName, coinGeckoId, marketData = n
         return null;
       })(),
       // Round 193 (AutoResearch): include which slugs were tried so debugging is easier
+      // Round 539 (AutoResearch): distinguish timeout vs not-found vs unexpected for clearer diagnostics
       error: (() => {
         if (profileData || metricsData) return null;
         const triedSlugs = slugs.slice(0, 4).join(', ');
+        const profileErr = profileResult.status === 'rejected' ? profileResult.reason?.message : null;
+        const metricsErr = metricsResult.status === 'rejected' ? metricsResult.reason?.message : null;
+        const anyTimeout = [profileErr, metricsErr].some(e => e?.includes('timeout'));
+        if (anyTimeout) return `Messari timeout — data unavailable for "${projectName}"`;
         return `Messari tokenomics unavailable (tried: ${triedSlugs}${slugs.length > 4 ? '…' : ''})`;
       })(),
     };
   } catch (error) {
+    const isTimeout = error.name === 'AbortError' || error.message?.includes('timeout');
     return {
       ...fallback,
-      error: error.name === 'AbortError' ? 'Messari timeout' : error.message,
+      error: isTimeout ? `Messari timeout — data unavailable for "${projectName}"` : error.message,
     };
   }
 }

@@ -300,6 +300,35 @@ export function scoreReportQuality(rawData, scores, analysis) {
     score = Math.max(0, score - 3);
   }
 
+  // Round 384 (AutoResearch batch): alpha signal density quality check
+  // Reports with BUY+ verdict but zero strong alpha signals are over-optimistic
+  const alphaSignalsForQuality = Array.isArray(rawData?.alpha_signals) ? rawData.alpha_signals : [];
+  const strongSignalCount = alphaSignalsForQuality.filter(s => s.strength === 'strong').length;
+  const verdictForQuality = analysis?.verdict;
+  if (verdictForQuality === 'STRONG BUY' && strongSignalCount === 0) {
+    issues.push('STRONG BUY verdict with zero strong alpha signals — verdict may be over-optimistic. Strong buy verdicts require at least 1-2 strong signals from distinct categories.');
+    score = Math.max(0, score - 7);
+  }
+  if (verdictForQuality === 'BUY' && alphaSignalsForQuality.length === 0) {
+    issues.push('BUY verdict with no alpha signals detected — fundamentals may warrant HOLD. BUY verdicts should have at least 1 moderate+ signal.');
+    score = Math.max(0, score - 4);
+  }
+
+  // Round 384: Multi-source sentiment alignment quality bonus
+  // Reports where X, Reddit, and web social all agree have higher accuracy
+  const xSentScore = Number(rawData?.x_social?.sentiment_score ?? NaN);
+  const webSentScore = Number(rawData?.social?.sentiment_score ?? NaN);
+  const redditSent = rawData?.reddit?.sentiment;
+  if (Number.isFinite(xSentScore) && Number.isFinite(webSentScore)) {
+    const sentDivergence = Math.abs(xSentScore - webSentScore);
+    if (sentDivergence < 0.2) {
+      score = Math.min(100, score + 3); // Multi-source agreement = higher quality signal
+    } else if (sentDivergence > 0.6) {
+      issues.push(`X/Twitter (${xSentScore.toFixed(2)}) and web social (${webSentScore.toFixed(2)}) sentiment diverge significantly — ambiguous signal environment.`);
+      score = Math.max(0, score - 3);
+    }
+  }
+
   return {
     quality_score: Math.max(0, Math.min(100, score)),
     grade,

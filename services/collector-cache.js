@@ -24,6 +24,9 @@ const COLLECTOR_TTLS_MS = {
   holders: 60 * 60 * 1000,     // Round 16: Holder data is very slow-moving (1h)
   ecosystem: 15 * 60 * 1000,   // Round 16: Ecosystem derived from onchain/dex
   contract: 60 * 60 * 1000,    // Round 16: Contract status rarely changes (1h)
+  // Round 384 (AutoResearch batch): x_social TTL — X/Twitter social data changes frequently
+  x_social: 10 * 60 * 1000,    // X social mirrors social TTL (10 min)
+  fear_greed: 60 * 60 * 1000,  // Fear/greed index updates once per hour
 };
 
 const STALE_GRACE_MS = 60 * 60 * 1000; // Serve stale for up to 1h while refreshing

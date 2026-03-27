@@ -63,9 +63,15 @@ function similarityScore(projectName, protocol) {
 
 function computePctChange(current, previous) {
   if (current == null || previous == null || previous === 0) return null;
-  const result = ((current - previous) / Math.abs(previous)) * 100;
+  const c = Number(current);
+  const p = Number(previous);
+  if (!Number.isFinite(c) || !Number.isFinite(p) || p === 0) return null;
+  const result = ((c - p) / Math.abs(p)) * 100;
   // Round 183 (AutoResearch): guard against NaN/Infinity from extreme values
-  return Number.isFinite(result) ? result : null;
+  // Round 531 (AutoResearch): also clamp extreme % changes (>10000%) as data anomalies
+  if (!Number.isFinite(result)) return null;
+  if (Math.abs(result) > 10000) return null; // likely stale/bad historical data point
+  return parseFloat(result.toFixed(2));
 }
 
 function getClosestHistoricalTvl(tvlHistory, daysBack) {
@@ -340,6 +346,15 @@ export async function collectOnchain(projectName) {
       }
     }
 
+    // Round 542 (AutoResearch): MCap/TVL ratio from DeFiLlama protocol.mcap field
+    // Key valuation metric: low MCap/TVL = potentially undervalued, high = overvalued relative to TVL
+    const protocolMcap = protocol?.mcap ?? null;
+    const mcapToTvlRatio = (() => {
+      if (protocolMcap == null || currentTvl == null || currentTvl <= 0) return null;
+      const ratio = protocolMcap / currentTvl;
+      return Number.isFinite(ratio) ? parseFloat(ratio.toFixed(3)) : null;
+    })();
+
     // Round 5 (AutoResearch batch): Derive fees_30d and revenue_30d from 7d data if missing
     // Round 229: prefer actual 30d sum over derived estimate
     const fees30dActual = feeTotals30d?.fees != null && feeTotals30d.fees > 0 ? feeTotals30d.fees : null;
@@ -482,6 +497,33 @@ export async function collectOnchain(projectName) {
         if (activeUsers24h == null) return null;
         return Math.round(activeUsers24h * 7 * 0.6);
       })(),
+      // Round 544 (AutoResearch): security signals from DeFiLlama protocol data
+      // audit_links presence = at least one public audit; stablecoin flag from category
+      has_audit: (() => {
+        const links = protocol?.audit_links;
+        if (!Array.isArray(links)) return null;
+        return links.length > 0;
+      })(),
+      audit_count: (() => {
+        const links = protocol?.audit_links;
+        return Array.isArray(links) ? links.length : null;
+      })(),
+      // Token address from DeFiLlama (may differ from CoinGecko platforms field)
+      llama_token_address: protocol?.address ?? null,
+      // Whether the protocol uses a native token (has non-null address) vs governance-free
+      has_native_token: protocol?.address != null && String(protocol.address).length > 5,
+      // Round 542 (AutoResearch): MCap/TVL from DeFiLlama — key DeFi valuation signal
+      // < 1 = TVL > market cap (potentially undervalued), > 3 = might be overvalued relative to usage
+      protocol_mcap: protocolMcap,
+      mcap_to_tvl_ratio: mcapToTvlRatio,
+      mcap_to_tvl_tier: (() => {
+        if (mcapToTvlRatio == null) return null;
+        if (mcapToTvlRatio < 0.5) return 'very_undervalued';
+        if (mcapToTvlRatio < 1) return 'undervalued';
+        if (mcapToTvlRatio < 2) return 'fairly_valued';
+        if (mcapToTvlRatio < 5) return 'overvalued';
+        return 'highly_overvalued';
+      })(),
       // Round 383 (AutoResearch): tvl_vs_ath_pct — how far current TVL is from protocol's all-time high TVL
       // This is a critical onchain context signal: near ATH TVL = peak adoption; far below = declining protocol
       // DeFiLlama historicalTvl endpoint provides full history
@@ -500,12 +542,38 @@ export async function collectOnchain(projectName) {
         const velocity = currentTvl - weekAgoTvl;
         return Number.isFinite(velocity) ? Math.round(velocity) : null;
       })(),
+      // Round 384 (AutoResearch batch): TVL 90-day range — high/low over the last 90 days
+      // Gives medium-term TVL range context (quarterly support/resistance)
+      tvl_range_90d: (() => {
+        if (!Array.isArray(tvlHistory) || tvlHistory.length < 10 || currentTvl == null) return null;
+        // Get last ~90 data points (DeFiLlama usually provides daily data)
+        const recent = tvlHistory.slice(-90).map(p => Number(p.totalLiquidityUSD ?? p[1] ?? p.tvl ?? 0)).filter(v => Number.isFinite(v) && v > 0);
+        if (recent.length < 10) return null;
+        const high = Math.max(...recent);
+        const low = Math.min(...recent);
+        if (low <= 0 || high <= 0) return null;
+        const rangeWidth = ((high - low) / low) * 100;
+        const positionInRange = (currentTvl - low) / (high - low); // 0=at low, 1=at high
+        return {
+          high: Math.round(high),
+          low: Math.round(low),
+          range_width_pct: parseFloat(rangeWidth.toFixed(1)),
+          position_in_range: parseFloat(Math.max(0, Math.min(1, positionInRange)).toFixed(3)),
+        };
+      })(),
       error: null,
     };
   } catch (error) {
+    const isTimeout = error.name === 'AbortError' || error.message?.includes('timed out');
+    const isCooldown = error.message?.includes('cooldown');
+    const isNotFound = error.message?.includes('not found') || error.message?.includes('404');
+    let errorMsg = error.message;
+    if (isTimeout) errorMsg = `DeFiLlama timeout (>${GLOBAL_TIMEOUT_MS ?? 20000}ms)`;
+    else if (isCooldown) errorMsg = `DeFiLlama API in cooldown — too many recent failures`;
+    else if (isNotFound) errorMsg = `DeFiLlama: protocol not found for "${projectName}"`;
     return {
       ...fallback,
-      error: error.name === 'AbortError' ? 'DeFiLlama timeout' : error.message,
+      error: errorMsg,
     };
   }
 }

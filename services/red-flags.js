@@ -676,6 +676,13 @@ export function detectRedFlags(rawData = {}, scores = {}) {
   const noCoverageFlag = detectNoCoverageRisk(rawData);
   if (noCoverageFlag) flags.push(noCoverageFlag);
 
+  // Round 384 (AutoResearch batch): high inflation + zero CEX red flags
+  const highInflationFlag = detectHighInflationRate(rawData);
+  if (highInflationFlag) flags.push(highInflationFlag);
+
+  const zeroCexFlag = detectZeroCexListings(rawData);
+  if (zeroCexFlag) flags.push(zeroCexFlag);
+
   // Deduplicate flags by flag key (keep highest severity)
   const severityOrder = { critical: 3, warning: 2, info: 1 };
   const flagMap = new Map();
@@ -1001,4 +1008,49 @@ export function detectNoCoverageRisk(rawData = {}) {
     };
   }
   return null;
+}
+
+// ─── Round 384 (AutoResearch batch): New red flag detectors ──────────────────
+
+/**
+ * R384-1: High inflation rate red flag — structural token supply inflation is a slow bleed.
+ */
+export function detectHighInflationRate(rawData = {}) {
+  const tokenomics = rawData.tokenomics ?? {};
+  const market = rawData.market ?? {};
+  const inflationRate = Number(tokenomics.inflation_rate ?? NaN);
+  const mcap = Number(market.market_cap ?? 0);
+  if (!Number.isFinite(inflationRate) || mcap <= 0) return null;
+  if (inflationRate > 50) {
+    return {
+      flag: 'high_inflation_rate',
+      severity: inflationRate > 100 ? 'critical' : 'warning',
+      detail: `Annual inflation rate ${inflationRate.toFixed(1)}% — ${inflationRate > 100 ? 'hyperinflationary' : 'very high'} supply growth. Holding this token requires yield > inflation to be net positive for holders.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * R384-2: Zero CEX listings for established token — isolation risk.
+ * A token with $5M+ mcap but zero CEX listings is systematically excluded from institutional flow.
+ */
+export function detectZeroCexListings(rawData = {}) {
+  const market = rawData.market ?? {};
+  const mcap = Number(market.market_cap ?? 0);
+  const exchangeCount = Number(market.exchange_count ?? NaN);
+  const cexCount = Number(market.cex_count ?? NaN);
+  const coinAgeMonths = market.genesis_date
+    ? (Date.now() - new Date(market.genesis_date).getTime()) / (1000 * 60 * 60 * 24 * 30.44)
+    : null;
+  // Only flag if exchange count is known (not null) and is 0 or cex_count is 0
+  const isKnownZeroExchanges = (exchangeCount === 0 && !Number.isNaN(exchangeCount)) || (cexCount === 0 && !Number.isNaN(cexCount));
+  if (!isKnownZeroExchanges || mcap < 5_000_000) return null;
+  // Only flag for tokens that have been around long enough (>3 months)
+  if (coinAgeMonths != null && coinAgeMonths < 3) return null;
+  return {
+    flag: 'zero_cex_listings',
+    severity: mcap > 50_000_000 ? 'critical' : 'warning',
+    detail: `$${(mcap / 1e6).toFixed(0)}M MCap token with zero CEX listings — excluded from institutional flow and retail discovery. Exit liquidity severely constrained.`,
+  };
 }

@@ -226,6 +226,24 @@ export async function collectAll(projectName, exaService, collectorCache = null)
 
   const dataSourceSummary = buildDataSourceSummary(collectorsInfo);
 
+  // Round 548 (AutoResearch): pre-compute cross-collector derived signals for scoring convenience
+  // These avoid scoring.js having to import from multiple collectors independently
+  const crossCollectorSignals = {
+    // MCap/TVL from either source (prefer onchain as it uses DeFiLlama which is more reliable)
+    mcap_to_tvl_ratio: onchain.data?.mcap_to_tvl_ratio
+      ?? (market.data?.market_cap != null && onchain.data?.tvl != null && onchain.data.tvl > 0
+        ? parseFloat((market.data.market_cap / onchain.data.tvl).toFixed(3))
+        : null),
+    // Combined development activity (GitHub + CoinGecko fallback)
+    dev_commits_90d: github.data?.commits_90d
+      ?? github.data?.commits_90d_cg_fallback
+      ?? null,
+    // Primary contract address (from contract collector or market bridge)
+    primary_contract_address: contract.data?.contract_address ?? null,
+    // Security signal: has_audit from DeFiLlama (null if protocol not found)
+    has_audit: onchain.data?.has_audit ?? null,
+  };
+
   // Round 202 (AutoResearch): log collector failures for observability
   for (const [name, info] of Object.entries(collectorsInfo)) {
     if (!info.ok && info.error) {
@@ -237,6 +255,42 @@ export async function collectAll(projectName, exaService, collectorCache = null)
   // scoring.js reads social.community_score but it only exists in market — bridge the gap
   if (social.data && market.data?.community_score != null && social.data.community_score == null) {
     social.data = { ...social.data, community_score: market.data.community_score };
+  }
+
+  // Round 547 (AutoResearch): bridge contract_addresses from market to contract/holders collectors
+  // When market has platforms data but contract.data is empty/errored, surface addresses
+  if (contract.data && market.data?.contract_addresses) {
+    if (!contract.data.contract_address) {
+      const addrs = market.data.contract_addresses;
+      const chain = addrs.ethereum ? 'ethereum'
+        : addrs.base ? 'base'
+        : Object.keys(addrs)[0] || null;
+      const addr = chain ? addrs[chain] : null;
+      if (addr) {
+        contract.data = {
+          ...contract.data,
+          contract_address: addr,
+          platform: chain,
+          // Flag that this came from market fallback, not Etherscan verification
+          is_verified: contract.data.is_verified ?? null,
+          _address_source: 'coingecko_platforms',
+        };
+      }
+    }
+  }
+
+  // Round 546 (AutoResearch): if GitHub collector failed/partial, bridge cg_commits_4w from market
+  // CoinGecko developer_data gives us commit_count_4_weeks as a fallback development signal
+  if (github.data && market.data?.cg_commits_4w != null) {
+    if (github.data.commits_90d == null || !github.ok) {
+      github.data = {
+        ...github.data,
+        commits_90d_cg_fallback: market.data.cg_commits_4w * 3, // extrapolate 4w → 90d
+        cg_commits_4w: market.data.cg_commits_4w,
+        cg_forks: market.data.cg_forks ?? github.data.cg_forks ?? null,
+        cg_stars: market.data.cg_stars ?? github.data.cg_stars ?? null,
+      };
+    }
   }
 
   return {
@@ -258,6 +312,7 @@ export async function collectAll(projectName, exaService, collectorCache = null)
       duration_ms: Date.now() - startedAt,
       collectors: collectorsInfo,
       data_sources: dataSourceSummary,
+      cross_collector: crossCollectorSignals,
     },
   };
 }

@@ -188,6 +188,11 @@ function buildFactRegistry(rawData = {}) {
   push('market.weekly_price_return', rawData?.market?.weekly_price_return);
   push('market.price_range_pct_7d', rawData?.market?.price_range_pct_7d);
   push('market.ath_recovery_required_pct', rawData?.market?.ath_recovery_potential?.required_pct);
+  // Round 384 (AutoResearch batch): 90-day price range context
+  push('market.price_range_90d_high', rawData?.market?.price_range_90d?.high);
+  push('market.price_range_90d_low', rawData?.market?.price_range_90d?.low);
+  push('market.price_range_90d_position', rawData?.market?.price_range_90d?.position_in_range);
+  push('market.price_range_90d_tier', rawData?.market?.price_range_90d?.tier);
   push('onchain.tvl_vs_ath_pct', rawData?.onchain?.tvl_vs_ath_pct);
   push('onchain.weekly_tvl_velocity_usd', rawData?.onchain?.weekly_tvl_velocity_usd);
   push('github.monthly_commit_velocity_change_pct', rawData?.github?.monthly_commit_velocity?.change_pct);
@@ -308,6 +313,12 @@ export function buildDataSummary(rawData = {}) {
     if (market.price_range_pct_7d != null) {
       const rangeLabel = market.price_range_pct_7d >= 30 ? 'highly volatile' : market.price_range_pct_7d >= 15 ? 'volatile' : market.price_range_pct_7d >= 5 ? 'moderate' : 'stable/consolidating';
       marketLines.push(`- 7d price range: ${market.price_range_pct_7d.toFixed(1)}% (${rangeLabel})`);
+    }
+    // Round 384 (AutoResearch batch): 90-day price range context
+    if (market.price_range_90d != null) {
+      const r90 = market.price_range_90d;
+      const tierDesc = { upper_quartile: '🟢 top quartile of 90d range', upper_half: 'above 90d midpoint', lower_half: 'below 90d midpoint', lower_quartile: '🔴 bottom quartile of 90d range' };
+      marketLines.push(`- 90d price range: ${tierDesc[r90.tier] || r90.tier} (${(r90.position_in_range * 100).toFixed(0)}% from low to high, range width ${r90.range_width_pct.toFixed(0)}%)`);
     }
     // Round 233 (AutoResearch nightly): momentum divergence — is short-term vs long-term momentum aligned?
     if (market.momentum_divergence != null) {

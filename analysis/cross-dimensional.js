@@ -422,6 +422,48 @@ function detectRevenuePriceDecoupling(scores, rawData = {}) {
   return divergences;
 }
 
+/**
+ * Round 384 (AutoResearch batch): Detect strong development + declining social — builders building
+ * while market loses attention. This is the setup before a "catalyst re-discovery" event.
+ */
+function detectBuilderInSilence(scores, rawData = {}) {
+  const result = [];
+  const devScore = safeScore(scores?.development);
+  const socialScore = safeScore(scores?.social_momentum);
+  const github = rawData?.github ?? {};
+  if (devScore === null || socialScore === null) return result;
+  if (devScore >= 7 && socialScore <= 3.5) {
+    const commits90d = Number(github.commits_90d ?? 0);
+    result.push({
+      type: 'builder_in_silence',
+      severity: 'info',
+      dimensions: ['development', 'social_momentum'],
+      detail: `Strong dev activity (${devScore}/10, ${commits90d} commits/90d) despite low social noise (${socialScore}/10) — team building quietly while market ignores. Classic pre-catalyst setup.`,
+    });
+  }
+  return result;
+}
+
+/**
+ * Round 384: Detect high risk score but high market score — market overpricing risk.
+ * When risk score is below 4 and market is above 7, market participants are ignoring risks.
+ */
+function detectMarketIgnoringRisk(scores, rawData = {}) {
+  const result = [];
+  const marketScore = safeScore(scores?.market_strength);
+  const riskScore = safeScore(scores?.risk);
+  if (marketScore === null || riskScore === null) return result;
+  if (marketScore >= 7 && riskScore <= 3.5) {
+    result.push({
+      type: 'market_ignoring_risk',
+      severity: 'warning',
+      dimensions: ['market_strength', 'risk'],
+      detail: `High market strength (${marketScore}/10) but very poor risk profile (${riskScore}/10) — market appears to be pricing in optimism while ignoring structural risks (concentration, volatility, liquidity). Asymmetric downside risk.`,
+    });
+  }
+  return result;
+}
+
 export function analyzeCrossDimensional(scores, rawData = {}) {
   const divergences = [
     ...detectDivergences(scores),
@@ -432,6 +474,8 @@ export function analyzeCrossDimensional(scores, rawData = {}) {
     ...detectOrganicVolumeSocialConfirmation(scores, rawData), // Round 382
     ...detectInflationSocialDivergence(scores, rawData),    // Round 383
     ...detectRevenuePriceDecoupling(scores, rawData),       // Round 383
+    ...detectBuilderInSilence(scores, rawData),             // Round 384
+    ...detectMarketIgnoringRisk(scores, rawData),           // Round 384
   ];
   const convergences = detectConvergences(scores);
   const anomalies = detectAnomalies(scores);

@@ -125,5 +125,23 @@ export function generateElevatorPitch(projectName, rawData, scores, analysis) {
   if (vs52w?.tier === 'near_high') rangeTag = '📈 Near 52-week high';
   else if (vs52w?.tier === 'near_low') rangeTag = '⚠️ Near 52-week low';
 
-  return { pitch, one_line_risk: oneLineRisk, range_tag: rangeTag };
+  // Round 384 (AutoResearch batch): critical flag count for pitch context
+  const criticalFlagCount = redFlags.filter(f => f.severity === 'critical').length;
+  const criticalFlagNote = criticalFlagCount >= 2
+    ? `⛔ ${criticalFlagCount} critical risk factors`
+    : criticalFlagCount === 1 ? '⚠️ 1 critical risk factor' : null;
+
+  // Round 384: 90d price range context tag
+  const range90d = market.price_range_90d;
+  let range90dTag = null;
+  if (range90d?.tier === 'upper_quartile') range90dTag = '📊 90d high zone';
+  else if (range90d?.tier === 'lower_quartile') range90dTag = '📊 90d low zone';
+
+  return {
+    pitch,
+    one_line_risk: oneLineRisk,
+    range_tag: rangeTag,
+    range_90d_tag: range90dTag,
+    critical_flag_note: criticalFlagNote,
+  };
 }

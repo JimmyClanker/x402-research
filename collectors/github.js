@@ -152,8 +152,11 @@ export async function collectGithub(projectName) {
       repo = topRepo.name;
     }
 
+    // Round 543 (AutoResearch): add Accept header to request topics (requires custom media type)
     const [repoInfo, commitsInfo, contributorsInfo, languagesInfo, packageJsonInfo, workflowsInfo, releasesInfo, closedIssuesInfo, openPrsInfo] = await Promise.allSettled([
-      fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}`),
+      fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, {
+        headers: { accept: 'application/vnd.github.mercy-preview+json' },
+      }),
       fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}/commits?per_page=1`),
       fetchContributorStats(owner, repo),
       fetchJson(`${GITHUB_API_BASE}/repos/${owner}/${repo}/languages`),
@@ -506,6 +509,9 @@ export async function collectGithub(projectName) {
         };
       })(),
 
+      // Round 543 (AutoResearch): GitHub repo topics — free keyword signals (e.g. "defi", "ethereum", "zkp")
+      // Useful for LLM context: confirms what the project actually builds without text parsing
+      topics: Array.isArray(repoData?.topics) ? repoData.topics.slice(0, 10) : [],
       // Round 235 (AutoResearch): commit_consistency_score — regularity of commits over 90d (0-100)
       // A protocol with consistent weekly commits is more reliable than one with burst activity
       commit_consistency_score: (() => {

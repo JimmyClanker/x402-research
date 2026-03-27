@@ -33,11 +33,18 @@ export async function collectEcosystem(projectName, onchainData = null, dexData 
     const llamaChains = Array.isArray(onchainData?.chains) ? onchainData.chains : [];
     const tvl = onchainData?.tvl ?? null;
 
-    // DeFiLlama's currentChainTvls isn't passed through directly — derive from chains list.
-    // We only have the aggregate TVL, so we distribute evenly as a fallback approximation
-    // (realistic breakdown would require re-fetching protocol detail, but we avoid extra calls)
+    // Round 550 (AutoResearch): use chain_tvl breakdown from DeFiLlama if available (passed via onchainData)
+    // This gives the actual per-chain TVL distribution instead of uniform distribution approximation
     const chainTvlBreakdown = {};
-    if (llamaChains.length > 0 && tvl != null && tvl > 0) {
+    const exactChainTvl = onchainData?.chain_tvl;
+    if (exactChainTvl && typeof exactChainTvl === 'object' && Object.keys(exactChainTvl).length > 0) {
+      // Use real per-chain TVL from DeFiLlama protocol data
+      for (const [chain, val] of Object.entries(exactChainTvl)) {
+        const v = Number(val);
+        if (Number.isFinite(v) && v > 0) chainTvlBreakdown[chain] = v;
+      }
+    } else if (llamaChains.length > 0 && tvl != null && tvl > 0) {
+      // Fallback: uniform distribution if exact breakdown not available
       const perChain = tvl / llamaChains.length;
       for (const chain of llamaChains) {
         chainTvlBreakdown[chain] = Math.round(perChain * 100) / 100;

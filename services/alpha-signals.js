@@ -1036,6 +1036,16 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
   const liqQualSig = detectHighQualityLiquiditySetup(rawData);
   if (liqQualSig) signals.push(liqQualSig);
 
+  // Round 384 (AutoResearch batch): new alpha detectors
+  const tvlNearAthSig = detectTvlNearAth(rawData);
+  if (tvlNearAthSig) signals.push(tvlNearAthSig);
+
+  const microCapSig = detectMicroCapAlpha(rawData);
+  if (microCapSig) signals.push(microCapSig);
+
+  const deflationarySig = detectDeflationaryTokenomics(rawData);
+  if (deflationarySig) signals.push(deflationarySig);
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {
@@ -1433,6 +1443,69 @@ export function detectHighQualityLiquiditySetup(rawData = {}) {
         detail: `$${(liq / 1e6).toFixed(1)}M DEX liquidity across multiple pools (largest pool ${topPairLiqPct.toFixed(0)}%), buy pressure ${buySellRatio.toFixed(2)}x. High liquidity-to-MCap ratio ${liqToMcapPct.toFixed(1)}% enables position entry/exit without slippage.`,
       };
     }
+  }
+  return null;
+}
+
+// ─── Round 384 (AutoResearch batch): New alpha detectors ─────────────────────
+
+/**
+ * R384-1: TVL near all-time-high signal — protocol near its maximum historical TVL
+ * suggests strong fundamental momentum and market confidence.
+ */
+export function detectTvlNearAth(rawData = {}) {
+  const onchain = rawData.onchain ?? {};
+  const tvlVsAthPct = Number(onchain.tvl_vs_ath_pct ?? NaN);
+  const tvl = Number(onchain.tvl ?? 0);
+  if (!Number.isFinite(tvlVsAthPct) || tvl < 1_000_000) return null;
+  if (tvlVsAthPct >= -10 && tvlVsAthPct <= 5) {
+    return {
+      signal: 'tvl_near_ath',
+      strength: tvlVsAthPct >= -5 ? 'strong' : 'moderate',
+      detail: `Protocol TVL within ${Math.abs(tvlVsAthPct).toFixed(1)}% of its all-time-high (${(tvl / 1e6).toFixed(1)}M locked) — capital confidence at peak levels.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * R384-2: Micro-cap with strong fundamentals — small cap + top-tier dev + positive sentiment
+ * is the classic early alpha setup before larger market awareness.
+ */
+export function detectMicroCapAlpha(rawData = {}) {
+  const market = rawData.market ?? {};
+  const github = rawData.github ?? {};
+  const social = rawData.social ?? {};
+  const mcap = Number(market.market_cap ?? 0);
+  // Micro-cap: $1M - $50M range
+  if (mcap < 1_000_000 || mcap > 50_000_000) return null;
+  const commits90d = Number(github.commits_90d ?? 0);
+  const sentimentScore = Number(social.sentiment_score ?? 0);
+  // Need strong dev + positive sentiment to qualify
+  if (commits90d >= 20 && sentimentScore > 0.3) {
+    return {
+      signal: 'micro_cap_strong_fundamentals',
+      strength: commits90d >= 50 && sentimentScore > 0.5 ? 'strong' : 'moderate',
+      detail: `Micro-cap ($${(mcap / 1e6).toFixed(1)}M MCap) with active dev (${commits90d} commits/90d) and positive sentiment (${sentimentScore.toFixed(2)}) — potential undiscovered alpha.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * R384-3: Deflationary tokenomics signal — negative inflation rate with real supply burning.
+ */
+export function detectDeflationaryTokenomics(rawData = {}) {
+  const tokenomics = rawData.tokenomics ?? {};
+  const inflationRate = Number(tokenomics.inflation_rate ?? NaN);
+  const pctCirculating = Number(tokenomics.pct_circulating ?? 0);
+  if (!Number.isFinite(inflationRate) || inflationRate >= 0) return null;
+  if (pctCirculating > 50) { // meaningful deflationary signal needs reasonable circulation
+    return {
+      signal: 'deflationary_tokenomics',
+      strength: inflationRate <= -3 && pctCirculating >= 70 ? 'strong' : 'moderate',
+      detail: `Deflationary token: ${inflationRate.toFixed(1)}%/yr inflation with ${pctCirculating.toFixed(0)}% circulating — net supply contraction creates structural scarcity premium.`,
+    };
   }
   return null;
 }
