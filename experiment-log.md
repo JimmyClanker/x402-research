@@ -2182,3 +2182,158 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Change:** Added 20 new category mappings covering: web3-gaming, p2e, gamefi, infrastructure-middleware, middleware, cross-chain-messaging, interoperability, identity/DID protocols, insurance variants, credit protocols, synthetic assets, structured products, options/perpetual/margin trading, on-chain ETFs, tokenized equity/commodity. Improves categorization accuracy for newer DeFi verticals.
 - **Files:** scoring/category-weights.js
 - **Tests:** 177/177 pass
+
+## AutoResearch Prompt Engineering Batch — 30 Rounds (2026-03-27 02:30 UTC)
+
+**Focus:** Prompt Engineering & LLM Output Quality — buildOpusPrompt improvements, bull/bear case specificity, anti-repetition, buildDataSummary context, quick report anti-hallucination, validateReport guardrails.
+
+### Round 361 — FACT_REGISTRY: 8 new fields for LLM grounding
+- **Change:** Added net_buy_pressure_pct, volume_to_liquidity_ratio, price_momentum_score, community_score, revenue_per_active_user, commit_frequency, days_since_last_commit, bus_factor_score to buildFactRegistry().
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 362 — buildDataSummary: holders section — accept both field name variants + holder_count
+- **Change:** Holders section now accepts both top10_holder_concentration_pct and top10_concentration_pct. Added holder_count with context label when available.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 363 — buildDataSummary: contract section enrichment
+- **Change:** Contract section now shows is_proxy, audited, audit_firms, honeypot detection, buy/sell tax with ⚠️ for high values.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 364 — buildOpusPrompt: category analysis for AI infra, gaming, bridge, derivatives
+- **Change:** Added 4 new category-specific analysis registers: ai_infrastructure, web3_gaming, cross_chain_bridge, derivatives — each with sector-specific benchmarks and focus areas.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 365 — validateReport: verdict-score consistency check + scores parameter
+- **Change:** validateReport() now accepts optional scores parameter. Added verdict-score divergence warning when implied score differs >2.5pts from algorithmic score.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 366 — buildDataSummary: 52-week price context section
+- **Change:** Added new 52-WEEK PRICE CONTEXT section showing tier label (near 52w high/low/mid), pct_from_52w_high, pct_from_52w_low when data available.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 367 — buildDataSummary: GitHub velocity tier + bus factor qualitative labels
+- **Change:** GitHub section now shows github_velocity_tier with emoji labels and contributor_bus_factor qualitative description. Also added critical_issue_ratio in Round 382.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 368 — buildOpusPrompt: strict paragraph scope definitions for analysis_text
+- **Change:** Replaced generic "cover different ground" with explicit 4-paragraph scope template: P1=verdict+top metrics, P2=fundamentals deep-dive (different numbers), P3=market+sentiment, P4=outlook with concrete thresholds.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 369 — validateReport: improved commit count hallucination detection
+- **Change:** Multiple commit pattern regexes (90 days, quarter, 3 months variants). Breaks on first match. More robust than single pattern.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 370 — Quick report: 11-rule anti-hallucination block
+- **Change:** Rewrote quick report anti-hallucination from 10 to 11 explicit rules. Added bull_case/bear_case number requirement (rule 8), source tags scope (rule 10), x_sentiment BANNED rule (rule 5 with "BANNED" keyword).
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 371 — buildDataSummary: Narrative momentum context section
+- **Change:** Added NARRATIVE MOMENTUM section showing alignment, active narratives (up to 5), dominance score with label, and momentum quality trend.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 372 — buildOpusPrompt: narrative context in user message
+- **Change:** Added NARRATIVE_CONTEXT block to Opus user message when narrative_momentum data is available — alignment, narratives, dominance score, trend, detail.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 373 — buildOpusPrompt: moat instruction with 4 evidence-backed types + forbidden list
+- **Change:** Moat instruction now specifies 4 evidence-backed moat types (SCALE/DEV-TECH/LIQUIDITY-NETWORK/TOKENOMICS) each requiring specific RAW_DATA fields. Explicit FORBIDDEN list: "first mover advantage", "strong community" (without number), "network effects" (without data), "innovative", "unique", "robust ecosystem".
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 374 — Quick report: LIQUIDITY CONTEXT block inline
+- **Change:** Added inline LIQUIDITY CONTEXT block showing DEX liquidity with position sizing guidance, volume velocity %, buy/sell pressure label.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 375 — thesis-generator.js: sector comparison in bull/bear cases
+- **Change:** generateThesis() now computes sectorBullNote and sectorBearNote from sector_comparison.price_to_tvl and percentile data. Appended to bull/bear case strings when sector data is available.
+- **Files:** services/thesis-generator.js
+- **Tests:** 177/177 pass
+
+### Round 376 — buildDataSummary: realized volatility 90d + days_since_ath in market section
+- **Change:** Added realized_vol_90d (annualized %) with volatility label, and days_since_ath with recency context in market section.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 377 — buildOpusPrompt: VOLATILITY_CONTEXT block in user message
+- **Change:** When volatility regime is not 'calm', a VOLATILITY_CONTEXT block is injected with regime, caution multiplier, 24h swing, realized vol, and explicit position sizing reduction instruction.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 378 — buildDataSummary: MCap/Vol coverage ratio in market section
+- **Change:** Added MCap/Vol coverage ratio (how many days of volume = market cap) with liquidity label (very liquid/liquid/moderate/illiquid).
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 379 — validateReport: moat generic phrase detection
+- **Change:** Added post-processing check that flags forbidden moat phrases (first mover advantage, strong community without number, network effects without data, robust ecosystem, innovative/unique). Logged as warnings.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 380 — buildOpusPrompt: DATA_COMPLETENESS context block
+- **Change:** Added DATA_COMPLETENESS block to user message showing % completeness, available vs failed collectors, and explicit HOLD cap instruction when completeness < 40%.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 381 — buildOpusPrompt: risks output format with severity labels + forbidden generics
+- **Change:** Risks instruction now requires "[SEVERITY] [Risk Type]: [number from data]. [price impact]" format. Severity labels: CRITICAL/HIGH/MEDIUM/LOW. Explicit forbidden patterns: "Regulatory uncertainty" without context, "Smart contract risk" without audit data.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 382 — buildDataSummary: critical_issue_ratio in GitHub section
+- **Change:** Added issues-per-contributor ratio with context labels (overwhelming backlog/high load/moderate/healthy capacity) in GitHub section of data summary.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 383 — validateReport: analysis_text paragraph count validation
+- **Change:** Added paragraph structure check to validateReport. Warns if analysis_text has <2 paragraphs (single block) or >6 paragraphs (fragmented). Expected: 3-4 focused paragraphs.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 384 — buildOpusPrompt: CROSS_DIMENSIONAL_SIGNALS block in user message
+- **Change:** Added CROSS_DIMENSIONAL_SIGNALS block injecting algorithmically detected convergences (bullish) and divergences (conflicting) from cross_dimensional analysis data.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 385 — buildOpusPrompt: TEMPORAL_SIGNALS block (score momentum history)
+- **Change:** Added TEMPORAL_SIGNALS block from temporal_delta when history exists — shows overall narrative, recent score momentum signals (SCORE_MOMENTUM with direction arrow).
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 386 — Quick report: inline DEV CONTEXT block
+- **Change:** Added inline DEV CONTEXT block for quick report showing commits/wk, velocity tier, contributors, days since last commit, dev quality index.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 387 — buildDataSummary: active_addresses_7d + daily_active_users in onchain section
+- **Change:** Onchain section now shows active_addresses_7d (with user base size label) and daily_active_users when available — product engagement signal.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 388 — buildOpusPrompt: catalysts output format with data-backed patterns
+- **Change:** Catalysts instruction now requires "[Catalyst Type]: [observation from data] → [expected impact]" format with 3 concrete examples. Emphasizes 1-2 data-backed > 4 generic catalysts.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 389 — validateReport: duplicate metric detection in key_findings
+- **Change:** Added check for duplicate metric types in key_findings (TVL, market cap, volume, commits, etc.). Warns when same metric appears in multiple findings.
+- **Files:** synthesis/llm.js
+- **Tests:** 177/177 pass
+
+### Round 390 — Engine version bump to r63-2026-03-27
+- **Change:** Bumped engine_version to r63-2026-03-27 marking the Prompt Engineering batch completion.
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass
+
