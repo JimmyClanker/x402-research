@@ -238,7 +238,7 @@ export function formatReport(projectName, rawData, scores, llmAnalysis) {
 const json = {
     project_name: projectName,
     generated_at: new Date().toISOString(),
-    engine_version: 'r63-2026-03-27', // bump: 30-round AutoResearch Prompt Engineering batch (R361-390)
+    engine_version: 'r64-2026-03-27', // bump: 40-round AutoResearch Report Templates batch (R391-430)
     verdict: llmAnalysis?.verdict || 'HOLD',
     headline: llmAnalysis?.headline ?? null,
     project_summary: llmAnalysis?.project_summary ?? null,
@@ -268,7 +268,8 @@ const json = {
       );
     })(),
     score: scores?.overall?.score ?? null,
-    validation_warnings: llmAnalysis?._validation?.warnings ?? [],
+    // Round 427 (AutoResearch): filter empty/null validation_warnings for cleaner output
+    validation_warnings: (llmAnalysis?._validation?.warnings ?? []).filter(w => w && typeof w === 'string' && w.trim().length > 0),
     data_quality: dataQualitySummary,
     // Round 54 (AutoResearch): red_flags_summary — compact risk overview for MCP consumers
     red_flags_summary: (() => {
@@ -288,6 +289,13 @@ const json = {
     })(),
     key_metrics: keyMetrics,
     scores,
+    // Round 423 (AutoResearch): score_snapshot — flat map of dim → score for quick parsing
+    score_snapshot: Object.fromEntries(
+      ['market_strength','onchain_health','social_momentum','development','tokenomics_health','distribution','risk','overall'].map(dim => [
+        dim,
+        scores?.[dim]?.score != null ? parseFloat(Number(scores[dim].score).toFixed(1)) : null
+      ])
+    ),
     formatted_scores: ['market_strength','onchain_health','social_momentum','development','tokenomics_health','distribution','risk','overall'].map(dim => ({
       dimension: dim,
       score: scores?.[dim]?.score ?? null,
@@ -366,14 +374,15 @@ const json = {
     `🚨 Risk flags: ${json.red_flags_summary.total} total (${json.red_flags_summary.critical} critical, ${json.red_flags_summary.warnings} warnings) — risk level: ${json.red_flags_summary.risk_level}`,
     '',
     '🐦 X sentiment',
-    llmAnalysis?.x_sentiment_summary || 'n/a',
-    // Round 35 (AutoResearch): Surface raw x_social KOL data when available
-    ...(rawData?.x_social && !rawData.x_social.error && rawData.x_social.notable_accounts?.length
-      ? [`- KOLs: ${rawData.x_social.notable_accounts.slice(0, 4).map((a) => `@${a}`).join(', ')} (${rawData.x_social.kol_sentiment || 'n/a'})`]
-      : []),
-    ...(rawData?.x_social && !rawData.x_social.error && rawData.x_social.key_narratives?.length
-      ? [`- Narratives: ${rawData.x_social.key_narratives.slice(0, 3).join('; ')}`]
-      : []),
+    // Round 425 (AutoResearch): richer X sentiment block with score + KOL + narratives
+    ...(rawData?.x_social && !rawData.x_social.error ? [
+      `${rawData.x_social.sentiment ? `Sentiment: ${rawData.x_social.sentiment.toUpperCase()}` : ''}${rawData.x_social.sentiment_score != null ? ` (${rawData.x_social.sentiment_score}/10)` : ''}${rawData.x_social.kol_sentiment ? ` | KOL: ${rawData.x_social.kol_sentiment}` : ''}${rawData.x_social.engagement_level ? ` | Engagement: ${rawData.x_social.engagement_level}` : ''}`,
+      ...(rawData.x_social.notable_accounts?.length ? [`KOLs: ${rawData.x_social.notable_accounts.slice(0, 4).map(a => `@${a}`).join(', ')}`] : []),
+      ...(rawData.x_social.key_narratives?.length ? [`Narratives: ${rawData.x_social.key_narratives.slice(0, 3).join('; ')}`] : []),
+      llmAnalysis?.x_sentiment_summary ? `Summary: ${llmAnalysis.x_sentiment_summary}` : '',
+    ].filter(Boolean) : [
+      llmAnalysis?.x_sentiment_summary || 'n/a',
+    ]),
     '',
     `🔎 Key findings (${llmAnalysis?.key_findings?.length ?? 0})`,
     ...(llmAnalysis?.key_findings?.length ? llmAnalysis.key_findings.map((item) => `- ${item}`) : ['- n/a']),
@@ -556,7 +565,14 @@ const json = {
       <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px;">
         <div>
           <h2 style="font-family:'Caveat',cursive;font-size:32px;margin:0 0 8px;color:#b5c7d3;">🐦 X sentiment</h2>
-          <p style="margin:0;line-height:1.8;">${escapeHtml(llmAnalysis?.x_sentiment_summary || 'n/a')}</p>
+          ${rawData?.x_social && !rawData.x_social.error ? `
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+            ${rawData.x_social.sentiment ? `<span style="background:rgba(255,255,255,0.06);border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${rawData.x_social.sentiment === 'bullish' ? '#22c55e' : rawData.x_social.sentiment === 'bearish' ? '#ef4444' : '#fbbf24'};">${escapeHtml(rawData.x_social.sentiment)}</span>` : ''}
+            ${rawData.x_social.kol_sentiment ? `<span style="background:rgba(255,255,255,0.04);border-radius:6px;padding:3px 10px;font-size:12px;color:#888;">KOL: ${escapeHtml(rawData.x_social.kol_sentiment)}</span>` : ''}
+            ${rawData.x_social.engagement_level ? `<span style="background:rgba(255,255,255,0.04);border-radius:6px;padding:3px 10px;font-size:12px;color:#888;">${escapeHtml(rawData.x_social.engagement_level)}</span>` : ''}
+          </div>
+          ${rawData.x_social.key_narratives?.length ? `<p style="margin:0 0 4px;font-size:12px;color:#777;">Narratives: ${rawData.x_social.key_narratives.slice(0,3).map(n => escapeHtml(n)).join(' · ')}</p>` : ''}` : ''}
+          <p style="margin:0;line-height:1.8;font-size:13px;">${escapeHtml(llmAnalysis?.x_sentiment_summary || 'n/a')}</p>
         </div>
         <div>
           <h2 style="font-family:'Caveat',cursive;font-size:32px;margin:0 0 8px;color:#b5c7d3;">🥊 Competitor comparison</h2>
@@ -565,18 +581,22 @@ const json = {
       </section>
 
       ${rawData?.thesis ? `
-      <section style="margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
-        <div style="border:1px dashed rgba(34,197,94,0.28);border-radius:18px;padding:16px;background:rgba(34,197,94,0.04);">
-          <h3 style="font-family:'Caveat',cursive;font-size:24px;margin:0 0 8px;color:#22c55e;">🐂 Bull Case</h3>
-          <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(rawData.thesis.bull_case || 'n/a')}</p>
-        </div>
-        <div style="border:1px dashed rgba(248,113,113,0.28);border-radius:18px;padding:16px;background:rgba(248,113,113,0.04);">
-          <h3 style="font-family:'Caveat',cursive;font-size:24px;margin:0 0 8px;color:#f87171;">🐻 Bear Case</h3>
-          <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(rawData.thesis.bear_case || 'n/a')}</p>
-        </div>
-        <div style="border:1px dashed rgba(251,191,36,0.28);border-radius:18px;padding:16px;background:rgba(251,191,36,0.04);">
-          <h3 style="font-family:'Caveat',cursive;font-size:24px;margin:0 0 8px;color:#fbbf24;">🔄 Neutral Case</h3>
-          <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(rawData.thesis.neutral_case || 'n/a')}</p>
+      <section style="margin-bottom:20px;">
+        ${rawData.thesis.one_liner ? `<p style="font-style:italic;color:#ffd3b6;font-size:14px;margin:0 0 12px;padding:10px 16px;background:rgba(255,211,182,0.06);border-left:3px solid rgba(255,211,182,0.4);border-radius:0 8px 8px 0;">${escapeHtml(rawData.thesis.one_liner)}</p>` : ''}
+        ${rawData.thesis.conviction_score != null ? `<div style="margin-bottom:12px;font-size:12px;color:#888;">Conviction: <strong style="color:#ffd3b6;">${rawData.thesis.conviction_score}/100</strong></div>` : ''}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+          <div style="border:1px dashed rgba(34,197,94,0.28);border-radius:18px;padding:16px;background:rgba(34,197,94,0.04);">
+            <h3 style="font-family:'Caveat',cursive;font-size:24px;margin:0 0 8px;color:#22c55e;">🐂 Bull Case</h3>
+            <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(rawData.thesis.bull_case || 'n/a')}</p>
+          </div>
+          <div style="border:1px dashed rgba(248,113,113,0.28);border-radius:18px;padding:16px;background:rgba(248,113,113,0.04);">
+            <h3 style="font-family:'Caveat',cursive;font-size:24px;margin:0 0 8px;color:#f87171;">🐻 Bear Case</h3>
+            <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(rawData.thesis.bear_case || 'n/a')}</p>
+          </div>
+          <div style="border:1px dashed rgba(251,191,36,0.28);border-radius:18px;padding:16px;background:rgba(251,191,36,0.04);">
+            <h3 style="font-family:'Caveat',cursive;font-size:24px;margin:0 0 8px;color:#fbbf24;">🔄 Neutral Case</h3>
+            <p style="margin:0;line-height:1.7;color:#d1d5db;">${escapeHtml(rawData.thesis.neutral_case || 'n/a')}</p>
+          </div>
         </div>
       </section>` : ''}
 
@@ -933,6 +953,21 @@ export function formatAgentJSON(projectName, rawData, scores, llmAnalysis) {
         },
       ])
     ),
+    // Round 424 (AutoResearch): score_snapshot — flat dim→score map for quick parsing by agents
+    score_snapshot: Object.fromEntries(
+      ['market_strength', 'onchain_health', 'social_momentum', 'development', 'tokenomics_health', 'distribution', 'risk', 'overall'].map(dim => [
+        dim, scores?.[dim]?.score != null ? parseFloat(Number(scores[dim].score).toFixed(1)) : null
+      ])
+    ),
+    // Round 428 (AutoResearch): data_quality block in formatAgentJSON (mirrors main JSON)
+    data_quality: {
+      total_collectors: totalCollectors,
+      ok_collectors: okCollectors,
+      failed_collectors: totalCollectors - okCollectors,
+      coverage_pct: totalCollectors > 0 ? Math.round((okCollectors / totalCollectors) * 100) : null,
+      completeness_pct: scores?.overall?.completeness ?? null,
+      quality_tier: dataQualityTier,
+    },
     // Round 405 (AutoResearch): risk_profile — consolidated risk for agent consumption
     risk_profile: {
       risk_score: scores?.risk?.score ?? null,
@@ -1019,6 +1054,34 @@ export function formatReportMulti(format, projectName, rawData, scores, llmAnaly
         content: formatAgentJSON(projectName, rawData, scores, llmAnalysis),
         contentType: 'application/json',
       };
+    // Round 421 (AutoResearch): 'agent' format — structured text optimized for AI consumption
+    // Compact, no HTML, includes tl_dr + opportunity snapshot + risk profile header
+    case 'agent': {
+      const agentJson = formatAgentJSON(projectName, rawData, scores, llmAnalysis);
+      const scoreFmt = scores?.overall?.score != null ? `${Number(scores.overall.score).toFixed(1)}/10` : 'n/a';
+      const lines = [
+        `## ${projectName} — ${agentJson.opportunity_snapshot?.verdict ?? 'HOLD'} (${scoreFmt})`,
+        `TL;DR: ${agentJson.tl_dr ?? projectName}`,
+        `Alpha Index: ${agentJson.composite_alpha_index ?? 'n/a'}/100 (${agentJson.alpha_index_label ?? 'n/a'}) | Risk: ${agentJson.risk_profile?.risk_level ?? 'n/a'} | Action: ${agentJson.opportunity_snapshot?.action_bias ?? 'watch'}`,
+        agentJson.conviction ? `Conviction: ${agentJson.conviction.score}/100 (${agentJson.conviction.label})` : null,
+        '',
+        '### Key Metrics',
+        `Price: ${agentJson.key_metrics?.price_fmt ?? 'n/a'} | MCap: ${agentJson.key_metrics?.market_cap_fmt ?? 'n/a'} | TVL: ${agentJson.key_metrics?.tvl_fmt ?? 'n/a'} | Volume 24h: ${agentJson.key_metrics?.volume_24h_fmt ?? 'n/a'}`,
+        agentJson.key_metrics?.fdv_mcap_ratio ? `FDV/MCap: ${agentJson.key_metrics.fdv_mcap_ratio}x | Circulating: ${agentJson.key_metrics.pct_circulating_fmt ?? 'n/a'}` : null,
+        '',
+        '### Scores',
+        ...Object.entries(agentJson.scores ?? {}).map(([dim, s]) => `${dim.replace(/_/g, ' ')}: ${s.score != null ? `${Number(s.score).toFixed(1)}/10` : 'n/a'}${s.confidence_label ? ` [${s.confidence_label}]` : ''}`),
+        '',
+        agentJson.moat ? `### Moat\n${agentJson.moat}` : null,
+        agentJson.risks?.length ? `### Risks\n${agentJson.risks.slice(0, 3).map(r => `- ${r}`).join('\n')}` : null,
+        agentJson.catalysts?.length ? `### Catalysts\n${agentJson.catalysts.slice(0, 3).map(c => `- ${c}`).join('\n')}` : null,
+        agentJson.alpha_signals_top3?.length ? `### Alpha Signals\n${agentJson.alpha_signals_top3.map(s => `- [${s.strength}] ${s.signal}${s.detail ? `: ${s.detail}` : ''}`).join('\n')}` : null,
+        agentJson.key_findings?.length ? `### Key Findings\n${agentJson.key_findings.slice(0, 4).map(f => `- ${f}`).join('\n')}` : null,
+        agentJson.thesis?.bull_case ? `### Thesis\nBull: ${agentJson.thesis.bull_case}\nBear: ${agentJson.thesis.bear_case ?? 'n/a'}` : null,
+        `\nData Quality: ${agentJson.data_quality?.quality_tier ?? 'n/a'} | Coverage: ${agentJson.data_quality?.coverage_pct ?? 'n/a'}% | Completeness: ${agentJson.data_quality?.completeness_pct ?? 'n/a'}%`,
+      ].filter(l => l != null).join('\n');
+      return { content: lines, contentType: 'text/plain' };
+    }
     case 'html':
     default: {
       const result = formatReport(projectName, rawData, scores, llmAnalysis);

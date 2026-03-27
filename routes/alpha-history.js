@@ -1,5 +1,6 @@
 import express from 'express';
 import { getDimensionDistribution } from '../services/percentile-store.js';
+import { formatReportMulti } from '../synthesis/templates.js';
 
 export function createHistoryRouter({ signalsService, cache, getOrCreateReport, exaService, FULL_TTL_MS, QUICK_TTL_MS, buildCacheKey, normalizeProject, safeParseJSON }) {
   const router = express.Router();
@@ -71,6 +72,24 @@ export function createHistoryRouter({ signalsService, cache, getOrCreateReport, 
         report = await getOrCreateReport({ cacheKey: buildCacheKey(projectName, 'quick'), ttlMs: QUICK_TTL_MS, projectName, exaService, mode: 'quick' });
       } catch (err) {
         return res.status(502).json({ error: 'Export scan failed: ' + err.message });
+      }
+    }
+
+    // Round 422 (AutoResearch): ?format=agent|md|text|json produces alternative formats
+    const fmt = (req.query.format || '').toLowerCase();
+    if (fmt && fmt !== 'default') {
+      try {
+        const rawData = report?.raw_data ?? {};
+        const scores = report?.scores ?? {};
+        const llmAnalysis = report?.llm_analysis ?? null;
+        const multi = formatReportMulti(fmt, projectName, rawData, scores, llmAnalysis);
+        if (typeof multi.content === 'object' && multi.contentType === 'application/json') {
+          return res.set('Content-Type', 'application/json').json(multi.content);
+        }
+        return res.set('Content-Type', multi.contentType).send(multi.content);
+      } catch (err) {
+        console.warn('[alpha/export] format fallback:', err.message);
+        // fall through to default JSON export
       }
     }
 
