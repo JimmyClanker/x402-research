@@ -3212,3 +3212,63 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Why:** Better stale fallback semantics and more reliable contract resolution when CoinGecko platform data exists.
 - **Files:** `services/collector-cache.js`, `collectors/index.js`
 - **Tests:** `npm test` → 179/179 pass
+
+### Round 21 — GitHub fetch headers bugfix
+- **Change:** `collectors/github.js` `fetchJson()` now correctly merges caller-provided headers instead of silently ignoring them.
+- **Why:** The topics/media-type request was effectively broken before; now GitHub topic parsing works as intended.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 22 — More informative GitHub HTTP errors
+- **Change:** Error messages now include request label + compact response text snippet.
+- **Why:** Much faster diagnosis when GitHub returns 403/404/451/secondary-limit responses.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 23 — Timeout-specific GitHub error labeling
+- **Change:** Abort/timeouts are converted into explicit `timed out after ...ms` errors.
+- **Why:** Distinguishes latency failures from logical/API failures.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 24 — Rate-limit backoff smoothing
+- **Change:** Added a small incremental jitter/backoff step on retried 403/429 responses.
+- **Why:** Reduces synchronized hammering when multiple collectors hit GitHub rate limits together.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 25 — Better GitHub repo search scoring
+- **Change:** Added `repoSearchScore()` and rank among top 5 search candidates instead of blindly taking the first result.
+- **Why:** Improves project→repo matching accuracy, especially for generic names.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 26 — Search confidence surfaced
+- **Change:** Added `search_match_score` output and `repo_visibility` metadata.
+- **Why:** Gives downstream consumers a quick confidence/readability signal for auto-selected repos.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 27 — Contributor-stats rate-limit handling
+- **Change:** Added lightweight 403/429 handling inside contributor stats polling.
+- **Why:** Prevents GitHub secondary limits from collapsing contributor-derived metrics too quickly.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 28 — Richer GitHub repo metadata
+- **Change:** Added `subscribers`, `default_branch`, `homepage`, and `repo_age_days`.
+- **Why:** Extracts more useful context from the existing repo payload with zero additional API cost.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 29 — Topics dedupe/cleanup
+- **Change:** Normalized GitHub topics to lowercase, trimmed, deduped values.
+- **Why:** Cleaner data for prompts, filters, and scoring heuristics.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass
+
+### Round 30 — Commit consistency score fixed
+- **Change:** Rebuilt `commit_consistency_score` from contributor weekly stats instead of a single-commit response.
+- **Why:** The old logic was effectively meaningless; the new one measures real 13-week activity regularity.
+- **Files:** `collectors/github.js`
+- **Tests:** `npm test` → 179/179 pass

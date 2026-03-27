@@ -29,6 +29,10 @@ function createEmptyGithubResult(projectName) {
     description: null,
     license: null,
     watchers: null,
+    subscribers: null,
+    default_branch: null,
+    homepage: null,
+    repo_age_days: null,
     // Round 6: language breakdown + dependency count
     languages: {},
     dependency_count: null,
@@ -36,13 +40,15 @@ function createEmptyGithubResult(projectName) {
     has_ci: null,
     // Round 51: latest release
     latest_release: null,
+    repo_visibility: null,
+    search_match_score: null,
     error: null,
   };
 }
 
 // Round 187 (AutoResearch): GitHub fetchJson with retry on 403/429 (rate-limit)
 // GitHub returns 403 with Retry-After or X-RateLimit-Reset on secondary rate limits.
-async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, retries = 2 } = {}) {
+async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, retries = 2, headers = {}, label = 'GitHub request' } = {}) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -52,6 +58,7 @@ async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, retries = 2 } = 
         headers: {
           accept: 'application/vnd.github+json',
           'user-agent': 'alpha-scanner/6.0.0',
+          ...headers,
         },
         signal: controller.signal,
       });
@@ -63,21 +70,27 @@ async function fetchJson(url, { timeoutMs = DEFAULT_TIMEOUT_MS, retries = 2 } = 
         let delayMs = 1500; // default backoff
         if (retryAfter > 0) delayMs = Math.min(retryAfter * 1000, 8000);
         else if (resetAt > 0) delayMs = Math.min(Math.max((resetAt * 1000 - Date.now()), 0), 8000);
+        delayMs += Math.min(250 * attempt, 750); // light jitter/backoff growth
         clearTimeout(timeout);
         await new Promise((r) => setTimeout(r, delayMs));
-        lastError = new Error(`GitHub ${response.status} rate-limited: ${url}`);
+        lastError = new Error(`${label}: GitHub ${response.status} rate-limited (${url})`);
         continue;
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status} for ${url}`);
+        const responseText = await response.text().catch(() => '');
+        const compactText = responseText.replace(/\s+/g, ' ').trim().slice(0, 180);
+        throw new Error(`${label}: HTTP ${response.status}${compactText ? ` — ${compactText}` : ''}`);
       }
 
       const data = await response.json();
       return { data, headers: response.headers };
     } catch (err) {
       lastError = err;
-      if (err.name === 'AbortError' || attempt >= retries) throw lastError;
+      if (err.name === 'AbortError') {
+        lastError = new Error(`${label}: timed out after ${timeoutMs}ms`);
+      }
+      if (attempt >= retries) throw lastError;
       await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
     } finally {
       clearTimeout(timeout);
@@ -97,13 +110,36 @@ function getMappedRepo(projectName) {
   return githubRepos[key] || null;
 }
 
+function repoSearchScore(projectName, repo) {
+  const target = String(projectName || '').trim().toLowerCase();
+  const fullName = String(repo?.full_name || '').toLowerCase();
+  const name = String(repo?.name || '').toLowerCase();
+  const description = String(repo?.description || '').toLowerCase();
+  let score = 0;
+  if (name === target) score += 120;
+  if (fullName.endsWith(`/${target}`)) score += 110;
+  if (name.includes(target)) score += 60;
+  if (description.includes(target)) score += 15;
+  score += Math.min(30, Math.log10((Number(repo?.stargazers_count) || 0) + 1) * 8);
+  if (repo?.archived) score -= 40;
+  if (repo?.fork) score -= 20;
+  return score;
+}
+
+// Round 554 (AutoResearch): add overall timeout cap for contributor stats to prevent
+// long 202-polling from blocking the collector beyond the global GLOBAL_TIMEOUT_MS
+const CONTRIBUTOR_STATS_MAX_MS = 8000; // cap total time for contributor stats polling
+
 async function fetchContributorStats(owner, repo) {
   const url = `${GITHUB_API_BASE}/repos/${owner}/${repo}/stats/contributors`;
   // GitHub returns 202 while computing stats — retry up to 3 times
+  const deadline = Date.now() + CONTRIBUTOR_STATS_MAX_MS;
   for (let attempt = 0; attempt < 3; attempt++) {
+    if (Date.now() >= deadline) break; // exceeded overall cap
     try {
+      const remainingMs = Math.max(1000, deadline - Date.now());
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+      const timeout = setTimeout(() => controller.abort(), Math.min(DEFAULT_TIMEOUT_MS, remainingMs));
       try {
         const response = await fetch(url, {
           headers: {
@@ -113,8 +149,16 @@ async function fetchContributorStats(owner, repo) {
           signal: controller.signal,
         });
         if (response.status === 202) {
-          // Computing — wait and retry
-          await new Promise((r) => setTimeout(r, 1500));
+          // Computing — wait and retry (but respect deadline)
+          const waitMs = Math.min(1500, Math.max(0, deadline - Date.now() - 500));
+          if (waitMs < 100) break; // not enough time left
+          await new Promise((r) => setTimeout(r, waitMs));
+          continue;
+        }
+        if ((response.status === 429 || response.status === 403) && attempt < 2) {
+          const retryAfter = Number(response.headers.get('retry-after') || 0);
+          const waitMs = retryAfter > 0 ? Math.min(retryAfter * 1000, 3000) : 1200;
+          await new Promise((r) => setTimeout(r, waitMs));
           continue;
         }
         if (!response.ok) return { data: [], headers: response.headers };
@@ -139,13 +183,16 @@ export async function collectGithub(projectName) {
     let owner = mappedRepo?.owner || null;
     let repo = mappedRepo?.repo || null;
 
+    let searchMatchScore = mappedRepo ? 999 : null;
     if (!owner || !repo) {
-      const searchUrl = `${GITHUB_API_BASE}/search/repositories?q=${encodeURIComponent(`${projectName} crypto blockchain`)}&sort=stars&order=desc&per_page=1`;
-      const searchResponse = await fetchJson(searchUrl);
-      topRepo = searchResponse.data?.items?.[0];
+      const searchUrl = `${GITHUB_API_BASE}/search/repositories?q=${encodeURIComponent(`${projectName} crypto blockchain`)}&sort=stars&order=desc&per_page=5`;
+      const searchResponse = await fetchJson(searchUrl, { label: 'GitHub repo search' });
+      const searchItems = Array.isArray(searchResponse.data?.items) ? searchResponse.data.items : [];
+      topRepo = [...searchItems].sort((a, b) => repoSearchScore(projectName, b) - repoSearchScore(projectName, a))[0];
+      searchMatchScore = topRepo ? repoSearchScore(projectName, topRepo) : null;
 
       if (!topRepo?.owner?.login || !topRepo?.name) {
-        return { ...fallback, error: 'GitHub repository not found' };
+        return { ...fallback, error: `GitHub repository not found for "${projectName}"` };
       }
 
       owner = topRepo.owner.login;
@@ -360,11 +407,22 @@ export async function collectGithub(projectName) {
       description: repoData?.description || topRepo?.description || null,
       license: repoData?.license?.spdx_id || repoData?.license?.name || null,
       watchers: repoData?.watchers_count ?? null,
+      subscribers: repoData?.subscribers_count ?? null,
+      default_branch: repoData?.default_branch ?? null,
+      homepage: repoData?.homepage ?? null,
+      repo_age_days: (() => {
+        const createdAt = repoData?.created_at;
+        if (!createdAt) return null;
+        const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000);
+        return days >= 0 ? days : null;
+      })(),
       languages: languagesData,
       dependency_count: dependencyCount,
       has_ci: hasCI,
       has_test_suite: hasTestSuite, // Round 238: test coverage signal from CI workflow names
       latest_release: latestRelease,
+      repo_visibility: repoData?.visibility ?? null,
+      search_match_score: searchMatchScore,
       repo_health_tier: repoHealthTier,
       repo_health_score: repoHealthScore,
       fork_star_ratio: forkStarRatio != null ? Math.round(forkStarRatio * 1000) / 1000 : null,
@@ -492,6 +550,32 @@ export async function collectGithub(projectName) {
         const sorted = [...contributorStats].sort((a, b) => (b?.total || 0) - (a?.total || 0));
         return sorted[0]?.author?.login ?? null;
       })(),
+      // Round 578 (AutoResearch): age of last push in days — quicker staleness signal than reading timestamps
+      last_push_age_days: (() => {
+        const pushedAt = repoData?.pushed_at || commitsData?.[0]?.commit?.author?.date;
+        if (!pushedAt) return null;
+        const days = Math.floor((Date.now() - new Date(pushedAt).getTime()) / 86400000);
+        return days >= 0 ? days : null;
+      })(),
+      // Round 579 (AutoResearch): top contributor share — concentration of code output
+      top_contributor_commit_share_pct: (() => {
+        if (!Array.isArray(contributorStats) || contributorStats.length === 0) return null;
+        const total = contributorStats.reduce((sum, c) => sum + Number(c?.total || 0), 0);
+        if (total <= 0) return null;
+        const top = Math.max(...contributorStats.map((c) => Number(c?.total || 0)));
+        return parseFloat(((top / total) * 100).toFixed(1));
+      })(),
+      // Round 580 (AutoResearch): bus factor risk label from contributor concentration
+      bus_factor_risk: (() => {
+        if (!Array.isArray(contributorStats) || contributorStats.length === 0) return null;
+        const total = contributorStats.reduce((sum, c) => sum + Number(c?.total || 0), 0);
+        if (total <= 0) return null;
+        const top = Math.max(...contributorStats.map((c) => Number(c?.total || 0)));
+        const share = top / total;
+        if (share >= 0.7) return 'high';
+        if (share >= 0.45) return 'moderate';
+        return 'low';
+      })(),
 
       // Round 383 (AutoResearch): monthly_commit_velocity — a 3-month rolling window trend
       // Returns { recent: number, prev: number, change_pct: number } for scoring trend analysis
@@ -511,26 +595,42 @@ export async function collectGithub(projectName) {
 
       // Round 543 (AutoResearch): GitHub repo topics — free keyword signals (e.g. "defi", "ethereum", "zkp")
       // Useful for LLM context: confirms what the project actually builds without text parsing
-      topics: Array.isArray(repoData?.topics) ? repoData.topics.slice(0, 10) : [],
+      topics: Array.isArray(repoData?.topics)
+        ? [...new Set(repoData.topics.map((topic) => String(topic || '').trim().toLowerCase()).filter(Boolean))].slice(0, 10)
+        : [],
+      // Round 563 (AutoResearch): archived/disabled flags — critical abandonment signals
+      // Archived repo = no new contributions accepted; disabled = repo hidden by owner
+      // Either flag = strong negative signal for development activity scoring
+      is_archived: repoData?.archived ?? null,
+      is_disabled: repoData?.disabled ?? null,
+      // Derived: if archived or disabled, override commit_trend to indicate project status
+      project_status: (() => {
+        if (repoData?.archived) return 'archived';
+        if (repoData?.disabled) return 'disabled';
+        return null; // normal (status determined by commit activity)
+      })(),
+      // Round 558 (AutoResearch): network_count (total forks across the fork tree) and is_fork flag
+      // network_count > forks: indicates the repo has active derivative projects
+      // is_fork: if the main repo is itself a fork, this is a downstream project (higher risk)
+      network_count: repoData?.network_count ?? null,
+      is_fork: repoData?.fork ?? null,
+      // Size metric: lines of code proxy (GitHub disk usage in KB)
+      repo_size_kb: repoData?.size ?? null,
       // Round 235 (AutoResearch): commit_consistency_score — regularity of commits over 90d (0-100)
       // A protocol with consistent weekly commits is more reliable than one with burst activity
       commit_consistency_score: (() => {
-        if (!Array.isArray(commitsData) || commitsData.length === 0) return null;
-        // Group commits by week (approximate)
-        const weekBuckets = {};
-        for (const commit of commitsData) {
-          const dateStr = commit?.commit?.author?.date;
-          if (!dateStr) continue;
-          const d = new Date(dateStr);
-          const weekKey = `${d.getFullYear()}-W${Math.floor(d.getDate() / 7)}`;
-          weekBuckets[weekKey] = (weekBuckets[weekKey] || 0) + 1;
+        if (!Array.isArray(contributorStats) || contributorStats.length === 0) return null;
+        const weeklyTotals = new Array(13).fill(0);
+        for (const contributor of contributorStats) {
+          const weeks = Array.isArray(contributor?.weeks) ? contributor.weeks.slice(-13) : [];
+          const padded = new Array(Math.max(0, 13 - weeks.length)).fill(null).concat(weeks);
+          for (let i = 0; i < padded.length; i++) {
+            weeklyTotals[i] += Number(padded[i]?.c || 0);
+          }
         }
-        const weeks = Object.values(weekBuckets);
-        if (weeks.length < 3) return null;
-        // Score: % of weeks with any activity (regularity)
-        const totalWeeks = 13; // 90d / 7
-        const activeWeeks = weeks.length;
-        return Math.round(Math.min(100, (activeWeeks / totalWeeks) * 100));
+        const activeWeeks = weeklyTotals.filter((count) => count > 0).length;
+        if (activeWeeks === 0) return 0;
+        return Math.round((activeWeeks / 13) * 100);
       })(),
       // Round R10 (AutoResearch nightly): release_cadence — how many releases per month (last 90d)
       // High release cadence = active product iteration; near-zero = stagnant codebase
