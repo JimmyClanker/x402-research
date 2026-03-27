@@ -316,6 +316,16 @@ export function buildDataSummary(rawData = {}) {
       const trendEmoji = onchain.revenue_trend === 'improving' ? '📈' : '📉';
       onchainLines.push(`- Revenue trend: ${trendEmoji} ${onchain.revenue_trend} (vs prior 7d)`);
     }
+    // Round 387: active_addresses_7d — user activity signal
+    if (onchain.active_addresses_7d != null && onchain.active_addresses_7d > 0) {
+      const aaLabel = onchain.active_addresses_7d >= 100000 ? 'massive user base' : onchain.active_addresses_7d >= 10000 ? 'large user base' : onchain.active_addresses_7d >= 1000 ? 'medium user base' : onchain.active_addresses_7d >= 100 ? 'small user base' : 'niche/early';
+      onchainLines.push(`- Active addresses 7d: ${onchain.active_addresses_7d.toLocaleString('en-US')} (${aaLabel})`);
+    }
+    // Round 387: daily_active_users as product engagement signal  
+    if (onchain.daily_active_users != null && onchain.daily_active_users > 0) {
+      onchainLines.push(`- Daily active users: ~${onchain.daily_active_users.toLocaleString('en-US')}/day`);
+    }
+
     // Round 362: fees_per_tvl_7d as capital productivity signal
     if (onchain.fees_per_tvl_7d != null && onchain.tvl > 0) {
       const ftLabel = onchain.fees_per_tvl_7d >= 0.5 ? 'highly productive capital' : onchain.fees_per_tvl_7d >= 0.1 ? 'moderate' : 'low capital productivity';
@@ -479,6 +489,11 @@ export function buildDataSummary(rawData = {}) {
       const dqi = github.dev_quality_index;
       const dqLabel = dqi >= 70 ? 'strong' : dqi >= 40 ? 'average' : 'weak';
       githubLines.push(`- Dev Quality Index: ${dqi}/100 (${dqLabel})`);
+    }
+    // Round 382: critical_issue_ratio — issues per contributor (dev health signal)
+    if (github.critical_issue_ratio != null) {
+      const cirLabel = github.critical_issue_ratio >= 10 ? '⚠️ overwhelming backlog' : github.critical_issue_ratio >= 5 ? 'high issue load' : github.critical_issue_ratio >= 2 ? 'moderate' : '✅ healthy capacity';
+      githubLines.push(`- Issues/contributor: ${github.critical_issue_ratio.toFixed(1)}x (${cirLabel})`);
     }
     // Round 367: github_velocity_tier for quick orientation
     if (github.github_velocity_tier) {
@@ -1736,6 +1751,22 @@ export function validateReport(report, rawData, scores = null) {
     if (findingsWithoutNumbers > 2) {
       warnings.push(`${findingsWithoutNumbers}/${report.key_findings.length} key_findings contain no specific numbers — too generic`);
     }
+
+    // Round 389: Detect duplicate/overlapping key_findings (same metric type mentioned twice)
+    const metricKeywords = ['tvl', 'market cap', 'volume', 'commits', 'contributors', 'sentiment', 'fees', 'revenue', 'liquidity'];
+    const foundMetrics = new Map();
+    for (let i = 0; i < report.key_findings.length; i++) {
+      const findingLower = report.key_findings[i].toLowerCase();
+      for (const metric of metricKeywords) {
+        if (findingLower.includes(metric)) {
+          if (foundMetrics.has(metric)) {
+            warnings.push(`key_findings has duplicate metric type "${metric}" in findings #${foundMetrics.get(metric)+1} and #${i+1} — consider merging`);
+          } else {
+            foundMetrics.set(metric, i);
+          }
+        }
+      }
+    }
   }
 
   // Round 365: verdict-score consistency check
@@ -1746,6 +1777,16 @@ export function validateReport(report, rawData, scores = null) {
     const scoreDiff = Math.abs(impliedScore - overallScore);
     if (scoreDiff > 2.5) {
       warnings.push(`Verdict "${report.verdict}" (implied score ~${impliedScore}) diverges ${scoreDiff.toFixed(1)} pts from algorithmic score ${overallScore.toFixed(1)} — may be miscalibrated`);
+    }
+  }
+
+  // Round 383: analysis_text paragraph count check — ensure proper structure
+  if (report.analysis_text && typeof report.analysis_text === 'string' && report.analysis_text.length > 100) {
+    const paragraphs = report.analysis_text.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+    if (paragraphs.length < 2) {
+      warnings.push(`analysis_text appears to be a single block (${paragraphs.length} paragraphs detected) — expected 3-4 paragraphs with clear scopes`);
+    } else if (paragraphs.length > 6) {
+      warnings.push(`analysis_text has ${paragraphs.length} paragraphs — may be fragmented, expect 3-4 focused paragraphs`);
     }
   }
 
@@ -1923,8 +1964,8 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '- project_category: the project\'s primary category (examples: "DeFi Lending", "Layer 1", "DEX", "NFT Marketplace", "AI Infrastructure", "Meme Token"). Use the most specific category you can support from RAW_DATA.',
     '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. STRICT PARAGRAPH SCOPES — each paragraph covers EXCLUSIVE territory, NO metric appears in 2 paragraphs:\n  Para 1 [VERDICT + TOP METRICS]: State verdict explicitly. Use the 2-3 highest-signal metrics (usually: overall score, P/TVL or market cap rank, and the single strongest signal — TVL growth OR social spike OR dev velocity). End Para 1 with a one-sentence verdict justification.\n  Para 2 [FUNDAMENTALS DEEP-DIVE]: On-chain numbers ONLY — TVL change, fees, revenue, protocol health, supply metrics. NEVER re-state Para 1 numbers. Add context: compare fees to peers if sector data available, highlight stickiness or growth trajectory.\n  Para 3 [MARKET + SENTIMENT]: Price action (24h/7d/30d), DEX pressure, social signal, volume patterns. NEVER re-state on-chain numbers from Para 2.\n  Para 4 [OUTLOOK]: Near-term risk/reward — what specific data threshold would change the verdict? What\'s the primary catalyst to watch? What\'s the main risk trigger? Be concrete with numbers.\n  FORMAT: $414.8M not 414828652 | -2.48% not -2.484401525322113% | NO source tags | NO snake_case field names.',
     '- moat: competitive advantage in 1-2 sentences. MANDATORY: use EXACTLY ONE evidence-backed moat type with specific numbers from RAW_DATA:\n  → SCALE MOAT (if SECTOR_CONTEXT available): "Leads category by TVL at $X, 2.5x larger than #2 competitor at $Y." Use only when SECTOR_CONTEXT has comparative data.\n  → DEV/TECH MOAT (if github data available): "Active dev team: X contributors, Y commits/week, Z GitHub stars — typical category protocol averages W commits/week." Must use github.contributors, github.commit_frequency or commits_90d.\n  → LIQUIDITY/NETWORK MOAT (if DEX/onchain data available): "$XM deep liquidity across Z chains + Y% revenue capture creates LP switching costs." Must use dex_liquidity_usd and chain_count.\n  → TOKENOMICS MOAT (if circulating supply data available): "Z% circulating supply with only Y% annual inflation gives controlled dilution vs category avg W%." Must use pct_circulating and inflation_rate.\n  ABSOLUTE FORBIDDEN (delete on sight): "first mover advantage", "strong community", "network effects" (without user/TVL numbers), "innovative", "unique", "robust ecosystem".\n  If NO genuine moat exists from data: write EXACTLY "No clear moat identified from available data — competitive position unverifiable without sector comparison."',
-    '- risks: array of 3-5 risk strings. Format: "[Risk Type]: [Specific detail with numbers when available]. [Why this matters for price]". Examples: "Dilution risk: only 42% circulating, 58% supply unlocking over 18 months could suppress price." or "DEX sell pressure: buy/sell ratio 0.78 suggests sustained distribution." FORBIDDEN: vague risks like "regulatory uncertainty" without context, "smart contract risk" without audit/exploit data. Each risk must be actionable.',
-    '- catalysts: array of 2-4 upcoming catalysts. ONLY include catalysts supported by data. Prefix unverified ones with "[Unverified]". It is OK to have fewer catalysts if data is limited.',
+    '- risks: array of 3-5 risk strings. Use format: "[SEVERITY] [Risk Type]: [specific detail WITH a number from RAW_DATA]. [concrete price impact if risk materializes]". Severity labels: [CRITICAL] / [HIGH] / [MEDIUM] / [LOW]. Examples: "[HIGH] Dilution: 42% circulating supply means 58% unlocking over 18 months = sustained sell pressure of ~3.2% monthly." | "[CRITICAL] DEX Sell pressure: buy/sell ratio 0.78 over 24h suggests active distribution from large holders." | "[HIGH] TVL Concentration: 73% TVL on single chain creates bridge/exploit single-point-of-failure." ABSOLUTELY FORBIDDEN: "[MEDIUM] Regulatory uncertainty" (no context), "[LOW] Smart contract risk" (no audit data), any risk without a specific number. Risks without numbers = useless. Risks without severity = unranked noise.',
+    '- catalysts: array of 2-4 upcoming catalysts. Format: "[Catalyst Type]: [specific observation from data] → [expected price/usage impact]". Examples: "[Protocol upgrade]: Active dev team (Y commits/week) with recent release suggests protocol updates are in pipeline → potential TVL inflow if adopted." | "[Revenue inflection]: Fee efficiency $X/M TVL vs sector average $Y — approaching breakeven threshold that could trigger fee switch discussion." | "[Valuation re-rating]: P/TVL of Z is below sector median W — institutional discovery could drive re-rating." ONLY include catalysts supported by RAW_DATA patterns. Prefix uncertain ones with "[Unverified]". Having 1-2 strong data-backed catalysts > 4 generic ones.',
     '- competitor_comparison: Compare ONLY with metrics you have data for. If no competitor data available, write "Insufficient data for competitor comparison."',
     '- x_sentiment_summary: Summarize the X_SOCIAL data provided below. If X_SOCIAL is empty or has errors, write "No X/Twitter data available."',
     '- key_findings: array of 3-5 key findings. Format: "[Metric]: [value] — [what this means for investors]". Example: "TVL: $45.2M growing +8% weekly — suggests growing protocol adoption." Each MUST cite a specific data point from RAW_DATA or X_SOCIAL.',
@@ -1994,6 +2035,41 @@ export function buildOpusPrompt(projectName, rawData, scores) {
 
   if (Array.isArray(rawData?.red_flags) && rawData.red_flags.length) {
     userParts.push(`RED_FLAGS:\n${rawData.red_flags.map((f) => `- [${f.severity?.toUpperCase() || 'WARNING'}] ${f.flag}: ${f.detail}`).join('\n')}`);
+  }
+
+  // Round 385: TEMPORAL_SIGNALS — score momentum direction from historical comparisons
+  const tempDelta = rawData?.temporal_delta;
+  if (tempDelta && tempDelta.has_history) {
+    const tParts = ['TEMPORAL_SIGNALS (how scores changed since last scan):'];
+    if (tempDelta.narrative) tParts.push(`- Overall: ${tempDelta.narrative}`);
+    if (tempDelta.signals?.length) {
+      for (const s of tempDelta.signals.slice(0, 3)) {
+        const dir = s.type === 'SCORE_MOMENTUM' ? (s.data_json?.delta > 0 ? '📈' : '📉') : '';
+        tParts.push(`- ${dir} ${s.title}: ${s.detail}`);
+      }
+    }
+    tParts.push('→ Use score momentum direction in your catalysts (improving) or risks (declining) assessment.');
+    userParts.push(tParts.join('\n'));
+  }
+
+  // Round 384: CROSS_DIMENSIONAL_SIGNALS — surface notable divergences and convergences
+  const crossDim = rawData?.cross_dimensional;
+  if (crossDim && (crossDim.divergences?.length > 0 || crossDim.convergences?.length > 0)) {
+    const xdParts = ['CROSS_DIMENSIONAL_SIGNALS (algorithmically detected patterns):'];
+    if (crossDim.convergences?.length > 0) {
+      xdParts.push('CONVERGENCES (multiple dimensions aligned):');
+      for (const c of crossDim.convergences.slice(0, 3)) {
+        xdParts.push(`- [BULLISH] ${c.type}: ${c.detail}`);
+      }
+    }
+    if (crossDim.divergences?.length > 0) {
+      xdParts.push('DIVERGENCES (conflicting signals):');
+      for (const d of crossDim.divergences.slice(0, 3)) {
+        xdParts.push(`- [DIVERGENCE] ${d.type}: ${d.detail}`);
+      }
+    }
+    xdParts.push('→ Use these cross-dimensional patterns to strengthen thesis or identify hidden risks.');
+    userParts.push(xdParts.join('\n'));
   }
 
   // Round 380: DATA_COMPLETENESS context — explicit collectors OK/failed for verdict calibration
@@ -2321,6 +2397,19 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
         liqParts.push(`Buy/sell pressure: ${dexQ.buy_sell_ratio.toFixed(2)} (${bsLabel})`);
       }
       return liqParts.join(' | ');
+    })(),
+    // Round 386: Inline DEVELOPMENT CONTEXT for quick report
+    (() => {
+      const gh = rawData?.github;
+      if (!gh || gh.error || gh.commits_90d == null) return null;
+      const freq = gh.commit_frequency ?? (gh.commits_90d / 13);
+      const tier = gh.github_velocity_tier ?? (freq >= 14 ? 'hyperspeed' : freq >= 5 ? 'active' : freq >= 1 ? 'moderate' : 'slow');
+      const parts = ['## DEV CONTEXT'];
+      parts.push(`Commits/wk: ${freq.toFixed(1)} (${tier})`);
+      if (gh.contributors != null) parts.push(`Contributors: ${gh.contributors}`);
+      if (gh.days_since_last_commit != null) parts.push(`Last commit: ${gh.days_since_last_commit}d ago`);
+      if (gh.dev_quality_index != null) parts.push(`Dev quality: ${gh.dev_quality_index}/100`);
+      return parts.join(' | ');
     })(),
     `PROJECT: ${projectName}`,
     buildScoreSummary(scores),

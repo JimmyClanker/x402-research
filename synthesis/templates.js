@@ -226,7 +226,7 @@ export function formatReport(projectName, rawData, scores, llmAnalysis) {
 const json = {
     project_name: projectName,
     generated_at: new Date().toISOString(),
-    engine_version: 'r62-2026-03-26', // bump: 30-round AutoResearch nightly batch
+    engine_version: 'r63-2026-03-27', // bump: 30-round AutoResearch Prompt Engineering batch (R361-390)
     verdict: llmAnalysis?.verdict || 'HOLD',
     headline: llmAnalysis?.headline ?? null,
     project_summary: llmAnalysis?.project_summary ?? null,
