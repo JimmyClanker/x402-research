@@ -242,12 +242,28 @@
         statusBox.innerHTML = `
           <div class="loading-wrap" role="status" aria-live="polite" aria-label="Scanning ${project}">
             <div class="chalk-loading">Scanning <span class="loading-project">${project}</span><span class="loading-dots"></span></div>
-            <div class="loading-bar" aria-hidden="true"></div>
+            <div class="loading-bar" aria-hidden="true"><span class="fill-track"></span></div>
             <div class="footnote" id="loading-step-label" style="transition:opacity 0.2s;">${escapeHtml(steps[0])}</div>
           </div>`;
 
         clearInterval(_loadingInterval);
         var stepMs = mode === 'quick' ? 2500 : 3000;
+        // Round 11: animate loading-bar width (0→85% over duration, never reaching 100 until done)
+        (function animateProgress() {
+          const bar = document.querySelector('.loading-bar');
+          if (!bar) return;
+          let pct = 2; bar.style.setProperty('--progress-pct', pct + '%');
+          const totalMs = mode === 'quick' ? 12000 : 45000;
+          const interval = 400;
+          const maxPct = 88;
+          const step = (maxPct - pct) / (totalMs / interval) * 1.2;
+          const pid = setInterval(() => {
+            const barEl = document.querySelector('.loading-bar');
+            if (!barEl) { clearInterval(pid); return; }
+            pct = Math.min(pct + step * (1 - pct / 100), maxPct);
+            barEl.style.width = pct + '%';
+          }, interval);
+        })();
         _loadingInterval = setInterval(function() {
           stepIdx = Math.min(stepIdx + 1, steps.length - 1);
           var el = document.getElementById('loading-step-label');
@@ -1086,6 +1102,18 @@
         var nameEl = reportBox.querySelector('.project-name');
         if (nameEl) { nameEl.setAttribute('tabindex', '-1'); nameEl.focus({ preventScroll: true }); }
       }, 650);
+      // Round 12 (UX batch): announce result to screen readers via live region
+      const announcer = document.getElementById('sr-announcer');
+      if (announcer) {
+        const verdictEl = reportBox.querySelector('.verdict');
+        const scoreEl = reportBox.querySelector('.overall-score');
+        const verdict = verdictEl ? verdictEl.textContent.trim() : '';
+        const score = scoreEl ? scoreEl.textContent.trim() : '';
+        announcer.textContent = ''; // reset to re-trigger
+        setTimeout(() => {
+          announcer.textContent = `Scan complete. ${project}: ${verdict}${score ? ', score ' + score : ''}`;
+        }, 100);
+      }
     }
 
     function showError(msg, hint) {
@@ -1727,8 +1755,8 @@
         const overlay = document.getElementById('payment-overlay');
         if (overlay && overlay.style.display !== 'none' && overlay.style.display !== '') return; // let modal handle
         const resultsSection = document.getElementById('results-section');
-        if (resultsSection && resultsSection.style.display !== 'none') {
-          resultsSection.style.display = 'none';
+        if (resultsSection && resultsSection.classList.contains('visible')) {
+          resultsSection.classList.remove('visible');
           history.replaceState({}, '', location.pathname);
           input.focus();
         }

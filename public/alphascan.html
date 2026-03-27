@@ -322,6 +322,22 @@
       transform: translateY(-2px);
       opacity: 1; animation: none;
     }
+    /* Round 19 (UX batch): btn disabled/scanning state */
+    .btn-primary:disabled {
+      opacity: 0.65; cursor: not-allowed; animation: none;
+      transform: none;
+    }
+    .btn-primary:disabled::before {
+      content: '';
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: btnSpin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes btnSpin { to { transform: rotate(360deg); } }
     @keyframes ctaPulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(212,88,10,0); }
       50% { box-shadow: 0 0 18px 4px rgba(212,88,10,0.22); }
@@ -579,11 +595,22 @@
       content: ''; display: inline-block; width: 1.4em;
       text-align: left; animation: dots 1.2s steps(4, end) infinite;
     }
-    /* Round 65: enhanced loading bar with multi-color glow sweep */
+    /* Round 65 + R11 (UX batch): loading bar — glow sweep + progressive fill */
     .loading-bar {
       position: relative; height: 5px; border-radius: 999px;
-      overflow: hidden; background: rgba(255,255,255,0.06);
+      overflow: visible; background: rgba(255,255,255,0.06);
       margin: 8px 0;
+      /* R11: fill indicator */
+      width: 100%;
+      transition: width 0.4s ease;
+    }
+    /* R11: fill track that shows real progress */
+    .loading-bar .fill-track {
+      position: absolute; inset: 0; border-radius: 999px;
+      background: rgba(212,88,10,0.25);
+      width: var(--progress-pct, 0%);
+      transition: width 0.4s ease;
+      pointer-events: none;
     }
     .loading-bar::before {
       content: ''; position: absolute; top: 0; left: 0; bottom: 0;
@@ -1557,7 +1584,7 @@
   <header>
     <div class="container">
       <div class="header-inner">
-        <a href="/" class="logo" aria-label="Clawnkers — Home"><img src="/claw-logo.png?v=3" alt="" width="28" height="28"><span class="brand-text">Clawnkers<span>.</span></span></a>
+        <a href="/" class="logo" aria-label="Clawnkers — Home"><img src="/claw-logo.png?v=3" alt="" width="28" height="28" decoding="async"><span class="brand-text">Clawnkers<span>.</span></span></a>
         <nav aria-label="Main navigation">
           <a href="/#products">Products</a>
           <a href="/#about">About</a>
@@ -1576,10 +1603,10 @@
     </div>
   </header>
 
-  <main id="main-content">
+  <main id="main-content" tabindex="-1">
 
     <!-- ── Hero ── -->
-    <section class="hero-section">
+    <section class="hero-section" aria-label="Alpha Scanner">
       <div class="hero-bg"></div>
       <div class="container">
         <div class="hero-content">
@@ -1614,12 +1641,13 @@
     </section>
 
     <!-- ── Results (appear after scan) ── -->
-    <div id="results-section">
+    <!-- Round 18 (UX batch): results section with proper landmarks -->
+    <section id="results-section" aria-label="Scan results" aria-live="polite">
       <div class="results-container">
-        <section id="error-box" class="panel hidden"></section>
-        <section id="report" class="hidden"></section>
+        <section id="error-box" class="panel hidden" role="alert" aria-live="assertive"></section>
+        <section id="report" class="hidden" aria-label="Analysis report"></section>
       </div>
-    </div>
+    </section>
 
     <!-- ── How It Works ── -->
     <section class="how-section">
@@ -1685,7 +1713,7 @@
   <footer>
     <div class="container">
       <div class="footer-inner">
-        <div class="footer-logo"><img src="/claw-logo.png?v=3" alt="" width="24" height="24"><span class="brand-text">Clawnkers<span>.</span></span></div>
+        <div class="footer-logo"><img src="/claw-logo.png?v=3" alt="" width="24" height="24" loading="lazy" decoding="async"><span class="brand-text">Clawnkers<span>.</span></span></div>
         <div class="footer-links">
           <a href="/alphascan">Alpha Scanner</a>
           <a href="/#api">API Docs</a>
@@ -1701,9 +1729,12 @@
 
   <!-- Round 91: Toast notification container -->
   <div id="toast-container" aria-live="polite" aria-atomic="false" style="position:fixed;bottom:72px;right:20px;z-index:9500;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
+  <!-- Round 12 (UX batch): assertive live region for scan result announcements -->
+  <div id="sr-announcer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
 
-  <script src="js/alphascan.js?v=91"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/hamburger.js"></script>
+  <!-- Round 17 (UX batch): defer utils/hamburger to not block rendering -->
+  <script src="js/alphascan.js?v=92"></script>
+  <script src="js/utils.js" defer></script>
+  <script src="js/hamburger.js" defer></script>
 </body>
 </html>

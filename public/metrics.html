@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Metrics Dashboard — Clawnkers Internal</title>
   <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0a0a0a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -104,7 +105,11 @@
     }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    @media (max-width: 900px) {
+    /* Round 15 (UX batch): responsive grid breakpoints — tablet 2-col, mobile 1-col */
+    @media (max-width: 900px) and (min-width: 641px) {
+      .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
       .grid-2, .grid-3 { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
@@ -239,6 +244,14 @@
     .full-width { grid-column: 1 / -1; }
     /* Auto-refresh countdown */
     #countdown { font-size: 0.75rem; color: var(--muted); }
+    /* Round 16 (UX batch): print styles */
+    @media print {
+      .header, #key-bar, #print-btn, #refresh-btn { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      .card { border: 1px solid #ccc !important; background: #fff !important; page-break-inside: avoid; }
+      .progress-fill { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .container { max-width: 100% !important; padding: 0 !important; }
+    }
     /* Round 3 (UX batch): skip-link */
     .skip-link {
       position: absolute; top: -100%; left: 12px;
@@ -270,6 +283,7 @@
     <span id="status-text">—</span>
     <span id="countdown"></span>
     <button id="refresh-btn" onclick="loadMetrics()">↺ Refresh</button>
+    <button id="print-btn" onclick="window.print()" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--muted2);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-family:inherit;transition:border-color 0.2s,color 0.2s;" title="Print dashboard">🖨 Print</button>
   </div>
 </div>
 </header>
