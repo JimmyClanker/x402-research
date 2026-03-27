@@ -205,6 +205,14 @@ export function calculateMomentum(rawData = {}, previousScanData = null) {
     momentum_alignment_label: momentumAlignmentLabel,
     momentum_score: momentumScore,
     momentum_score_label: momentumScoreLabel,
+    // Round 468: dex_divergence_strength — when dex momentum diverges from market momentum
+    // strong dex + declining market = potential reversal; strong market + declining dex = potential top
+    dex_market_divergence: (() => {
+      if (dexMomentum === 'improving' && marketMomentum === 'declining') return 'dex_leading_reversal';
+      if (dexMomentum === 'declining' && marketMomentum === 'improving') return 'market_overextended';
+      if (dexMomentum === marketMomentum) return 'aligned';
+      return 'mixed';
+    })(),
     // Round 233 (AutoResearch nightly): momentum_confidence — how reliable is the momentum signal?
     // Confidence is higher when: more dims available, prev data exists for comparison, no divergence
     momentum_confidence: (() => {

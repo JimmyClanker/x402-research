@@ -2537,3 +2537,198 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Change:** Bumped engine_version to r64-2026-03-27 marking the Report Templates & Output Quality batch completion.
 - **Files:** synthesis/templates.js
 - **Tests:** 177/177 pass
+
+### Round 431 — SCORE_MOMENTUM: velocity_tier label (fast/normal/slow)
+- **Change:** Added `velocity_tier` (fast/normal/slow) to SCORE_MOMENTUM data_json and title based on pts/h speed.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 432 — SCORE_MOMENTUM: score_zone + zone crossing detection
+- **Change:** Added `score_zone` (strong_buy/watch/neutral/avoid) + `prev_score_zone` + `crossed_zone` flag. Title now shows zone transition when boundary is crossed.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 433 — CATEGORY_LEADER_SHIFT: category_momentum (strengthening/weakening/stable)
+- **Change:** Compute avg score of top3 current vs old. If delta > 0.3 = strengthening, < -0.3 = weakening. Added to data_json and title.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 434 — DIVERGENCE: divergence_magnitude composite scoring
+- **Change:** Added `divergence_magnitude` = score × |price_change| / 10, with `magnitude_label` (extreme/strong/moderate). Used to rank which divergences are most actionable.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 435 — REGIME_SHIFT: fully implemented (BTC price + score distribution analysis)
+- **Change:** Replaced placeholder with real detection: BTC median price comparison 7d, portfolio avg score delta, stddev dispersion change. Detects bear_entering, bull_entering, rotation, convergence.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 436 — BREAKER_ALERT: breaker_risk_score (1-10 composite)
+- **Change:** Added `breaker_risk_score` to BREAKER_ALERT data_json and title — composite from severity (4pts) + count (3pts) + duration (3pts). Enables alert prioritization.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 437 — DIVERGENCE: volume_confirmation flag
+- **Change:** Positive divergence with high volume = accumulation confirmed; negative divergence with high volume = distribution confirmed. Added to data_json and detail.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 438 — SCORE_MOMENTUM: relative change severity upgrade
+- **Change:** If relative score change >30% (e.g. 4.0→5.2 = 30% relative), upgrade severity medium→high regardless of absolute delta.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 439-440 — New alpha signals: multi_timeframe_momentum + score_momentum_alignment
+- **Change:** `multi_timeframe_momentum`: all 3 timeframes (1h/24h/7d) bullish or bearish. `score_momentum_alignment`: oracle score >= 7.0 + strong price momentum tier.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 441 — getSignalStrengthScore: theme clustering bonus
+- **Change:** 3+ signals in same theme (onchain/social/technical) adds +8 pts bonus for correlated conviction.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 442 — Trade setup: Fibonacci support anchoring for entry zone
+- **Change:** When price is between ATL and ATH, find nearest Fibonacci support below price (within 15%) and anchor entry low to it.
+- **Files:** services/trade-setup.js
+- **Tests:** 177/177 pass
+
+### Round 443 — Risk/reward: signal_count_multiplier
+- **Change:** 3+ strong alpha signals boost EV by 3% per strong signal beyond 2nd (max +15%). Zero signals penalizes EV 10%.
+- **Files:** services/risk-reward.js
+- **Tests:** 177/177 pass
+
+### Round 444 — New alpha signal: on_chain_fee_velocity
+- **Change:** Weekly fee rate vs monthly fee rate — if weekly annualized > monthly annualized × 1.3, protocol extraction is accelerating.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 445 — New alpha signals: healthy_holder_distribution + holder_distribution_improving
+- **Change:** Gini coefficient < 0.7 = healthy distribution; improving trend = reducing concentration over time.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 446 — Trend reversal: momentum tier regime flip + DEX intraday burst
+- **Change:** When price_momentum_tier shows uptrend but 30d is negative → regime flip. DEX m5+h1+h24 all positive after 30d downtrend = potential reversal catalyst.
+- **Files:** services/trend-reversal.js
+- **Tests:** 177/177 pass
+
+### Round 447 — Trade setup: Fibonacci stop loss refinement
+- **Change:** After base volatility stop, find highest Fibonacci support below current stop. If within 5% of original stop, use it as more precise stop (with 2% buffer).
+- **Files:** services/trade-setup.js
+- **Tests:** 177/177 pass
+
+### Round 448 — Risk/reward: trend_reversal_adjustment
+- **Change:** Bullish reversal high-confidence → +12% EV. Accumulation → +6%. Bearish reversal high-confidence → -20% EV + position size downgrade. Distribution → -10%.
+- **Files:** services/risk-reward.js
+- **Tests:** 177/177 pass
+
+### Round 449 — New alpha signal: protocol_upgrade_catalyst
+- **Change:** Detects v2/upgrade/migration narratives in social mentions. Protocol upgrades historically drive 30-150%+ price appreciation.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 450 — Trade setup: entry_timing_score (0-100) + entry_timing_label
+- **Change:** Composite entry timing quality score: score quality (30pts) + RR ratio (25pts) + volatility fit (25pts) + proximity to support (20pts). Labels: excellent/good/fair/poor.
+- **Files:** services/trade-setup.js
+- **Tests:** 177/177 pass
+
+### Round 451 — New alpha signal: low_stablecoin_systemic_risk
+- **Change:** When 80%+ of protocol TVL in blue-chip stablecoins (USDC/USDT/DAI) = low systemic risk.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 452 — New alpha signal: high_developer_activity composite
+- **Change:** 6-indicator composite (stars growth, forks, PRs, commits, commit trend, open issues). 4/6 = moderate, 5/6 = strong.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 453 — momentum.js: weighted momentum_score (0-100)
+- **Change:** Added `momentum_score` (weighted: market 25, onchain 20, social 15, dev 15, dex 15, tokenomics 10) and `momentum_score_label` (strongly_bullish/bullish/neutral/bearish/strongly_bearish).
+- **Files:** services/momentum.js
+- **Tests:** 177/177 pass
+
+### Round 454 — Risk/reward: momentum_score EV adjustment
+- **Change:** momentum_score ≥70 boosts EV up to +15%; ≤30 penalizes EV proportionally.
+- **Files:** services/risk-reward.js
+- **Tests:** 177/177 pass
+
+### Round 455 — New alpha signal: deep_liquidity_pool
+- **Change:** DEX liquidity ≥5% of market cap with $1M+ = institutional market maker presence. ≥10% = strong.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 456 — DIVERGENCE: persistence check across snapshots
+- **Change:** Check prior 3 snapshots for same divergence condition. 2+ persistent = upgrade severity medium→high, add persistence note to detail.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 457 — New alpha signal: high_token_velocity
+- **Change:** Daily volume / (circulating supply × price) > 10% = active on-chain utility. Shows token is actively traded, not just held.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 458 — Risk/reward: score_confidence_adjustment
+- **Change:** Confidence <40% → -20% EV penalty. Confidence ≥85% → +5% EV boost. Separate from probability adjustments.
+- **Files:** services/risk-reward.js
+- **Tests:** 177/177 pass
+
+### Round 459 — SCORE_MOMENTUM: delta_acceleration (Δ²)
+- **Change:** Calculate second derivative of score changes. If last delta is larger than prior delta = accelerating momentum. Added to title, detail, and data_json.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 460 — New alpha signal: active_addresses_growth
+- **Change:** Weekly active address rate vs monthly average. If weekly rate 30% above monthly trend = organic adoption acceleration.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 461 — CATEGORY_LEADER_SHIFT: top_mover_detail
+- **Change:** Added `entered_details` and `exited_details` arrays to data_json — shows who entered/exited with their score before/after.
+- **Files:** oracle/signal-detector.js
+- **Tests:** 177/177 pass
+
+### Round 462 — New alpha signal: net_buying_pressure_composite
+- **Change:** Requires 3/4 buy pressure indicators (DEX ratio, CEX volume change, 24h price, pressure_signal). Multi-source confirmation reduces false positives.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 463 — Trade setup: partial_take_profit_strategy
+- **Change:** Based on RR ratio: excellent RR (≥3) = 25/35/40 split; good (≥2) = 33/34/33; moderate (≥1.5) = 40/40/20; weak = 60/30/10. Helps agents size exits.
+- **Files:** services/trade-setup.js
+- **Tests:** 177/177 pass
+
+### Round 464 — New alpha signal: supply_unlock_risk + mid_unlock_near_ath_caution
+- **Change:** Upcoming unlock ≥5% in 30 days = selling pressure warning. Mid-unlock phase near ATH = caution weak signal.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 465 — Risk/reward: supply_unlock_ev_adjustment
+- **Change:** Large unlock (≥10%, ≤14d) = -25% EV + position size downgrade. Moderate unlock (≥5%, ≤30d) = -12% EV.
+- **Files:** services/risk-reward.js
+- **Tests:** 177/177 pass
+
+### Round 466 — Trend reversal: sparkline V-reversal detection
+- **Change:** Split 7d sparkline in half. If second half avg > first half avg × 1.1 = V-reversal pattern. +2 bullish points.
+- **Files:** services/trend-reversal.js
+- **Tests:** 177/177 pass
+
+### Round 467 — New alpha signals: sector_outperforming_btc + outperforming_sector
+- **Change:** When sector performance > BTC by 5%+ = sector rotation signal. When project > sector by 5%+ = idiosyncratic strength.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 468 — momentum.js: dex_market_divergence field
+- **Change:** Added `dex_market_divergence` = when DEX momentum diverges from market momentum. Values: dex_leading_reversal / market_overextended / aligned / mixed.
+- **Files:** services/momentum.js
+- **Tests:** 177/177 pass
+
+### Round 469 — New alpha signal: social_leads_price
+- **Change:** High social sentiment (>0.6) + KOL bullish + price barely moved (<3% 24h, <10% 7d) = social leading price signal. Early entry window.
+- **Files:** services/alpha-signals.js
+- **Tests:** 177/177 pass
+
+### Round 470 — Engine version bump to r470-2026-03-27
+- **Change:** Bumped engine_version to r470-2026-03-27 marking Oracle Signal Detection & Alpha Signals batch completion (R431-470).
+- **Files:** synthesis/templates.js
+- **Tests:** 177/177 pass

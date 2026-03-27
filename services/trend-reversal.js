@@ -85,6 +85,25 @@ export function detectTrendReversal(rawData = {}) {
     bullishPoints += 2;
   }
 
+  // Round 466: sparkline V-reversal — flat bottom then sharp uptick = classic V-reversal pattern
+  const sparklineData = rawData?.sparkline_7d ?? null;
+  if (Array.isArray(sparklineData) && sparklineData.length >= 7) {
+    // Split into halves: if first half is flat/down and second half is up = V pattern
+    const half = Math.floor(sparklineData.length / 2);
+    const firstHalf = sparklineData.slice(0, half);
+    const secondHalf = sparklineData.slice(half);
+    const firstAvg = firstHalf.reduce((s, v) => s + v, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((s, v) => s + v, 0) / secondHalf.length;
+    const latestPrice = sparklineData[sparklineData.length - 1];
+    const lowestPoint = Math.min(...sparklineData);
+    // V-reversal: second half > first half by >10%, and latest price is near high
+    if (firstAvg > 0 && secondAvg > firstAvg * 1.10 && latestPrice > secondAvg * 0.98) {
+      const recoveryPct = ((latestPrice - lowestPoint) / lowestPoint) * 100;
+      signals.push(`7d sparkline V-reversal: avg ${firstAvg.toFixed(4)} → ${secondAvg.toFixed(4)}, recovery ${recoveryPct.toFixed(1)}% from intra-week low`);
+      bullishPoints += 2;
+    }
+  }
+
   // --- Bearish reversals ---
   // 6. Exhaustion near ATH with sell pressure
   if (athDist !== null && athDist > -10 && buySellRatio !== null && buySellRatio < 0.85) {

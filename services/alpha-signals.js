@@ -760,6 +760,100 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // Round 469 (AutoResearch): social_leads_price — high social conviction + price not moved yet
+  // Classic leading indicator: KOLs and community bullish, but price hasn't reacted → early entry
+  const socialSentiment469 = safeN(social.sentiment_score ?? NaN);
+  const kolSentiment = social.kol_sentiment ?? null;
+  const xSocial469 = rawData.x_social ?? {};
+  const priceChange24h469 = safeN(market.price_change_pct_24h ?? NaN);
+  const priceChange7d469 = safeN(market.price_change_pct_7d ?? NaN);
+  if (
+    Number.isFinite(socialSentiment469) && socialSentiment469 > 0.6 &&
+    (kolSentiment === 'bullish' || xSocial469.kol_sentiment === 'bullish') &&
+    Number.isFinite(priceChange24h469) && Number.isFinite(priceChange7d469) &&
+    priceChange24h469 < 3 && priceChange7d469 < 10
+  ) {
+    signals.push({
+      signal: 'social_leads_price',
+      strength: socialSentiment469 > 0.75 ? 'strong' : 'moderate',
+      detail: `Strong social sentiment (${socialSentiment469.toFixed(2)}) + KOL bullish conviction, but price only ${priceChange24h469.toFixed(1)}% 24h / ${priceChange7d469.toFixed(1)}% 7d — social narrative leading price, potential early entry before broader market reaction.`,
+    });
+  }
+
+  // Round 467 (AutoResearch): sector_outperforming_btc — project's sector is beating BTC this week
+  // When a sector is outperforming BTC (beta-adjusted), it indicates sector rotation flow
+  const sectorPerf7d = safeN(sector.sector_performance_7d ?? NaN);
+  const btcPerf7d = safeN(market.btc_price_change_7d ?? NaN);
+  const projectPerf7d = safeN(market.price_change_pct_7d ?? NaN);
+  if (Number.isFinite(sectorPerf7d) && Number.isFinite(btcPerf7d) && sectorPerf7d > btcPerf7d + 5) {
+    const relativeOut = sectorPerf7d - btcPerf7d;
+    signals.push({
+      signal: 'sector_outperforming_btc',
+      strength: relativeOut > 15 ? 'strong' : 'moderate',
+      detail: `${sector.sector_name ?? 'Sector'} outperforming BTC by +${relativeOut.toFixed(1)}% this week (sector: +${sectorPerf7d.toFixed(1)}% vs BTC: +${btcPerf7d.toFixed(1)}%) — capital rotating into this sector.`,
+    });
+  }
+  // Also check if THIS project is outperforming its own sector
+  if (Number.isFinite(projectPerf7d) && Number.isFinite(sectorPerf7d) && projectPerf7d > sectorPerf7d + 5) {
+    signals.push({
+      signal: 'outperforming_sector',
+      strength: projectPerf7d > sectorPerf7d + 15 ? 'strong' : 'moderate',
+      detail: `Project outperforming its sector by +${(projectPerf7d - sectorPerf7d).toFixed(1)}% this week (+${projectPerf7d.toFixed(1)}% vs sector +${sectorPerf7d.toFixed(1)}%) — idiosyncratic strength, project-specific catalyst likely.`,
+    });
+  }
+
+  // Round 464 (AutoResearch): supply_unlock_risk — upcoming token unlock is negative for price
+  // Supply unlock detector: if unlock > 5% of supply within 30 days = significant overhang risk
+  const supplyUnlock = rawData?.supply_unlock ?? rawData?.onchain?.supply_unlock ?? null;
+  if (supplyUnlock && typeof supplyUnlock === 'object') {
+    const unlockPct = safeN(supplyUnlock.pct_of_supply_30d ?? supplyUnlock.unlock_pct ?? 0);
+    const daysToUnlock = safeN(supplyUnlock.days_to_next_unlock ?? 999);
+    if (unlockPct >= 5 && daysToUnlock <= 30) {
+      signals.push({
+        signal: 'upcoming_supply_unlock_risk',
+        strength: unlockPct >= 15 || daysToUnlock <= 7 ? 'strong' : 'moderate',
+        detail: `Supply unlock of ${unlockPct.toFixed(1)}% of circulating supply expected in ${daysToUnlock}d — historically creates selling pressure. Consider reducing position size or waiting for unlock to pass.`,
+      });
+    }
+  } else {
+    // Check via market data: circulating_to_max_ratio changing + decreasing supply → unlock pressure
+    const maxSupply = safeN(market.max_supply ?? 0);
+    const circulatingSupply452 = safeN(market.circulating_supply ?? 0);
+    if (maxSupply > 0 && circulatingSupply452 > 0) {
+      const supplyUtilization = circulatingSupply452 / maxSupply;
+      // If supply util is 30-70% it's mid-unlock phase — potentially concerning if price is at highs
+      if (supplyUtilization >= 0.3 && supplyUtilization <= 0.7) {
+        // Only surface this if price is at high (near ATH) — unlock at ATH = sell pressure setup
+        const athDist464 = safeN(market.ath_distance_pct ?? NaN);
+        if (Number.isFinite(athDist464) && athDist464 > -20) {
+          signals.push({
+            signal: 'mid_unlock_near_ath_caution',
+            strength: 'weak',
+            detail: `${(supplyUtilization * 100).toFixed(0)}% of max supply circulating — mid-unlock phase with price near ATH (${Math.abs(athDist464).toFixed(1)}% from ATH). Early investors/team may have unlock incentive to sell.`,
+          });
+        }
+      }
+    }
+  }
+
+  // Round 462 (AutoResearch): net_buying_pressure_composite — multi-source buy pressure confirmation
+  // Fires when 3 independent buy pressure signals align: DEX buys + CEX volume + 24h price
+  const dexBuySell = safeN(dex.buy_sell_ratio ?? 0);
+  const cexVolChange = safeN(market.volume_change_pct_24h ?? NaN);
+  const price24hChange = safeN(market.price_change_pct_24h ?? NaN);
+  let buyPressureScore = 0;
+  if (dexBuySell >= 1.15) buyPressureScore++;
+  if (Number.isFinite(cexVolChange) && cexVolChange > 20) buyPressureScore++;
+  if (Number.isFinite(price24hChange) && price24hChange > 3) buyPressureScore++;
+  if (dex.pressure_signal === 'buy_pressure') buyPressureScore++;
+  if (buyPressureScore >= 3) {
+    signals.push({
+      signal: 'net_buying_pressure_composite',
+      strength: buyPressureScore >= 4 ? 'strong' : 'moderate',
+      detail: `Composite buy pressure confirmed (${buyPressureScore}/4 signals): DEX ratio ${dexBuySell.toFixed(2)}${Number.isFinite(cexVolChange) ? `, CEX vol +${cexVolChange.toFixed(0)}%` : ''}${Number.isFinite(price24hChange) ? `, price +${price24hChange.toFixed(1)}% 24h` : ''} — multiple independent sources confirming net buying.`,
+    });
+  }
+
   // Round 460 (AutoResearch): active_addresses_growth — growing active addresses = increasing adoption
   // When active_addresses_7d is growing vs active_addresses_30d average, organic usage is expanding
   const activeAddresses7d = safeN(onchain.active_addresses_7d ?? 0);

@@ -235,6 +235,21 @@ export function assessRiskReward(rawData, scores, tradeSetup) {
     }
   }
 
+  // Round 465: supply_unlock_ev_adjustment — upcoming unlock = headwind for price targets
+  const supplyUnlock465 = rawData?.supply_unlock ?? rawData?.onchain?.supply_unlock ?? null;
+  if (supplyUnlock465 && expectedValue !== null) {
+    const unlockPct = safeN(supplyUnlock465.pct_of_supply_30d ?? supplyUnlock465.unlock_pct ?? 0);
+    const daysToUnlock = safeN(supplyUnlock465.days_to_next_unlock ?? 999);
+    if (unlockPct >= 10 && daysToUnlock <= 14) {
+      volAdjustedEv = round(volAdjustedEv * 0.75, 4);
+      notes.push(`⚠️ Large supply unlock ${unlockPct.toFixed(0)}% in ${daysToUnlock}d — significant EV discount 25%.`);
+      if (positionSizeSuggestion === 'full') positionSizeSuggestion = 'half';
+    } else if (unlockPct >= 5 && daysToUnlock <= 30) {
+      volAdjustedEv = round(volAdjustedEv * 0.88, 4);
+      notes.push(`Supply unlock ${unlockPct.toFixed(0)}% in ${daysToUnlock}d — EV discounted 12% for unlock headwind.`);
+    }
+  }
+
   // Round 443: signal_count_multiplier — more strong alpha signals = higher EV confidence
   // Each strong alpha signal beyond 2 boosts EV by 3% (max +15%)
   const alphaSignalsCount = safeN(rawData?._alpha_signals_count, 0);

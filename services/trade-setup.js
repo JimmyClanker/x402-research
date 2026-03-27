@@ -255,6 +255,31 @@ export function generateTradeSetup(rawData, scores) {
   // Round 63: Recommended position size hint (% of portfolio)
   const positionSizeHint = overallScore >= 7.5 ? '3-5%' : overallScore >= 5.5 ? '1-3%' : '0.5-1%';
 
+  // Round 463: partial_take_profit_strategy — how much to take off at each TP level
+  // Based on RR ratio and setup quality: better setups = let more ride to TP3
+  let tp1TakePct, tp2TakePct, tp3TakePct;
+  if (rrRatio !== null && rrRatio >= 3.0) {
+    // Excellent RR: take small at TP1, let most ride
+    tp1TakePct = 25; tp2TakePct = 35; tp3TakePct = 40;
+  } else if (rrRatio !== null && rrRatio >= 2.0) {
+    // Good RR: balanced distribution
+    tp1TakePct = 33; tp2TakePct = 34; tp3TakePct = 33;
+  } else if (rrRatio !== null && rrRatio >= 1.5) {
+    // Moderate RR: take more early
+    tp1TakePct = 40; tp2TakePct = 40; tp3TakePct = 20;
+  } else {
+    // Weak RR or unknown: take most at TP1
+    tp1TakePct = 60; tp2TakePct = 30; tp3TakePct = 10;
+  }
+  const partialTakeProfitStrategy = {
+    tp1_take_pct: tp1TakePct,
+    tp2_take_pct: tp2TakePct,
+    tp3_take_pct: tp3TakePct,
+    rationale: rrRatio !== null
+      ? `RR ${rrRatio.toFixed(2)} → ${rrRatio >= 3.0 ? 'let winners run' : rrRatio >= 2.0 ? 'balanced distribution' : 'take profits early'}`
+      : 'no price data — take profits conservatively',
+  };
+
   // Round 450: entry_timing_score — 0-100 composite score for entry timing quality
   // Components: score quality (30pts) + RR ratio (25pts) + volatility fit (25pts) + proximity to support (20pts)
   let entryTimingScore = 0;
@@ -297,6 +322,7 @@ export function generateTradeSetup(rawData, scores) {
     position_size_hint: positionSizeHint,
     entry_timing_score: entryTimingScore,
     entry_timing_label: entryTimingLabel,
+    partial_take_profit_strategy: partialTakeProfitStrategy,
     notes,
   };
 }

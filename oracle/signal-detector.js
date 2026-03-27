@@ -291,6 +291,23 @@ export function detectCategoryLeaderShift(db) {
     const categoryMomentum = (newTop3AvgScore - oldTop3AvgScore) > 0.3 ? 'strengthening'
       : (newTop3AvgScore - oldTop3AvgScore) < -0.3 ? 'weakening' : 'stable';
 
+    // Round 461: top_mover_detail — who entered and what's their score?
+    const enteredDetails = rows
+      .filter(r => enteredIds.includes(r.token_id))
+      .map(r => ({
+        name: r.token_name || r.token_symbol || `#${r.token_id}`,
+        score: r.overall_score,
+        // Find their old score if they had one outside top3
+        old_score: oldRows2.find(o => o.token_id === r.token_id)?.overall_score ?? null,
+      }));
+    const exitedDetails = oldRows2
+      .filter(r => exitedIds.includes(r.token_id))
+      .map(r => ({
+        name: r.token_name || r.token_symbol || `#${r.token_id}`,
+        old_score: r.overall_score,
+        new_score: rows.find(n => n.token_id === r.token_id)?.overall_score ?? null,
+      }));
+
     signals.push({
       signal_type: 'CATEGORY_LEADER_SHIFT',
       token_id: null,
@@ -310,6 +327,8 @@ export function detectCategoryLeaderShift(db) {
         category_momentum: categoryMomentum,
         new_avg_score: parseFloat(newTop3AvgScore.toFixed(3)),
         old_avg_score: parseFloat(oldTop3AvgScore.toFixed(3)),
+        entered_details: enteredDetails,
+        exited_details: exitedDetails,
       }),
       expires_at: expiresAt,
     });
