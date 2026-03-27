@@ -142,6 +142,46 @@ function extractKeyMetrics(rawData, scores) {
       const direction = v.pct_from_52w_high >= 0 ? 'at' : `${Math.abs(v.pct_from_52w_high).toFixed(1)}% below`;
       return `${direction} 52w high ($${v.high_52w})`;
     })(),
+    // Round 381 (AutoResearch): ATH distance context for key metrics display
+    ath_distance_pct: market.ath_distance_pct ?? null,
+    ath_distance_fmt: (() => {
+      const d = market.ath_distance_pct;
+      if (d == null) return 'n/a';
+      return `${d.toFixed(1)}% from ATH`;
+    })(),
+    // Round 381 (AutoResearch): days_since_ath — LLM-legible recency signal
+    days_since_ath: market.days_since_ath ?? null,
+    days_since_ath_fmt: (() => {
+      const d = market.days_since_ath;
+      if (d == null) return 'n/a';
+      if (d <= 30) return `ATH set ${d}d ago (recent)`;
+      if (d <= 90) return `ATH set ${d}d ago (near)`;
+      if (d <= 365) return `ATH set ${Math.round(d / 30)}mo ago`;
+      return `ATH set ${(d / 365).toFixed(1)}yr ago`;
+    })(),
+    // Round 381 (AutoResearch): market_cap_to_volume_ratio — valuation efficiency signal
+    market_cap_to_volume_ratio: market.market_cap_to_volume_ratio ?? null,
+    // Round 382 (AutoResearch): DEX data quality signals for report consumers
+    wash_trading_risk: dex.wash_trading_risk ?? null,
+    median_trade_size_usd: dex.median_trade_size_usd ?? null,
+    median_trade_size_fmt: (() => {
+      const v = dex.median_trade_size_usd;
+      if (v == null) return 'n/a';
+      if (v >= 10000) return `$${(v / 1000).toFixed(1)}K (whale)`;
+      if (v >= 500) return `$${v.toFixed(0)} (institutional/mid retail)`;
+      if (v >= 50) return `$${v.toFixed(0)} (retail organic)`;
+      return `$${v.toFixed(2)} (micro/bot risk)`;
+    })(),
+    // Round 382 (AutoResearch): article quality score for social signal reliability
+    avg_article_quality_score: rawData?.social?.avg_article_quality_score ?? null,
+    article_quality_fmt: (() => {
+      const q = rawData?.social?.avg_article_quality_score;
+      if (q == null) return 'n/a';
+      if (q >= 1.4) return `${q.toFixed(2)}x (tier-1 dominated)`;
+      if (q >= 1.2) return `${q.toFixed(2)}x (above average)`;
+      if (q >= 0.9) return `${q.toFixed(2)}x (average)`;
+      return `${q.toFixed(2)}x (low quality)`;
+    })(),
   };
 }
 

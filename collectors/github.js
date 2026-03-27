@@ -450,6 +450,37 @@ export async function collectGithub(projectName) {
         return Math.round((1 - gini) * 100);
       })(),
 
+      // Round 381 (AutoResearch): github_velocity_tier — composite development pace classification
+      // Combines commit frequency (commits/week) + staleness (days since last commit) into one label
+      // Useful for quick LLM orientation without requiring both fields to be processed separately
+      github_velocity_tier: (() => {
+        const freq = commitFrequency;
+        const daysSince = (() => {
+          const d = commitsData?.[0]?.commit?.author?.date;
+          if (!d) return null;
+          return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+        })();
+        if (freq == null) return null;
+        if (daysSince != null && daysSince > 180) return 'stale';      // No activity for 6+ months
+        if (daysSince != null && daysSince > 90) return 'slowing';     // 3-6 months since last commit
+        if (freq >= 14) return 'hyperspeed';                           // 2+ commits/day
+        if (freq >= 5) return 'active';                                // 5-14/wk
+        if (freq >= 1) return 'moderate';                              // 1-5/wk
+        if (freq > 0) return 'slow';                                   // < 1/wk
+        return 'inactive';
+      })(),
+      // Round 382 (AutoResearch): critical_issue_ratio — open issues relative to total contributors
+      // High ratio = dev team is overwhelmed by bug reports (quality risk)
+      // Low ratio with active PRs = healthy balanced team
+      critical_issue_ratio: (() => {
+        const contribCount = Array.isArray(contributorStats) ? contributorStats.length : 0;
+        const openIssueCount = repoData?.open_issues_count ?? 0;
+        if (contribCount === 0) return null;
+        const ratio = openIssueCount / Math.max(1, contribCount);
+        // >10 issues per contributor = overwhelming debt; <2 = healthy capacity
+        return parseFloat(ratio.toFixed(1));
+      })(),
+
       // Round 235 (AutoResearch): commit_consistency_score — regularity of commits over 90d (0-100)
       // A protocol with consistent weekly commits is more reliable than one with burst activity
       commit_consistency_score: (() => {

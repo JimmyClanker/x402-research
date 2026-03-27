@@ -125,6 +125,22 @@ export function assessVolatility(rawData = {}) {
   };
   const risk_tier = RISK_TIER_MAP[`${regime}_${weekly_class}`] ?? 'moderate_risk';
 
+  // Round 381 (AutoResearch): ATH recency context for volatility interpretation
+  // If token is near ATH, elevated volatility is "good" volatility (price discovery)
+  // If token is far from ATH (>80% below), elevated volatility likely means continued decline
+  const daysSinceAth = safeN(rawData?.market?.days_since_ath);
+  const athDistPct = safeN(rawData?.market?.ath_distance_pct);
+  let athVolatilityContext = null;
+  if (daysSinceAth !== null && regime !== 'calm') {
+    if (daysSinceAth <= 30) {
+      athVolatilityContext = 'positive_discovery'; // near ATH + volatile = breakout phase
+      notes.push(`Volatility near ATH set ${daysSinceAth}d ago — price discovery phase, volatility may be constructive.`);
+    } else if (athDistPct !== null && athDistPct < -80 && daysSinceAth > 365) {
+      athVolatilityContext = 'structural_decline'; // far from ATH + volatile = continued decay
+      notes.push(`Volatility deep below ATH (${Math.abs(athDistPct).toFixed(0)}% from ATH set ${Math.round(daysSinceAth / 365 * 10) / 10}yr ago) — high-vol may signal continued downtrend.`);
+    }
+  }
+
   return {
     regime,
     risk_tier,
@@ -133,6 +149,8 @@ export function assessVolatility(rawData = {}) {
     weekly_class,
     volatility_pct_24h: change24h,
     volatility_pct_7d: change7d,
+    // Round 381 (AutoResearch): ATH context for interpreting volatility direction
+    ath_volatility_context: athVolatilityContext,
     notes,
   };
 }

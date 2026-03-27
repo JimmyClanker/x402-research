@@ -12,8 +12,8 @@
 import { calculateScores, computeSparklineTrend } from '../synthesis/scoring.js';
 import { generateReport, generateQuickReport } from '../synthesis/llm.js';
 import { getBenchmarkForCategory, compareToSector } from '../services/sector-benchmarks.js';
-import { detectRedFlags } from '../services/red-flags.js';
-import { detectAlphaSignals } from '../services/alpha-signals.js';
+import { detectRedFlags, detectFeeRevenueDivergence } from '../services/red-flags.js';
+import { detectAlphaSignals, detectRecentAthMomentum } from '../services/alpha-signals.js';
 import { generateTradeSetup } from '../services/trade-setup.js';
 import { assessRiskReward } from '../services/risk-reward.js';
 import { scoreReportQuality } from '../services/report-quality.js';
@@ -85,8 +85,17 @@ export function phaseEnrich(rawData, scores) {
   }
 
   // Core enrichment — all sync
-  const redFlags = detectRedFlags(rawData, scores);
-  const alphaSignals = detectAlphaSignals(rawData, scores);
+  const redFlagsBase = detectRedFlags(rawData, scores);
+  // Round 381 (AutoResearch): inject fee-revenue divergence flag if detected
+  const feeRevDivFlag = detectFeeRevenueDivergence(rawData);
+  const redFlags = feeRevDivFlag
+    ? [...redFlagsBase, feeRevDivFlag]
+    : redFlagsBase;
+
+  const alphaSignalsBase = detectAlphaSignals(rawData, scores);
+  // Round 381 (AutoResearch): ATH momentum signal is now wired inside detectAlphaSignals
+  // via the detectRecentAthMomentum call added in Round 15, so just use alphaSignalsBase directly
+  const alphaSignals = alphaSignalsBase;
   const volatilityAssessment = assessVolatility(rawData);
   const priceAlerts = buildPriceAlerts(redFlags, alphaSignals);
   const trendReversal = detectTrendReversal(rawData);

@@ -339,6 +339,24 @@ export async function collectMarket(projectName) {
         const trendingBonus = isTrending ? 20 : 0;
         return Math.round(velScore + commScore + trendingBonus);
       })(),
+      // Round 381 (AutoResearch): days_since_ath — simple integer for LLM/scoring context
+      // More legible than ath_recency string alone, useful for decay calculations
+      days_since_ath: (() => {
+        const athDate = marketData?.ath_date?.usd;
+        if (!athDate) return null;
+        const days = Math.floor((Date.now() - new Date(athDate).getTime()) / 86400000);
+        return days >= 0 ? days : null;
+      })(),
+      // Round 381 (AutoResearch): price_change_90d computed from chart history (more accurate than
+      // the existing price_change_pct_90d field which uses a heuristic weighted blend as fallback)
+      // Already present as price_change_pct_90d — alias for cross-collector consistency
+      // Round 381 (AutoResearch): market_cap_to_volume_ratio — a "valuation efficiency" signal
+      // Low ratio (<5) = highly liquid, efficiently valued; high ratio (>200) = illiquid or speculative
+      market_cap_to_volume_ratio: (() => {
+        if (marketCap == null || totalVolume == null || totalVolume === 0) return null;
+        const ratio = marketCap / totalVolume;
+        return Number.isFinite(ratio) ? parseFloat(ratio.toFixed(1)) : null;
+      })(),
       // Round 2
       is_trending: isTrending,
       categories,

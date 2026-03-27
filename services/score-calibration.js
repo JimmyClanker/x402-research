@@ -32,14 +32,24 @@ export function calibrateScores(db, rawScores) {
     if (val == null) continue;
     const rawScore = typeof val === 'object' ? val.score : val;
 
-    // Fetch all historical scores for this dimension
+    // Round 382 (AutoResearch): Fetch only recent 90-day window to prevent stale data drift
+    // Historical data older than 90 days may not reflect current market conditions
+    // Falls back to all-time history if recent window has < MIN_HISTORY points
     let rows;
     try {
-      rows = db.prepare('SELECT score FROM score_history WHERE dimension = ?').all(dim);
+      const recentRows = db.prepare(
+        "SELECT score FROM score_history WHERE dimension = ? AND created_at > datetime('now', '-90 days')"
+      ).all(dim);
+      rows = recentRows.length >= MIN_HISTORY ? recentRows
+        : db.prepare('SELECT score FROM score_history WHERE dimension = ?').all(dim);
     } catch {
-      // Table doesn't exist yet — return raw
-      calibrated[dim] = { raw: rawScore, z_score: null, calibrated: false };
-      continue;
+      try {
+        rows = db.prepare('SELECT score FROM score_history WHERE dimension = ?').all(dim);
+      } catch {
+        // Table doesn't exist yet — return raw
+        calibrated[dim] = { raw: rawScore, z_score: null, calibrated: false };
+        continue;
+      }
     }
 
     if (rows.length < MIN_HISTORY) {

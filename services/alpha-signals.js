@@ -727,6 +727,20 @@ export function detectAlphaSignals(rawData = {}, scores = {}) {
     });
   }
 
+  // Round 381 (AutoResearch): Wire in detectRecentAthMomentum — recent ATH is a strong alpha signal
+  const athMomentumSignal = detectRecentAthMomentum(rawData);
+  if (athMomentumSignal) signals.push(athMomentumSignal);
+
+  // Round 381 (AutoResearch): Narrative freshness signal — fresh narratives = active catalyst cycle
+  const narrativeFreshness = safeN(social.narrative_freshness_score ?? null, null);
+  if (narrativeFreshness !== null && narrativeFreshness >= 60) {
+    signals.push({
+      signal: 'fresh_narrative_momentum',
+      strength: narrativeFreshness >= 80 ? 'strong' : 'moderate',
+      detail: `Narrative freshness score ${narrativeFreshness}/100 — most social coverage driven by events from last 3 days. Active catalyst cycle in progress.`,
+    });
+  }
+
   // Deduplicate signals by signal key (keep first occurrence)
   const seen = new Set();
   return signals.filter((s) => {
@@ -864,6 +878,128 @@ export function detectPtvlUndervaluation(rawData = {}) {
       signal: 'ptvl_deep_value',
       strength: ptvl < 0.2 ? 'strong' : 'moderate',
       detail: `P/TVL ratio ${ptvl.toFixed(3)} — market cap ($${(mcap / 1e6).toFixed(1)}M) is below locked TVL ($${(tvl / 1e6).toFixed(1)}M). Historically a DeFi deep value entry zone.`,
+    };
+  }
+  return null;
+}
+
+// ─── Round 356 (AutoResearch batch): New alpha signal detectors ───────────────
+
+/**
+ * Detect fee-switch activation or revenue-sharing announcement.
+ * A protocol turning on fees is a strong tokenomics catalyst.
+ */
+export function detectFeeSwitchMomentum(rawData = {}) {
+  const social = rawData.social ?? {};
+  const narratives = Array.isArray(social.key_narratives) ? social.key_narratives : [];
+  const hasFeeSwitch = narratives.some(n =>
+    /fee.?switch|revenue.?shar|fee.?distribut|token.?buyback|yield.?token/i.test(n)
+  );
+  const fees7d = Number(rawData.onchain?.fees_7d ?? 0);
+  if (hasFeeSwitch && fees7d > 0) {
+    return {
+      signal: 'fee_switch_momentum',
+      strength: fees7d > 500_000 ? 'strong' : 'moderate',
+      detail: `Fee-switch or revenue-sharing narrative detected in social mentions with $${(fees7d / 1000).toFixed(0)}K weekly fees — potential catalyst for token accrual.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Detect strong TVL inflow acceleration vs prior period.
+ * TVL growing faster than its own 30d trend = institutional accumulation signal.
+ */
+export function detectTvlAcceleration(rawData = {}) {
+  const onchain = rawData.onchain ?? {};
+  const tvl7d = Number(onchain.tvl_change_7d ?? NaN);
+  const tvl30d = Number(onchain.tvl_change_30d ?? NaN);
+  if (!Number.isFinite(tvl7d) || !Number.isFinite(tvl30d)) return null;
+  const tvl = Number(onchain.tvl ?? 0);
+  // 7d annualized rate faster than 30d annualized rate by >2x
+  const annualized7d = tvl7d * 52;
+  const annualized30d = tvl30d * 12;
+  if (tvl > 5_000_000 && tvl7d > 5 && annualized7d > annualized30d * 2) {
+    return {
+      signal: 'tvl_acceleration',
+      strength: tvl7d > 20 ? 'strong' : 'moderate',
+      detail: `TVL growing at ${tvl7d.toFixed(1)}% weekly vs ${tvl30d.toFixed(1)}% monthly average — acceleration suggests fresh capital inflow, not just organic growth.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Round 381 (AutoResearch): Detect recent ATH as momentum confirmation signal.
+ * A token setting a new ATH (or near ATH) within the last 30 days is in price discovery.
+ * This is one of the strongest momentum signals in crypto markets.
+ */
+export function detectRecentAthMomentum(rawData = {}) {
+  const market = rawData.market ?? {};
+  const daysSinceAth = market.days_since_ath;
+  const athRecency = market.ath_recency;
+  const athDistancePct = Number(market.ath_distance_pct ?? -100);
+  if (daysSinceAth == null) return null;
+  // Within 30 days of ATH = strong momentum signal
+  if (daysSinceAth <= 30) {
+    return {
+      signal: 'recent_ath_momentum',
+      strength: daysSinceAth <= 7 ? 'strong' : 'moderate',
+      detail: `New ATH set ${daysSinceAth}d ago — token is in active price discovery. Strong institutional and retail confirmation.`,
+    };
+  }
+  // Within 90 days and still within 5% of ATH = near-ATH consolidation (potential breakout)
+  if (daysSinceAth <= 90 && athDistancePct >= -5) {
+    return {
+      signal: 'ath_consolidation',
+      strength: 'moderate',
+      detail: `ATH set ${daysSinceAth}d ago, price ${Math.abs(athDistancePct).toFixed(1)}% below ATH — consolidating near highs, potential breakout zone.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Round 382 (AutoResearch): Detect wash-trading-free high volume — organic volume surge.
+ * Volume spike WITHOUT wash trading risk = genuine demand signal.
+ */
+export function detectOrganicVolumeSpike(rawData = {}) {
+  const market = rawData.market ?? {};
+  const dex = rawData.dex ?? {};
+  const mcap = Number(market.market_cap ?? 0);
+  const vol = Number(market.total_volume ?? 0);
+  const vol7dAvg = Number(market.volume_7d_avg ?? 0);
+  if (mcap <= 0 || vol <= 0) return null;
+  // Wash trading risk must be low to qualify as organic
+  if (dex.wash_trading_risk && dex.wash_trading_risk !== 'low') return null;
+  const velPct = (vol / mcap) * 100;
+  const spikeMultiple = vol7dAvg > 0 ? vol / vol7dAvg : 0;
+  if (velPct >= 20 && spikeMultiple >= 3) {
+    return {
+      signal: 'organic_volume_spike',
+      strength: velPct >= 50 ? 'strong' : 'moderate',
+      detail: `Volume at ${velPct.toFixed(1)}% of MCap (${spikeMultiple.toFixed(1)}x 7d avg) with no wash trading detected — organic demand surge. Median trade size $${dex.median_trade_size_usd?.toFixed(2) ?? 'n/a'} indicates retail/institutional buys.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Detect governance activity surge — proposals, votes, DAO participation.
+ */
+export function detectGovernanceSurge(rawData = {}) {
+  const social = rawData.social ?? {};
+  const narratives = Array.isArray(social.key_narratives) ? social.key_narratives : [];
+  const hasGovernance = narratives.some(n =>
+    /governance|dao vote|proposal|on-chain vote|snapshot vote|protocol upgrade/i.test(n)
+  );
+  if (!hasGovernance) return null;
+  const sentiment = Number(social.sentiment_score ?? 0);
+  if (hasGovernance && sentiment > 0.2) {
+    return {
+      signal: 'governance_momentum',
+      strength: sentiment > 0.5 ? 'strong' : 'moderate',
+      detail: `Active governance/DAO activity detected in social narratives with positive sentiment (${sentiment.toFixed(2)}) — community engagement and protocol direction clarity can drive price discovery.`,
     };
   }
   return null;

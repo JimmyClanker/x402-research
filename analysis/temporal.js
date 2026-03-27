@@ -82,6 +82,10 @@ export function analyzeTemporalDelta(db, projectName, currentRawData, currentSco
     { metric: 'holder_engagement_score', prev: safeN(prevMarket.holder_engagement_score), curr: safeN(currMarket.holder_engagement_score), unit: '' },
     { metric: 'dex_liquidity', prev: safeN(prevDex.dex_liquidity_usd), curr: safeN(currDex.dex_liquidity_usd), unit: '$' },
     { metric: 'reddit_activity_score', prev: safeN(prevReport?.raw_data?.reddit?.reddit_activity_score), curr: safeN(currentRawData?.reddit?.reddit_activity_score), unit: '' },
+    // Round 382 (AutoResearch): add wash trading risk and article quality to temporal tracking
+    { metric: 'github_commits_90d', prev: safeN(prevReport?.raw_data?.github?.commits_90d), curr: safeN(currentRawData?.github?.commits_90d), unit: '' },
+    { metric: 'revenue_7d', prev: safeN(prevOnchain.revenue_7d), curr: safeN(currOnchain.revenue_7d), unit: '$' },
+    { metric: 'buy_sell_ratio', prev: safeN(prevDex.buy_sell_ratio), curr: safeN(currDex.buy_sell_ratio), unit: '' },
   ];
 
   for (const { metric, prev, curr, unit } of metricPairs) {

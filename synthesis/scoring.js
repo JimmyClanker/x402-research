@@ -1,7 +1,10 @@
 import { applyCircuitBreakers } from '../scoring/circuit-breakers.js';
 import { detectRedFlags } from '../services/red-flags.js';
 import { getCategoryWeights } from '../scoring/category-weights.js';
-import { safeNumber } from '../utils/math.js';
+import { safeNumber, safeNum, weightedAvg } from '../utils/math.js';
+// Round 382 (AutoResearch): Import safeNum and weightedAvg for cleaner null-aware calculations.
+// safeNum returns null (not 0) for missing values — prevents null-field collapsing to 0 in scores.
+// weightedAvg automatically rebalances weights when fields are null — no more manual null checks.
 
 function clampScore(value) {
   return Math.min(10, Math.max(1, Number(value.toFixed(1))));
@@ -128,10 +131,25 @@ export function calculateConfidence(rawData = {}) {
   else if (Object.keys(dex).length > 0) dexConf = 30;
   else dexConf = 0;
 
-  // overall_confidence: weighted average of 7 dimensions
+  // Round 356 (AutoResearch batch): reddit confidence — upvote-weighted signals add social quality
+  const reddit = rawData.reddit ?? {};
+  let redditConf;
+  if (reddit.error) redditConf = 0;
+  else if (reddit.upvote_weighted_sentiment != null && reddit.post_count > 0) redditConf = 80;
+  else if (reddit.post_count > 0) redditConf = 50;
+  else redditConf = 0;
+
+  // Round 382 (AutoResearch): article quality confidence boost — high quality sources = more reliable social signal
+  // Only applies when social collector returned results with quality scoring
+  const artQual = rawData.social?.avg_article_quality_score;
+  if (artQual != null && artQual >= 1.2) {
+    socialConf = Math.min(100, socialConf + 8); // tier-1 coverage = measurably more reliable
+  }
+
+  // overall_confidence: weighted average of 8 dimensions (reddit added at 5% weight, dex reduced to 3%)
   const overall_confidence = Math.round(
-    (marketConf * 0.20 + onchainConf * 0.20 + socialConf * 0.15 + devConf * 0.15 +
-     tokenomicsConf * 0.15 + holderConf * 0.10 + dexConf * 0.05)
+    (marketConf * 0.20 + onchainConf * 0.19 + socialConf * 0.15 + devConf * 0.15 +
+     tokenomicsConf * 0.14 + holderConf * 0.10 + dexConf * 0.04 + redditConf * 0.03)
   );
 
   return {
@@ -142,6 +160,7 @@ export function calculateConfidence(rawData = {}) {
     tokenomics: tokenomicsConf,
     holders: holderConf,
     dex: dexConf,
+    reddit: redditConf,
     overall_confidence,
   };
 }
@@ -282,6 +301,15 @@ function scoreMarketStrength(market = {}) {
   else if (athRecency === 'near_ath') raw += 0.25;    // ATH within 90 days = still in strong range
   else if (athRecency === 'old_ath') raw -= 0.15;     // ATH over 1 year ago = structural underperformance
 
+  // Round 382 (AutoResearch): days_since_ath granular bonus — supplement ath_recency with exact day count
+  // More precise than the label-based approach; catches tokens that set ATH yesterday vs 29 days ago
+  const daysSinceAth = market.days_since_ath;
+  if (daysSinceAth != null && Number.isFinite(Number(daysSinceAth))) {
+    const dsa = Number(daysSinceAth);
+    if (dsa <= 7) raw += 0.25;         // ATH within a week = very strong momentum confirmation
+    else if (dsa <= 30 && athRecency !== 'recent_ath') raw += 0.15; // Supplement if label not already captured
+  }
+
   // Round 6: price_momentum_tier bonus — reward consistent multi-TF trends
   const momentumTier = market.price_momentum_tier;
   if (momentumTier === 'strong_uptrend') raw += 0.4;
@@ -376,6 +404,15 @@ function scoreMarketStrength(market = {}) {
   const priceVsMa7 = market.price_vs_ma7;
   if (priceVsMa7?.above_ma7 && priceVsMa7.pct_vs_ma7 > 5) raw += 0.3;
   else if (priceVsMa7?.above_ma7 === false && priceVsMa7?.pct_vs_ma7 < -5) raw -= 0.3;
+
+  // Round 381 (AutoResearch): market_cap_to_volume_ratio — liquidity efficiency signal
+  // High ratio = illiquid / speculative premium; low ratio = actively traded, efficient pricing
+  const mcapToVol = market.market_cap_to_volume_ratio;
+  if (mcapToVol != null && Number.isFinite(mcapToVol)) {
+    if (mcapToVol < 5) raw += 0.2;        // Very liquid — active trading, tight spreads
+    else if (mcapToVol > 500) raw -= 0.3; // Very illiquid — speculative premium or ghost token
+    else if (mcapToVol > 200) raw -= 0.15;
+  }
 
   // Round 124 (AutoResearch): Empty data guard — no price, no volume, no market cap → neutral 5.0
   // Prevents spurious scoring when all market signals are absent
@@ -703,6 +740,26 @@ function scoreSocialMomentum(social = {}) {
     // Scale penalty: 50% = 0, 100% = -0.4
     const penalty = (competitorContentRatio - 0.5) * 0.8;
     raw -= Math.min(penalty, 0.4);
+  }
+
+  // Round 381 (AutoResearch): narrative_freshness_score bonus — fresh narratives indicate
+  // that the social signal is driven by recent events (catalysts), not stale coverage
+  const narrativeFreshness = safeNumber(social.narrative_freshness_score ?? null, null);
+  if (narrativeFreshness !== null && narrativeFreshness > 0) {
+    // Map 0-100 freshness to max +0.3 bonus
+    const freshnessAdj = (narrativeFreshness / 100) * 0.3;
+    raw += freshnessAdj;
+  }
+
+  // Round 382 (AutoResearch): Source quality bonus — if avg_article_quality_score is available
+  // (computed by social collector from trusted domain scoring), high quality coverage boosts signal
+  const articleQualityScore = safeNumber(social.avg_article_quality_score ?? null, null);
+  if (articleQualityScore !== null) {
+    // Score >1.3 = tier-1 coverage (Bloomberg/CoinDesk class), >1.0 = above average, <0.8 = blog noise
+    if (articleQualityScore >= 1.4) raw += 0.35;       // Tier-1 dominated coverage
+    else if (articleQualityScore >= 1.2) raw += 0.2;   // Above-average source quality
+    else if (articleQualityScore >= 1.0) raw += 0.05;  // Average
+    else if (articleQualityScore < 0.8) raw -= 0.15;   // Low quality / blog noise
   }
 
   // Round 48 (AutoResearch): social_health_index — 0-100 normalized composite
@@ -1296,6 +1353,16 @@ export function calculateScores(data) {
 
   // Round 9: Reddit supplement to social momentum
   social_momentum.score = applyRedditSupplement(social_momentum.score, data?.reddit);
+
+  // Round 382 (AutoResearch): Reddit subreddit quality supplement
+  // Tier-1 subreddit hits (ethereum, bitcoin, defi, etc.) indicate credible community discussion
+  const redditSubredditQuality = data?.reddit?.subreddit_quality;
+  if (redditSubredditQuality === 'high') {
+    social_momentum.score = clampScore(social_momentum.score + 0.2);
+    social_momentum.reasoning += ' | Reddit tier-1 subreddits (+0.2).';
+  } else if (redditSubredditQuality === 'moderate') {
+    social_momentum.score = clampScore(social_momentum.score + 0.1);
+  }
 
   // Round 14 (AutoResearch nightly): news momentum supplement to social score
   const newsMom = data?.social?.news_momentum;

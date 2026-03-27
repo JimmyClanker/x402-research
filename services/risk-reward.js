@@ -160,6 +160,34 @@ export function assessRiskReward(rawData, scores, tradeSetup) {
     }
   }
 
+  // Round 382 (AutoResearch): Wash trading risk EV discount
+  // When wash trading is detected, volume and price signals are unreliable → reduce position size conviction
+  const washRisk = rawData?.dex?.wash_trading_risk;
+  if (washRisk === 'high' && expectedValue !== null) {
+    volAdjustedEv = round(volAdjustedEv * 0.75, 4);
+    notes.push('⚠️ Wash trading risk HIGH — volume data unreliable, EV discounted 25%. Use limit orders only.');
+    if (positionSizeSuggestion === 'full') positionSizeSuggestion = 'half';
+    else if (positionSizeSuggestion === 'half') positionSizeSuggestion = 'quarter';
+  } else if (washRisk === 'elevated' && expectedValue !== null) {
+    volAdjustedEv = round(volAdjustedEv * 0.88, 4);
+    notes.push('Wash trading risk ELEVATED — treat volume signals with caution, EV discounted 12%.');
+  }
+
+  // Round 381 (AutoResearch): ATH recency EV adjustment
+  // Recent ATH (< 30d) = strong momentum confirmation → boost EV slightly
+  // Very old ATH (> 2yr, >80% below) = structural headwind → penalize EV
+  const daysSinceAth = rawData?.market?.days_since_ath;
+  const athDistancePct = safeN(rawData?.market?.ath_distance_pct, 0);
+  if (daysSinceAth != null && expectedValue !== null) {
+    if (daysSinceAth <= 30 && expectedValue > 0) {
+      volAdjustedEv = round(volAdjustedEv * 1.05, 4);
+      notes.push(`ATH set ${daysSinceAth}d ago — recent price discovery, EV boosted 5%.`);
+    } else if (daysSinceAth > 730 && athDistancePct < -80) {
+      volAdjustedEv = round(volAdjustedEv * 0.90, 4);
+      notes.push(`ATH set ${Math.round(daysSinceAth / 365 * 10) / 10}yr ago, ${Math.abs(athDistancePct).toFixed(0)}% below — long-term structural headwind, EV adjusted down 10%.`);
+    }
+  }
+
   return {
     rr_ratio: rrRatio,
     probability_tp1: pTP1,

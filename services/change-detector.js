@@ -84,7 +84,26 @@ export function detectChanges(db, projectName, currentData) {
   metricPairs.push(
     { metric: 'dex_liquidity', prev: safeN(prevDex.dex_liquidity_usd), curr: safeN(currDex.dex_liquidity_usd) },
     { metric: 'dex_volume_24h', prev: safeN(prevDex.dex_volume_24h), curr: safeN(currDex.dex_volume_24h) },
+    // Round 382 (AutoResearch): Track buy/sell ratio changes (distribution phase detection)
+    { metric: 'buy_sell_ratio', prev: safeN(prevDex.buy_sell_ratio), curr: safeN(currDex.buy_sell_ratio) },
   );
+
+  // Round 382 (AutoResearch): Detect wash trading risk state changes
+  const prevWashRisk = prevDex?.wash_trading_risk ?? null;
+  const currWashRisk = currDex?.wash_trading_risk ?? null;
+  if (prevWashRisk !== currWashRisk && (prevWashRisk != null || currWashRisk != null)) {
+    const WASH_SEVERITY = { high: 3, elevated: 2, low: 1, null: 0 };
+    const prevSev = WASH_SEVERITY[prevWashRisk] ?? 0;
+    const currSev = WASH_SEVERITY[currWashRisk] ?? 0;
+    changes.push({
+      metric: 'wash_trading_risk',
+      previous: prevWashRisk,
+      current: currWashRisk,
+      change_pct: null,
+      direction: currSev > prevSev ? 'worsened' : currSev < prevSev ? 'improved' : 'flat',
+      significant: Math.abs(currSev - prevSev) >= 2,
+    });
+  }
 
   for (const { metric, prev, curr } of metricPairs) {
     const pct = changePct(prev, curr);

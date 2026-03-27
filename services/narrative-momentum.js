@@ -102,13 +102,27 @@ export function detectNarrativeMomentum(rawData = {}) {
     : 85;
   const narrativeDominanceScore = Math.min(100, narrativeDominanceBase + (narrativeAlignment === 'bullish' ? 15 : 0));
 
+  // Round 381 (AutoResearch): narrative_momentum_quality — combines dominance + social freshness
+  // Fresh narratives (from recent news) + strong dominance = highest quality signal
+  const narrativeFreshness = safeN(rawData?.social?.narrative_freshness_score ?? 0);
+  const narrativeMomentumQuality = Math.min(100, Math.round(
+    narrativeDominanceScore * 0.6 + narrativeFreshness * 0.4
+  ));
+
   return {
     active_narratives: activeNarratives,
     narrative_count: activeNarratives.length,
     dominant_narrative: dominantNarrative,
     narrative_alignment: narrativeAlignment,
     narrative_dominance_score: narrativeDominanceScore,
+    // Round 381: composite quality score combining dominance + freshness
+    narrative_momentum_quality: narrativeMomentumQuality,
     detail,
   };
+}
+
+function safeN(v, fb = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fb;
 }
 

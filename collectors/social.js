@@ -392,6 +392,22 @@ export async function collectSocial(projectName, exaService) {
       sentiment_credibility_score: sentimentCredibility,
       bot_ratio: botRatio,
       competitor_content_ratio: competitorContentRatio,
+      // Round 381 (AutoResearch): narrative_freshness_score — measures what fraction of narratives
+      // are driven by very recent news (last 3 days). High freshness = active, fast-moving story.
+      // Used by scoring to weight social momentum more heavily when narratives are fresh.
+      narrative_freshness_score: (() => {
+        if (uniqueNews.length === 0) return 0;
+        // Articles from last 3 days that contain narrative tokens
+        const narrativeTokens = extractNarratives(uniqueNews, projectName);
+        if (narrativeTokens.length === 0) return 0;
+        const freshWithNarrative = uniqueNews.filter((item) => {
+          const ageMs = now - new Date(item.date || 0).getTime();
+          if (ageMs > 3 * 24 * 60 * 60 * 1000) return false;
+          const text = `${item.title} ${item.highlights.join(' ')}`.toLowerCase();
+          return narrativeTokens.some((tok) => text.includes(tok));
+        }).length;
+        return Math.round((freshWithNarrative / Math.min(uniqueNews.length, 10)) * 100);
+      })(),
       // Round 192 (AutoResearch): more informative error — report failure count and first error message
       error: (() => {
         const failed = settled.filter((e) => e.status === 'rejected');

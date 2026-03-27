@@ -104,6 +104,13 @@ export function createAlphaRouter({ config, exaService, signalsService, collectA
       const cacheStatus = response?.cache?.hit ? 'HIT' : 'MISS';
       res.set('X-Cache-Status', cacheStatus);
       res.set('X-Cache-Age-Ms', String(response?.cache?.age_ms ?? 0));
+      // Round 382 (AutoResearch): Add scan quality headers for API consumers
+      const overallConf = response?.scores?.overall?.overall_confidence;
+      if (overallConf != null) res.set('X-Overall-Confidence', String(overallConf));
+      const verdict = response?.analysis?.verdict || response?.quick_analysis?.verdict;
+      if (verdict) res.set('X-Verdict', verdict);
+      const scanScore = response?.scores?.overall?.score;
+      if (scanScore != null) res.set('X-Alpha-Score', String(scanScore));
       return res.json(response);
     } catch (error) {
       const { stage, message } = extractAlphaErrorDetails(error);

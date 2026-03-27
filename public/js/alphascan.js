@@ -89,6 +89,19 @@
         case 'issue_health_score': return `${Number(value).toFixed(0)}/100`;
         case 'momentum_divergence': { const n=Number(value); if(!Number.isFinite(n)) return 'n/a'; return `${n>0?'+':''}${n.toFixed(0)}%/yr`; }
         case 'coin_age_days': { const days=Number(value); if(!Number.isFinite(days)) return 'n/a'; if(days<90) return `${days}d`; if(days<730) return `${(days/30.44).toFixed(0)}mo`; return `${(days/365).toFixed(1)}yr`; }
+        // Round 382 (AutoResearch): human-readable labels for categorical fields
+        case 'wash_trading_risk': {
+          const labels = { high: '⚠️ HIGH — fake volume likely', elevated: '⚠️ Elevated — caution', low: '✓ Low — organic' };
+          return labels[String(value).toLowerCase()] || String(value);
+        }
+        case 'subreddit_quality': {
+          const labels = { high: '⭐ High (tier-1 subs)', moderate: '✓ Moderate', niche: '— Niche only' };
+          return labels[String(value).toLowerCase()] || String(value);
+        }
+        case 'github_velocity_tier': {
+          const labels = { hyperspeed: '🚀 Hyperspeed', active: '✓ Active', moderate: '→ Moderate', slow: '↓ Slow', slowing: '⚠️ Slowing', stale: '⚠️ Stale', inactive: '✗ Inactive' };
+          return labels[String(value).toLowerCase()] || String(value);
+        }
         default: return formatNumber(value,k);
       }
     }
@@ -377,6 +390,17 @@
         ['Bus factor score','bus_factor_score',raw?.github?.bus_factor_score != null ? `${raw.github.bus_factor_score}/100` : null,null],
         ['Sell wall risk','sell_wall_risk',raw?.dex?.sell_wall_risk,null],
         ['Rev/active user','revenue_per_active_user',raw?.onchain?.revenue_per_active_user != null ? `$${raw.onchain.revenue_per_active_user.toFixed(4)}/user/day` : null,null],
+        // Round 381 (AutoResearch): new diagnostic metrics
+        ['Days since ATH','days_since_ath', raw?.market?.days_since_ath != null ? `${raw.market.days_since_ath}d` : null, null],
+        ['MCap/Volume ratio','market_cap_to_volume_ratio', raw?.market?.market_cap_to_volume_ratio != null ? `${raw.market.market_cap_to_volume_ratio.toFixed(1)}x` : null, null],
+        ['Wash trading risk','wash_trading_risk', raw?.dex?.wash_trading_risk !== 'low' ? raw?.dex?.wash_trading_risk : null, null],
+        ['Avg trade size','median_trade_size_usd', raw?.dex?.median_trade_size_usd != null ? `$${raw.dex.median_trade_size_usd.toFixed(2)}` : null, null],
+        ['Dev velocity tier','github_velocity_tier', raw?.github?.github_velocity_tier, null],
+        ['Narrative freshness','narrative_freshness_score', raw?.social?.narrative_freshness_score != null ? `${raw.social.narrative_freshness_score}/100` : null, null],
+        // Round 382 (AutoResearch): new diagnostic metrics
+        ['Reddit quality','subreddit_quality', raw?.reddit?.subreddit_quality, null],
+        ['Article quality','avg_article_quality_score', raw?.social?.avg_article_quality_score != null ? `${raw.social.avg_article_quality_score.toFixed(2)}x` : null, null],
+        ['Critical issue ratio','critical_issue_ratio', raw?.github?.critical_issue_ratio != null && raw.github.critical_issue_ratio > 10 ? `${raw.github.critical_issue_ratio.toFixed(1)} issues/dev` : null, null],
       ];
       return rows.filter(([,,value])=> value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== 'n/a').map(([label,key,value,type])=>{
         const cls=type==='change'?` class="${changeClass(value)}"`:''

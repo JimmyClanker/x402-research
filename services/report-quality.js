@@ -251,6 +251,17 @@ export function scoreReportQuality(rawData, scores, analysis) {
     score = Math.max(0, score - 5);
   }
 
+  // Round 381 (AutoResearch): wash trading risk quality note
+  // When wash trading is suspected, volume-based signals should be treated with skepticism
+  const dexWashRisk = rawData?.dex?.wash_trading_risk;
+  if (dexWashRisk === 'high') {
+    issues.push('High wash trading risk detected on DEX — volume-based signals (market strength, DEX momentum) may be inflated. Report reliability reduced.');
+    score = Math.max(0, score - 8);
+  } else if (dexWashRisk === 'elevated') {
+    issues.push('Elevated wash trading risk on DEX — exercise caution interpreting volume signals.');
+    score = Math.max(0, score - 3);
+  }
+
   return {
     quality_score: Math.max(0, Math.min(100, score)),
     grade,

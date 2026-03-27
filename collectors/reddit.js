@@ -137,6 +137,16 @@ export async function collectReddit(projectName) {
       return Math.round(postScore + upvoteScore + recencyBonus + divScore);
     })();
 
+    // Round 382 (AutoResearch): Tier-1 subreddit detection
+    // Posts in high-quality crypto subreddits have more credibility than random subs
+    const TIER1_SUBREDDITS = new Set([
+      'ethereum', 'bitcoin', 'defi', 'cryptocurrency', 'ethfinance',
+      'ethtrader', 'defisignals', 'algotrading', 'cryptomarkets',
+      'solana', 'avalanche', 'polkadot', 'cosmos', 'near',
+    ]);
+    const tier1SubredditHits = subreddits.filter(s => TIER1_SUBREDDITS.has(s.toLowerCase())).length;
+    const subreddit_quality = tier1SubredditHits >= 2 ? 'high' : tier1SubredditHits >= 1 ? 'moderate' : 'niche';
+
     return {
       ...fallback,
       post_count: posts.length,
@@ -150,6 +160,8 @@ export async function collectReddit(projectName) {
       },
       total_upvotes: totalUpvotes,
       reddit_activity_score: redditActivityScore,
+      tier1_subreddit_hits: tier1SubredditHits,
+      subreddit_quality,
       top_posts: topPosts,
       error: null,
     };

@@ -443,6 +443,54 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
     }
   }
 
+  // Round 381 (AutoResearch): Wash trading risk circuit breaker
+  // When DEX data suggests wash trading (tiny trades cycling liquidity), score becomes unreliable
+  const washRisk = dex?.wash_trading_risk;
+  if (washRisk === 'high') {
+    breakers.push({
+      cap: 5.5,
+      reason: `Wash trading risk HIGH — tiny avg trade size with very high volume/liquidity ratio suggests artificial volume, market data unreliable`,
+      severity: 'warning',
+    });
+  }
+
+  // Round 382 (AutoResearch): Wash trading + sell pressure compound breaker
+  // When both wash trading is elevated AND sell pressure exists, data is both unreliable AND bearish
+  // This is a compounded risk: fake volume masking a distribution phase
+  if (washRisk === 'elevated' && dex?.pressure_signal === 'sell_pressure') {
+    const ratio = safeN(dex?.buy_sell_ratio ?? 1);
+    breakers.push({
+      cap: 6.0,
+      reason: `Wash trading (elevated) + sell pressure (ratio ${ratio.toFixed(2)}) compound risk — volume data unreliable and sellers dominant`,
+      severity: 'warning',
+    });
+  }
+
+  // Round 381 (AutoResearch): Long-term ATH decay warning
+  // Tokens that are >90% below ATH (set over 1 year ago) have historically poor recovery rates
+  // unless accompanied by a new catalyst — prevents false BUY signals on dead cat bounces
+  const daysSinceAthCB = rawData?.market?.days_since_ath;
+  const athDistCB = safeN(rawData?.market?.ath_distance_pct ?? 0);
+  if (daysSinceAthCB != null && daysSinceAthCB > 365 && athDistCB < -90) {
+    breakers.push({
+      cap: 5.5,
+      reason: `Token is ${Math.abs(athDistCB).toFixed(0)}% below ATH set ${Math.round(daysSinceAthCB / 365 * 10) / 10}yr ago — statistically poor recovery odds without new catalyst`,
+      severity: 'warning',
+    });
+  }
+
+  // Round 381 (AutoResearch): market_cap_to_volume_ratio extreme premium check
+  // Tokens with MCap/Volume > 1000 have almost no organic trading — easy to manipulate prices
+  const mcapVolRatio381 = rawData?.market?.market_cap_to_volume_ratio;
+  const mcap381 = safeN(rawData?.market?.market_cap ?? 0);
+  if (mcapVolRatio381 != null && mcapVolRatio381 > 1000 && mcap381 > 1_000_000) {
+    breakers.push({
+      cap: 6.0,
+      reason: `MCap/Volume ratio ${mcapVolRatio381.toFixed(0)}x — only ${((1 / mcapVolRatio381) * 100).toFixed(3)}% of market cap traded daily, price easily manipulated`,
+      severity: 'warning',
+    });
+  }
+
   // Applica il cap più restrittivo
   if (breakers.length === 0) {
     return { score: overallScore, breakers: [], capped: false };

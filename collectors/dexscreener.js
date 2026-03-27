@@ -319,6 +319,29 @@ export async function collectDexScreener(projectName) {
         if (risk === 1) return 'low';
         return null;
       })(),
+      // Round 381 (AutoResearch): median_trade_size_usd — average trade value per transaction
+      // Small median trade size (<$50) with high tx count = retail organic activity
+      // Very large median trade size (>$10K) with few txns = whale activity or wash trading
+      // Extremely small ($1-10) with very high volume = potential wash trading indicator
+      median_trade_size_usd: (() => {
+        const totalTxns = totalBuys24h + totalSells24h;
+        if (totalTxns === 0 || totalVolume24h === 0) return null;
+        const avgTradeSize = totalVolume24h / totalTxns;
+        return Number.isFinite(avgTradeSize) ? parseFloat(avgTradeSize.toFixed(2)) : null;
+      })(),
+      // Round 381 (AutoResearch): wash_trading_risk — heuristic combining trade size + volume/liq ratio
+      // Small trade size + very high volume/liq ratio is a classic wash trading pattern
+      wash_trading_risk: (() => {
+        const totalTxns = totalBuys24h + totalSells24h;
+        if (totalTxns === 0 || totalVolume24h === 0 || totalLiquidity === 0) return null;
+        const avgTradeSize = totalVolume24h / totalTxns;
+        const volLiqRatio = totalVolume24h / totalLiquidity;
+        // Flag: avg trade < $20 AND volume/liq > 5 (rapid cycling of tiny orders = wash)
+        if (avgTradeSize < 20 && volLiqRatio > 5) return 'high';
+        // Flag: avg trade < $100 AND volume/liq > 10
+        if (avgTradeSize < 100 && volLiqRatio > 10) return 'elevated';
+        return 'low';
+      })(),
       // Round 235 (AutoResearch): most_active_chain — chain with highest 24h volume
       most_active_chain: (() => {
         if (!validPairs.length) return null;

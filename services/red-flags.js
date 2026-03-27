@@ -638,6 +638,26 @@ export function detectRedFlags(rawData = {}, scores = {}) {
     }
   }
 
+  // Round 351 (AutoResearch batch): Stale development check
+  const staleDevFlag = detectStaleDevelopment(rawData);
+  if (staleDevFlag) flags.push(staleDevFlag);
+
+  // Round 352 (AutoResearch batch): Extremely low volume check
+  const lowVolFlag = detectLowVolume(rawData);
+  if (lowVolFlag) flags.push(lowVolFlag);
+
+  // Round 382 (AutoResearch): Fee-revenue divergence check
+  const feeRevDivFlag = detectFeeRevenueDivergence(rawData);
+  if (feeRevDivFlag) flags.push(feeRevDivFlag);
+
+  // Round 382 (AutoResearch): Inverted TVL/MCap check (mercenary capital risk)
+  const invertedTvlFlag = detectInvertedTvlMcap(rawData);
+  if (invertedTvlFlag) flags.push(invertedTvlFlag);
+
+  // Round 382 (AutoResearch): Social-price divergence check
+  const socialPriceFlag = detectSocialPriceDivergence(rawData);
+  if (socialPriceFlag) flags.push(socialPriceFlag);
+
   // Deduplicate flags by flag key (keep highest severity)
   const severityOrder = { critical: 3, warning: 2, info: 1 };
   const flagMap = new Map();
@@ -746,6 +766,87 @@ export function detectInvertedTvlMcap(rawData = {}) {
       flag: 'mercenary_tvl_dominance',
       severity: 'warning',
       detail: `TVL ($${(tvl / 1e6).toFixed(1)}M) is ${ratio.toFixed(0)}x MCap ($${(mcap / 1e6).toFixed(1)}M) — likely incentivized mercenary capital vulnerable to farm-and-dump dynamics.`,
+    };
+  }
+  return null;
+}
+
+// ─── Round 351 (AutoResearch batch): Stale development red flag ──────────────
+
+/**
+ * Detect stale development — active project with no commits in 60+ days.
+ * Distinct from "no github" (which is about missing data vs. clear inactivity).
+ */
+export function detectStaleDevelopment(rawData = {}) {
+  const github = rawData.github ?? {};
+  if (github.error || github.commits_90d == null) return null;
+  const commits90d = Number(github.commits_90d ?? 0);
+  const commits30d = Number(github.commits_30d ?? 0);
+  const lastCommit = github.last_commit;
+
+  // If stars > 100 (real project) but <3 commits in last 30d and <10 in 90d
+  const stars = Number(github.stars ?? 0);
+  if (stars > 100 && commits30d < 3 && commits90d < 10) {
+    const daysSince = lastCommit
+      ? Math.floor((Date.now() - new Date(lastCommit).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    const detail = daysSince != null
+      ? `Last commit ${daysSince}d ago, only ${commits30d} commits in last 30d — development appears stalled.`
+      : `Only ${commits30d} commits in last 30d, ${commits90d} in 90d — low activity for a ${stars}-star repo.`;
+    return {
+      flag: 'stale_development',
+      severity: daysSince != null && daysSince > 120 ? 'critical' : 'warning',
+      detail,
+    };
+  }
+  return null;
+}
+
+// ─── Round 381 (AutoResearch): Fee-Revenue Divergence ───────────────────────
+
+/**
+ * Detect when fees are rising but protocol revenue is falling.
+ * This means the protocol is generating activity but not capturing value for token holders.
+ * Classic "mercenary volume" pattern — activity without protocol revenue = value drain.
+ */
+export function detectFeeRevenueDivergence(rawData = {}) {
+  const onchain = rawData.onchain ?? {};
+  const fees7d = Number(onchain.fees_7d ?? 0);
+  const fees7dPrev = Number(onchain.fees_7d_prev ?? 0);
+  const revenue7d = Number(onchain.revenue_7d ?? 0);
+  const revenue7dPrev = Number(onchain.revenue_7d_prev ?? 0);
+  if (fees7d <= 0 || fees7dPrev <= 0 || revenue7d <= 0 || revenue7dPrev <= 0) return null;
+  const feeGrowth = (fees7d - fees7dPrev) / fees7dPrev;
+  const revGrowth = (revenue7d - revenue7dPrev) / revenue7dPrev;
+  // Fees up >20% but revenue down >20% = protocol paying out more to LPs/users than it keeps
+  if (feeGrowth > 0.20 && revGrowth < -0.20) {
+    return {
+      flag: 'fee_revenue_divergence',
+      severity: 'warning',
+      detail: `Fees +${(feeGrowth * 100).toFixed(0)}% but protocol revenue ${(revGrowth * 100).toFixed(0)}% week-over-week — fees going to LPs/users, not token holders. Value capture deteriorating.`,
+    };
+  }
+  return null;
+}
+
+// ─── Round 352 (AutoResearch batch): Extremely low volume red flag ───────────
+
+/**
+ * Detect tokens with very low trading volume relative to market cap.
+ * Low volume = poor price discovery, easily manipulated, hard to exit.
+ */
+export function detectLowVolume(rawData = {}) {
+  const market = rawData.market ?? {};
+  const mcap = Number(market.market_cap ?? 0);
+  const volume = Number(market.total_volume ?? 0);
+  if (mcap <= 0 || volume <= 0) return null;
+  const volMcapRatio = volume / mcap;
+  // < 0.5% volume/mcap is extremely illiquid for anything above $1M mcap
+  if (mcap > 1_000_000 && volMcapRatio < 0.005) {
+    return {
+      flag: 'extremely_low_volume',
+      severity: volMcapRatio < 0.001 ? 'critical' : 'warning',
+      detail: `24h volume ($${(volume / 1000).toFixed(0)}K) is only ${(volMcapRatio * 100).toFixed(3)}% of market cap — extremely illiquid, price easily manipulated.`,
     };
   }
   return null;

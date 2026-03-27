@@ -158,3 +158,44 @@ export function getSectorWeights(sector) {
   if (!def) return SECTOR_DEFINITIONS.DeFi.weights;
   return def.weights;
 }
+
+/**
+ * Round 382 (AutoResearch): Analyze trade size profile vs sector expectations.
+ * Meme tokens typically have very small trades (retail); DeFi/L1 have larger institutional trades.
+ * Returns qualitative assessment for LLM context.
+ *
+ * @param {string} sector - detected sector
+ * @param {number|null} medianTradeSizeUsd - from dex collector
+ * @returns {{ assessment: string, detail: string }|null}
+ */
+export function analyzeTradeSizeProfile(sector, medianTradeSizeUsd) {
+  if (medianTradeSizeUsd == null || !Number.isFinite(medianTradeSizeUsd)) return null;
+  const size = medianTradeSizeUsd;
+
+  // Sector-specific trade size expectations
+  const SECTOR_EXPECTATIONS = {
+    Meme: { typical_min: 10, typical_max: 500, institutional_min: 5000 },
+    DeFi: { typical_min: 100, typical_max: 10000, institutional_min: 50000 },
+    L1: { typical_min: 100, typical_max: 5000, institutional_min: 25000 },
+    L2: { typical_min: 50, typical_max: 3000, institutional_min: 20000 },
+    Infrastructure: { typical_min: 200, typical_max: 8000, institutional_min: 40000 },
+  };
+  const exp = SECTOR_EXPECTATIONS[sector] || { typical_min: 50, typical_max: 5000, institutional_min: 20000 };
+
+  let assessment, detail;
+  if (size >= exp.institutional_min) {
+    assessment = 'institutional';
+    detail = `Avg trade $${size.toFixed(0)} indicates institutional/whale activity for ${sector} sector.`;
+  } else if (size >= exp.typical_max) {
+    assessment = 'large_retail';
+    detail = `Avg trade $${size.toFixed(0)} is above typical ${sector} retail size — high-conviction retail or small institutional.`;
+  } else if (size >= exp.typical_min) {
+    assessment = 'organic_retail';
+    detail = `Avg trade $${size.toFixed(0)} is within typical ${sector} retail range — organic activity pattern.`;
+  } else {
+    assessment = 'micro_retail';
+    detail = `Avg trade $${size.toFixed(0)} is very small for ${sector} — may indicate bot activity or very early-stage retail.`;
+  }
+
+  return { assessment, detail, size, sector };
+}

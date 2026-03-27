@@ -76,6 +76,22 @@ const CATEGORY_ALIASES = {
   'socialfi': 'Social',
   'meme': 'Meme',
   'meme coin': 'Meme',
+  // Round 381 (AutoResearch): additional 2025 category aliases
+  'payments': 'Payments',
+  'payment': 'Payments',
+  'stablecoin payments': 'Payments',
+  'consumer': 'Social',
+  'consumer crypto': 'Social',
+  'social protocol': 'Social',
+  'farcaster': 'Social',
+  'infrastructure': 'Infrastructure',
+  'tooling': 'Infrastructure',
+  'developer tools': 'Infrastructure',
+  'indexer': 'Infrastructure',
+  'data': 'Infrastructure',
+  'wallet': 'Infrastructure',
+  'privacy coin': 'Privacy',
+  'privacy': 'Privacy',
 };
 
 function normalizeCategory(category) {

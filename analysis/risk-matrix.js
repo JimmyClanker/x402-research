@@ -57,6 +57,28 @@ const FLAG_CATEGORY_MAP = {
   single_pool_liquidity_concentration: 'concentration',
   single_chain_tvl_concentration: 'concentration',
 
+  // Round 381 (AutoResearch): new risk categories
+  fee_revenue_divergence: 'tokenomics',
+  wash_trading_risk: 'market',
+  secondary_coverage_only: 'market',
+  stale_development: 'smart_contract',
+  extremely_low_volume: 'market',
+  // Round 382 (AutoResearch): additional risk flag mappings
+  mercenary_tvl_dominance: 'operational',
+  social_price_divergence: 'market',
+  revenue_collapse: 'tokenomics',
+  negative_real_yield: 'tokenomics',
+  old_ath_stagnation: 'market',
+  ghost_community: 'market',
+  ghost_contributors: 'smart_contract',
+  low_range_fdv_trap: 'tokenomics',
+  extreme_fdv_overhang: 'tokenomics',
+  sell_pressure_dominance: 'market',
+  suspicious_volume_spike: 'market',
+  unsupported_price_pump: 'market',
+  falling_social_velocity: 'market',
+  zombie_token_no_dex: 'market',
+
   // Other/mixed
   young_project: 'operational',
   bearish_sentiment: 'market',

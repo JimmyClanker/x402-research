@@ -57,6 +57,17 @@ const SIGNAL_PHRASES = {
   low_price_to_tvl:              'trading below on-chain value (P/TVL < 1x)',
   payments_network_growth:       'payment network adoption growth',
   accelerating_news_coverage:    'accelerating news coverage',
+  organic_volume_spike:              'organic volume surge (no wash trading detected)',
+  // Round 382 (AutoResearch): new signal phrases
+  recent_ath_momentum:               'recent ATH set — active price discovery',
+  ath_consolidation:                 'consolidating near ATH — potential breakout',
+  governance_momentum:               'active governance/DAO participation',
+  ptvl_deep_value:                   'trading below on-chain value (P/TVL < 0.5x)',
+  deep_multichain_presence:          'deep multi-chain deployment with diversified TVL',
+  revenue_acceleration:              'revenue accelerating faster than TVL growth',
+  tvl_acceleration:                  'TVL inflow accelerating vs prior period',
+  fee_switch_momentum:               'fee-switch or revenue-sharing narrative emerging',
+  low_fdv_inflation_risk:            'low FDV inflation risk (high % circulating)',
   // Round 236 (AutoResearch): 52-week range signals
   '52w_high_breakout':           'near 52-week high price discovery',
   exchange_listing_catalyst:     'potential major exchange listing',

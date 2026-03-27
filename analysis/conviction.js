@@ -190,7 +190,51 @@ export function calculateConviction(rawData, scores, enrichment = {}) {
     return 0;
   })();
 
-  const total = Math.min(100, Math.max(0, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus + range52wBonus + holderEngBonus + sellWallConvPenalty));
+  // Round 381 (AutoResearch): wash trading risk reduces conviction on market/DEX signals
+  // When wash trading is suspected, volume and price signals are unreliable
+  const washTradingPenalty = (() => {
+    const washRisk = rawData?.dex?.wash_trading_risk;
+    if (washRisk === 'high') return -4;     // Volume data highly unreliable
+    if (washRisk === 'elevated') return -2; // Moderate concern
+    return 0;
+  })();
+
+  // Round 381 (AutoResearch): recent ATH momentum boosts conviction
+  // A token near/at its ATH has strong market validation — price confirms thesis
+  const athConvictionBonus = (() => {
+    const daysSinceAth = rawData?.market?.days_since_ath;
+    if (daysSinceAth == null) return 0;
+    if (daysSinceAth <= 14) return 4;  // Within 2 weeks of ATH = very high conviction momentum signal
+    if (daysSinceAth <= 30) return 2;  // Within a month = still strong
+    if (daysSinceAth <= 90) return 1;  // Near ATH zone
+    return 0;
+  })();
+
+  // Round 382 (AutoResearch): Article quality boosts social conviction
+  // When coverage comes from tier-1 sources (Bloomberg, CoinDesk, etc.), social signals are more reliable
+  const articleQualityBonus = (() => {
+    const qual = safeN(rawData?.social?.avg_article_quality_score ?? null, null);
+    if (qual === null) return 0;
+    if (qual >= 1.4) return 3;    // Tier-1 dominated coverage = high credibility
+    if (qual >= 1.2) return 1;    // Above average source quality
+    if (qual < 0.8) return -2;    // Low quality / blog noise = low credibility signal
+    return 0;
+  })();
+
+  // Round 382 (AutoResearch): organic volume spike boosts conviction (no wash trading + high volume = real demand)
+  const organicVolumeBonus = (() => {
+    const washRisk = rawData?.dex?.wash_trading_risk;
+    if (washRisk && washRisk !== 'low') return 0; // Cannot claim organic if wash trading suspected
+    const vol = safeN(rawData?.market?.total_volume ?? 0);
+    const mcap = safeN(rawData?.market?.market_cap ?? 0);
+    if (mcap <= 0 || vol <= 0) return 0;
+    const velPct = (vol / mcap) * 100;
+    if (velPct >= 50) return 3;   // Very high organic activity = strong market conviction
+    if (velPct >= 20) return 1;   // Elevated organic activity
+    return 0;
+  })();
+
+  const total = Math.min(100, Math.max(0, f1.score + f2.score + f3.score + f4.score + f5.score + ptvlBonus + range52wBonus + holderEngBonus + sellWallConvPenalty + washTradingPenalty + athConvictionBonus + articleQualityBonus + organicVolumeBonus));
   const label = convictionLabel(total);
 
   const reasoning = [

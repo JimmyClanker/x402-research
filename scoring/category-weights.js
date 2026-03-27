@@ -101,6 +101,49 @@ export const CATEGORY_WEIGHTS = {
     market: 0.10, onchain: 0.18, social: 0.08, development: 0.32,
     tokenomics: 0.12, distribution: 0.10, risk: 0.10,
   },
+  // Round 353 (AutoResearch batch): Restaking protocols — security risk highest due to slashing,
+  // onchain TVL key indicator, dev/audit quality critical
+  restaking: {
+    market: 0.10, onchain: 0.30, social: 0.07, development: 0.22,
+    tokenomics: 0.11, distribution: 0.08, risk: 0.12,
+  },
+  // Round 354 (AutoResearch batch): Data availability / modular blockchains
+  // Critical infra: dev quality and adoption (TVL/usage) drive value; social less relevant
+  data_availability: {
+    market: 0.10, onchain: 0.22, social: 0.05, development: 0.32,
+    tokenomics: 0.13, distribution: 0.08, risk: 0.10,
+  },
+  // Round 355 (AutoResearch batch): Launchpads — community/IDO participation drives demand
+  // Social signals and distribution fairness are highest priority; onchain raise metrics matter
+  launchpad: {
+    market: 0.10, onchain: 0.15, social: 0.30, development: 0.10,
+    tokenomics: 0.12, distribution: 0.18, risk: 0.05,
+  },
+  // Round 381 (AutoResearch): Payments/stablecoin infrastructure
+  // Transaction volume and adoption (market) + dev quality critical for trust; low risk tolerance
+  payments_infra: {
+    market: 0.15, onchain: 0.22, social: 0.10, development: 0.22,
+    tokenomics: 0.12, distribution: 0.12, risk: 0.07,
+  },
+  // Round 381 (AutoResearch): MEV/block building protocols — specialized market infra
+  // Revenue from block space is key; highly technical development matters; social less relevant
+  mev_block_building: {
+    market: 0.12, onchain: 0.28, social: 0.05, development: 0.28,
+    tokenomics: 0.12, distribution: 0.08, risk: 0.07,
+  },
+  // Round 382 (AutoResearch): Decentralized AI / AI agent tokens
+  // Social/narrative momentum is primary driver (AI theme is hot narrative)
+  // Development quality critical (must ship working AI infra); onchain usage still early
+  decentralized_ai: {
+    market: 0.12, onchain: 0.12, social: 0.28, development: 0.28,
+    tokenomics: 0.10, distribution: 0.05, risk: 0.05,
+  },
+  // Round 382 (AutoResearch): GameFi / gaming tokens
+  // Player adoption (social) + onchain transaction quality critical; dev must ship playable games
+  gamefi: {
+    market: 0.12, onchain: 0.18, social: 0.28, development: 0.18,
+    tokenomics: 0.10, distribution: 0.08, risk: 0.06,
+  },
   default: {
     market: 0.14, onchain: 0.18, social: 0.14, development: 0.18,
     tokenomics: 0.14, distribution: 0.12, risk: 0.10,
@@ -163,7 +206,8 @@ export const CATEGORY_MAP = {
   mixer: 'privacy_protocol',
   'liquid-staking': 'liquid_staking', // Round R27: liquid staking dedicated weights
   'liquid-staking-tokens': 'liquid_staking',
-  restaking: 'liquid_staking',
+  restaking: 'restaking',           // Round 353: dedicated weights for restaking protocols
+
   'insurance': 'defi_lending',    // DeFi insurance is onchain-risk heavy
   'fan-token': 'meme_token',      // fan tokens behave like memes: social-driven
   'sports': 'meme_token',
@@ -176,7 +220,7 @@ export const CATEGORY_MAP = {
   'governance-token': 'layer_1',
   'dao': 'layer_1',
   'decentralized-autonomous-organization': 'layer_1',
-  'launchpad': 'consumer_crypto',       // launchpads are community/social driven
+  'launchpad': 'launchpad',              // Round 355: dedicated launchpad weights
   'ido-platform': 'consumer_crypto',
   'asset-management': 'defi_lending',   // asset management is onchain TVL-driven
   'portfolio-management': 'defi_lending',
@@ -193,7 +237,7 @@ export const CATEGORY_MAP = {
   'data-protocol': 'infra_tooling',
   'indexer': 'infra_tooling',
   'analytics': 'infra_tooling',
-  'data-availability': 'layer_2',
+  'data-availability': 'data_availability',  // Round 354: dedicated DA weights
   'rollup': 'layer_2',
   'rollup-as-a-service': 'layer_2',
   // Round 360 (AutoResearch): Additional category mappings for broader coverage

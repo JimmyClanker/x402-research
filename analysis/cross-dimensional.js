@@ -309,8 +309,81 @@ function detectBuyPressureSocialDivergence(scores, rawData) {
   return divergences;
 }
 
+/**
+ * Round 381 (AutoResearch): Detect wash trading vs high social divergence.
+ * When wash trading risk is high but social sentiment is also high, it may indicate
+ * that a coordinated pump is using fake volume to attract retail FOMO.
+ */
+function detectWashTradingSocialDivergence(scores, rawData = {}) {
+  const divergences = [];
+  const washRisk = rawData?.dex?.wash_trading_risk;
+  const socialScore = safeScore(scores?.social_momentum);
+  if (washRisk === 'high' && socialScore !== null && socialScore >= 6) {
+    divergences.push({
+      type: 'wash_trade_pump_cover',
+      severity: 'warning',
+      dimensions: ['market_strength', 'social_momentum'],
+      detail: `High wash trading risk on DEX combined with strong social momentum (${socialScore}/10) — suspicious pattern: fake volume may be inflating social metrics. Independent verification recommended.`,
+    });
+  }
+  return divergences;
+}
+
+/**
+ * Round 382 (AutoResearch): Detect high dev + low social = hidden gem pattern.
+ * When development is strong but social is weak, the project may be undermarketed.
+ * This is often a good asymmetric opportunity if fundamentals confirm.
+ */
+function detectHiddenGemPattern(scores, rawData = {}) {
+  const divergences = [];
+  const devScore = safeScore(scores?.development);
+  const socialScore = safeScore(scores?.social_momentum);
+  const onchainScore = safeScore(scores?.onchain_health);
+  if (devScore !== null && socialScore !== null && devScore >= 7 && socialScore <= 4) {
+    const hasOnchainSupport = onchainScore !== null && onchainScore >= 5;
+    divergences.push({
+      type: 'hidden_gem_pattern',
+      severity: 'info',
+      dimensions: ['development', 'social_momentum'],
+      detail: `High dev activity (${devScore}/10) with low social (${socialScore}/10) — undermarketed project${hasOnchainSupport ? ' with onchain support' : ''}. May represent early entry opportunity before narrative discovery.`,
+    });
+  }
+  return divergences;
+}
+
+/**
+ * Round 382 (AutoResearch): Detect organic volume vs social confirmation.
+ * Clean organic volume (no wash trading) + strong social = high conviction demand signal.
+ */
+function detectOrganicVolumeSocialConfirmation(scores, rawData = {}) {
+  const divergences = [];
+  const washRisk = rawData?.dex?.wash_trading_risk;
+  const vol = Number(rawData?.market?.total_volume ?? 0);
+  const mcap = Number(rawData?.market?.market_cap ?? 0);
+  const socialScore = safeScore(scores?.social_momentum);
+  if (!washRisk || washRisk === 'low') {
+    const velPct = mcap > 0 ? (vol / mcap) * 100 : 0;
+    if (velPct >= 15 && socialScore !== null && socialScore >= 6) {
+      divergences.push({
+        type: 'organic_volume_social_confirmation',
+        severity: 'info',
+        dimensions: ['market_strength', 'social_momentum'],
+        detail: `${velPct.toFixed(1)}% volume velocity (organic, no wash trading) + strong social (${socialScore}/10) — convergent demand signal. Both price action and narrative aligned.`,
+      });
+    }
+  }
+  return divergences;
+}
+
 export function analyzeCrossDimensional(scores, rawData = {}) {
-  const divergences = [...detectDivergences(scores), ...detect52wDivergence(scores, rawData), ...detectBuyPressureSocialDivergence(scores, rawData)];
+  const divergences = [
+    ...detectDivergences(scores),
+    ...detect52wDivergence(scores, rawData),
+    ...detectBuyPressureSocialDivergence(scores, rawData),
+    ...detectWashTradingSocialDivergence(scores, rawData),  // Round 381
+    ...detectHiddenGemPattern(scores, rawData),             // Round 382
+    ...detectOrganicVolumeSocialConfirmation(scores, rawData), // Round 382
+  ];
   const convergences = detectConvergences(scores);
   const anomalies = detectAnomalies(scores);
 

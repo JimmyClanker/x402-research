@@ -156,6 +156,33 @@ function buildFactRegistry(rawData = {}) {
   push('social.hack_exploit_mentions', rawData?.social?.hack_exploit_mentions);
   push('onchain.fees_7d_prev', rawData?.onchain?.fees_7d_prev);
   push('dex.dex_price_change_m5', rawData?.dex?.dex_price_change_m5);
+  // Round 381 (AutoResearch): new signals in fact registry
+  push('dex.wash_trading_risk', rawData?.dex?.wash_trading_risk);
+  push('dex.median_trade_size_usd', rawData?.dex?.median_trade_size_usd);
+  push('market.days_since_ath', rawData?.market?.days_since_ath);
+  push('market.market_cap_to_volume_ratio', rawData?.market?.market_cap_to_volume_ratio);
+  push('social.narrative_freshness_score', rawData?.social?.narrative_freshness_score);
+  push('narrative.narrative_momentum_quality', rawData?.narrative_momentum?.narrative_momentum_quality);
+  push('github.github_velocity_tier', rawData?.github?.github_velocity_tier);
+  // Round 382 (AutoResearch): Additional fact registry entries for richer LLM context
+  push('dex.wash_trading_risk', rawData?.dex?.wash_trading_risk);
+  push('social.avg_article_quality_score', rawData?.social?.avg_article_quality_score);
+  push('market.coin_age_days', rawData?.market?.coin_age_days);
+  push('onchain.protocol_age_days', rawData?.onchain?.protocol_age_days);
+  push('onchain.fees_per_tvl_7d', rawData?.onchain?.fees_per_tvl_7d);
+  push('github.issue_resolution_rate', rawData?.github?.issue_resolution_rate);
+  push('github.has_recent_release', rawData?.github?.has_recent_release);
+  push('tokenomics.unlock_risk_label', rawData?.tokenomics?.unlock_risk_label);
+  push('market.price_vs_52w_pct_from_high', rawData?.market?.price_vs_52w?.pct_from_52w_high);
+  // Round 361 (AutoResearch PE): Additional derived signals for LLM orientation
+  push('dex.net_buy_pressure_pct', rawData?.dex?.net_buy_pressure_pct);
+  push('dex.volume_to_liquidity_ratio', rawData?.dex?.volume_to_liquidity_ratio);
+  push('market.price_momentum_score', rawData?.market?.price_momentum_score);
+  push('market.community_score', rawData?.market?.community_score);
+  push('onchain.revenue_per_active_user', rawData?.onchain?.revenue_per_active_user);
+  push('github.commit_frequency', rawData?.github?.commit_frequency);
+  push('github.days_since_last_commit', rawData?.github?.days_since_last_commit);
+  push('github.bus_factor_score', rawData?.github?.bus_factor_score);
 
   return facts;
 }
@@ -204,9 +231,20 @@ export function buildDataSummary(rawData = {}) {
       const recencyLabel = market.ath_recency === 'recent_ath' ? '🔥 ATH set within 30 days' : market.ath_recency === 'near_ath' ? 'ATH set within 90 days' : market.ath_recency === 'moderate_ath' ? 'ATH set within 1 year' : 'ATH over 1 year ago';
       marketLines.push(`- ATH recency: ${recencyLabel}`);
     }
+    // Round 364: price_momentum_score 0-100 composite for LLM orientation
+    if (market.price_momentum_score != null) {
+      const pmsLabel = market.price_momentum_score >= 75 ? 'strong bullish momentum' : market.price_momentum_score >= 50 ? 'neutral-to-positive' : market.price_momentum_score >= 25 ? 'weak/declining' : 'strong bearish momentum';
+      marketLines.push(`- Price momentum score: ${market.price_momentum_score}/100 (${pmsLabel}) — across 1h/24h/7d/30d timeframes`);
+    }
     if (market.community_score != null) {
       const commLabel = market.community_score >= 70 ? 'large community' : market.community_score >= 40 ? 'moderate community' : 'small community';
       marketLines.push(`- Community score: ${market.community_score}/100 (${commLabel})`);
+    }
+    // Round 373: coin_age_days for maturity context
+    if (market.coin_age_days != null && market.coin_age_days > 0) {
+      const ageYears = (market.coin_age_days / 365).toFixed(1);
+      const ageLabel = market.coin_age_days >= 1825 ? 'battle-tested (5+ years)' : market.coin_age_days >= 730 ? 'established (2+ years)' : market.coin_age_days >= 365 ? 'growing (1-2 years)' : market.coin_age_days >= 180 ? 'early (6-12 months)' : 'very new (<6 months)';
+      marketLines.push(`- Token age: ${ageYears} years (${ageLabel})`);
     }
     if (market.volume_spike_flag) {
       marketLines.push(`- ⚠️ Volume spike: ${market.volume_spike_flag} (vs 7d avg)`);
@@ -256,6 +294,21 @@ export function buildDataSummary(rawData = {}) {
       const ratioLabel = ratio >= 0.5 ? 'high capture' : ratio >= 0.2 ? 'moderate capture' : 'low capture (most fees go to LPs/users)';
       onchainLines.push(`- Revenue Capture: ${(ratio * 100).toFixed(1)}% of fees → protocol (${ratioLabel})`);
     }
+    // Round 362: revenue_trend (improving/declining/flat)
+    if (onchain.revenue_trend && onchain.revenue_trend !== 'flat') {
+      const trendEmoji = onchain.revenue_trend === 'improving' ? '📈' : '📉';
+      onchainLines.push(`- Revenue trend: ${trendEmoji} ${onchain.revenue_trend} (vs prior 7d)`);
+    }
+    // Round 362: fees_per_tvl_7d as capital productivity signal
+    if (onchain.fees_per_tvl_7d != null && onchain.tvl > 0) {
+      const ftLabel = onchain.fees_per_tvl_7d >= 0.5 ? 'highly productive capital' : onchain.fees_per_tvl_7d >= 0.1 ? 'moderate' : 'low capital productivity';
+      onchainLines.push(`- Fees/TVL: ${(onchain.fees_per_tvl_7d * 100).toFixed(2)}% weekly (${ftLabel})`);
+    }
+    // Round 362: revenue_per_active_user (product-market fit signal)
+    if (onchain.revenue_per_active_user != null) {
+      const rpuLabel = onchain.revenue_per_active_user >= 1 ? 'strong monetization' : onchain.revenue_per_active_user >= 0.1 ? 'moderate' : onchain.revenue_per_active_user >= 0.01 ? 'early monetization' : 'pre-monetization';
+      onchainLines.push(`- Revenue/user/day: $${onchain.revenue_per_active_user.toFixed(4)} (${rpuLabel})`);
+    }
     // Round R156: TVL stickiness with context
     // Round 238 (AutoResearch): added 'growing' tier context
     if (onchain.tvl_stickiness) {
@@ -267,6 +320,17 @@ export function buildDataSummary(rawData = {}) {
     }
     if (onchain.protocol_maturity) {
       onchainLines.push(`- Protocol Maturity: ${onchain.protocol_maturity}`);
+    }
+    // Round 378: protocol_age_days for battle-tested context
+    if (onchain.protocol_age_days != null && onchain.protocol_age_days > 0) {
+      const ageYrs = (onchain.protocol_age_days / 365).toFixed(1);
+      const ageCtx = onchain.protocol_age_days >= 1095 ? 'battle-tested (3+ years of on-chain data)' : onchain.protocol_age_days >= 365 ? 'established (1+ year of on-chain data)' : onchain.protocol_age_days >= 90 ? 'growing protocol (3-12 months)' : 'very new protocol';
+      onchainLines.push(`- Protocol age: ${ageYrs} years since DeFiLlama listing (${ageCtx})`);
+    }
+    // Round 378: onchain_maturity_score composite index
+    if (onchain.onchain_maturity_score != null) {
+      const omsLabel = onchain.onchain_maturity_score >= 70 ? 'mature — sustainable model' : onchain.onchain_maturity_score >= 40 ? 'developing — improving' : 'immature — risky fundamentals';
+      onchainLines.push(`- Onchain maturity score: ${onchain.onchain_maturity_score}/100 (${omsLabel})`);
     }
 
     const validOnchain = onchainLines.filter(Boolean);
@@ -331,6 +395,16 @@ export function buildDataSummary(rawData = {}) {
     if (social.airdrop_mentions != null && social.airdrop_mentions > 0) {
       socialLines.push(`- Airdrop mentions: ${social.airdrop_mentions} (potential demand catalyst)`);
     }
+    // Round 371: avg_article_quality_score — tells LLM if coverage is from reputable sources
+    if (social.avg_article_quality_score != null) {
+      const aqLabel = social.avg_article_quality_score >= 1.3 ? 'tier-1 dominated (CoinDesk/Bloomberg-class)' : social.avg_article_quality_score >= 1.1 ? 'above-average source quality' : social.avg_article_quality_score >= 0.9 ? 'average source quality' : 'low-quality/blog coverage';
+      socialLines.push(`- Source quality: ${social.avg_article_quality_score.toFixed(2)}x (${aqLabel})`);
+    }
+    // Round 371: competitor_content_ratio — signals secondary vs primary narrative
+    if (social.competitor_content_ratio != null && social.competitor_content_ratio > 0.3) {
+      const compLabel = social.competitor_content_ratio > 0.6 ? '⚠️ mostly secondary coverage (discussed in competitor context)' : 'mixed — partially in competitor context';
+      socialLines.push(`- Coverage type: ${(social.competitor_content_ratio * 100).toFixed(0)}% competitor-framed articles (${compLabel})`);
+    }
 
     const validSocial = socialLines.filter(Boolean);
     if (validSocial.length) {
@@ -361,6 +435,25 @@ export function buildDataSummary(rawData = {}) {
       return `${v} (${tractionLabel})`;
     }));
     githubLines.push(add('Commit Trend', github.commit_trend));
+    // Round 361: commit_frequency (commits/week normalized over 90d)
+    if (github.commit_frequency != null) {
+      const cfLabel = github.commit_frequency >= 10 ? 'high velocity' : github.commit_frequency >= 3 ? 'steady' : 'low cadence';
+      githubLines.push(`- Commit frequency: ${github.commit_frequency.toFixed(1)}/week avg (${cfLabel})`);
+    }
+    // Round 361: dev recency signals
+    if (github.days_since_last_commit != null) {
+      const staleLabel = github.days_since_last_commit <= 7 ? 'fresh' : github.days_since_last_commit <= 30 ? 'recent' : github.days_since_last_commit <= 90 ? 'slowing' : '⚠️ stale';
+      githubLines.push(`- Last commit: ${github.days_since_last_commit}d ago (${staleLabel})`);
+    }
+    if (github.has_recent_release === true) {
+      githubLines.push(`- Recent release: yes (within 90d) — active shipping signal`);
+    } else if (github.has_recent_release === false) {
+      githubLines.push(`- Recent release: none in 90d`);
+    }
+    if (github.open_prs_count != null) {
+      const prLabel = github.open_prs_count >= 20 ? 'active pipeline' : github.open_prs_count >= 5 ? 'normal' : 'low';
+      githubLines.push(`- Open PRs: ${github.open_prs_count} (${prLabel})`);
+    }
     githubLines.push(add('Language', github.language));
     githubLines.push(add('License', github.license));
     githubLines.push(add('Watchers', github.watchers));
@@ -369,6 +462,29 @@ export function buildDataSummary(rawData = {}) {
       const dqi = github.dev_quality_index;
       const dqLabel = dqi >= 70 ? 'strong' : dqi >= 40 ? 'average' : 'weak';
       githubLines.push(`- Dev Quality Index: ${dqi}/100 (${dqLabel})`);
+    }
+    // Round 367: github_velocity_tier for quick orientation
+    if (github.github_velocity_tier) {
+      const velTierDesc = {
+        hyperspeed: '🚀 hyperspeed (2+ commits/day)',
+        active: '✅ active (5-14/wk)',
+        moderate: '→ moderate (1-5/wk)',
+        slow: '🟡 slow (<1/wk)',
+        slowing: '🟡 slowing (no commits 3-6m)',
+        stale: '🔴 stale (no commits 6m+)',
+        inactive: '❌ inactive',
+      };
+      githubLines.push(`- Velocity tier: ${velTierDesc[github.github_velocity_tier] || github.github_velocity_tier}`);
+    }
+    // Round 367: contributor_bus_factor qualitative label
+    if (github.contributor_bus_factor && !github.bus_factor_score) {
+      const bfDesc = {
+        critical: '⚠️ critical — 1 person controls >80% of commits',
+        high: '⚠️ high — top contributor dominates',
+        moderate: '→ moderate concentration',
+        healthy: '✅ healthy — distributed contributions',
+      };
+      githubLines.push(`- Contributor distribution: ${bfDesc[github.contributor_bus_factor] || github.contributor_bus_factor}`);
     }
 
     const validGithub = githubLines.filter(Boolean);
@@ -417,6 +533,10 @@ export function buildDataSummary(rawData = {}) {
     if (dex.sell_wall_risk && dex.sell_wall_risk !== 'low') {
       dexLines.push(`- ⚠️ Sell wall risk: ${dex.sell_wall_risk.toUpperCase()} (ratio: ${dex.buy_sell_ratio ?? 'n/a'}, momentum: ${dex.volume_momentum ?? 'n/a'})`);
     }
+    // Round 381 (AutoResearch): most_active_chain for liquidity context
+    if (dex.most_active_chain && dex.most_active_chain !== dex.dex_chains?.[0]) {
+      dexLines.push(`- Most active chain: ${dex.most_active_chain} (by 24h volume)`);
+    }
     // Round 221 (AutoResearch): net buy pressure % and volume/liquidity ratio
     if (dex.net_buy_pressure_pct != null) {
       const netBuyLabel = dex.net_buy_pressure_pct > 55 ? 'accumulation' : dex.net_buy_pressure_pct < 45 ? 'distribution' : 'balanced';
@@ -425,6 +545,13 @@ export function buildDataSummary(rawData = {}) {
     if (dex.volume_to_liquidity_ratio != null) {
       const vtlLabel = dex.volume_to_liquidity_ratio > 1 ? 'high capital efficiency' : dex.volume_to_liquidity_ratio > 0.1 ? 'moderate' : 'low';
       dexLines.push(`- Volume/Liquidity: ${dex.volume_to_liquidity_ratio.toFixed(3)}x (${vtlLabel})`);
+    }
+    // Round 381 (AutoResearch): wash trading risk + median trade size for LLM context
+    if (dex.wash_trading_risk && dex.wash_trading_risk !== 'low') {
+      dexLines.push(`- ⚠️ Wash trading risk: ${dex.wash_trading_risk.toUpperCase()} — avg trade size $${dex.median_trade_size_usd?.toFixed(2) ?? 'n/a'}, suspicious volume pattern`);
+    } else if (dex.median_trade_size_usd != null) {
+      const tradeLabel = dex.median_trade_size_usd >= 10000 ? 'whale-sized trades' : dex.median_trade_size_usd >= 500 ? 'institutional/mid retail' : dex.median_trade_size_usd >= 50 ? 'retail organic' : 'micro trades (bot risk)';
+      dexLines.push(`- Avg trade size: $${dex.median_trade_size_usd.toFixed(2)} (${tradeLabel})`);
     }
 
     const validDex = dexLines.filter(Boolean);
@@ -474,14 +601,20 @@ export function buildDataSummary(rawData = {}) {
     lines.push('');
   }
 
-  // HOLDERS
+  // HOLDERS — Round 362: accept both field names (top10_concentration_pct and top10_holder_concentration_pct)
   const holders = rawData.holders || {};
-  if (!holders.error && holders.top10_concentration_pct != null) {
+  const holderConcentration = holders.top10_holder_concentration_pct ?? holders.top10_concentration_pct;
+  if (!holders.error && holderConcentration != null) {
     lines.push('HOLDERS:');
-    lines.push(add('Top 10 Concentration', holders.top10_concentration_pct, (v) => {
+    lines.push(add('Top 10 Concentration', holderConcentration, (v) => {
       const concLabel = v > 80 ? 'extreme — whale squeeze risk' : v > 60 ? 'high — dump risk' : v > 40 ? 'moderate' : 'well-distributed';
       return `${v.toFixed(1)}% (${concLabel})`;
     }));
+    // Round 362: add holder count if available
+    if (holders.holder_count != null) {
+      const hdLabel = holders.holder_count >= 100000 ? 'large holder base' : holders.holder_count >= 10000 ? 'medium holder base' : holders.holder_count >= 1000 ? 'small holder base' : 'very few holders';
+      lines.push(`- Holder count: ${holders.holder_count.toLocaleString('en-US')} (${hdLabel})`);
+    }
     lines.push('');
   } else {
     gaps.push('holders (no data)');
@@ -507,6 +640,11 @@ export function buildDataSummary(rawData = {}) {
       const unlockRisk = v < 30 ? 'HIGH unlock risk — most supply not yet circulating' : v < 60 ? 'moderate unlock risk' : v < 90 ? 'low unlock risk' : 'fully circulating';
       return `${v.toFixed(1)}% (${unlockRisk})`;
     }));
+    // Round 363: surface composite unlock_risk_label for quicker LLM orientation
+    if (tokenomics.unlock_risk_label) {
+      const urlContext = tokenomics.unlock_risk_label === 'critical' ? '⚠️ immediate price suppression risk from pending unlocks/team allocations' : tokenomics.unlock_risk_label === 'high' ? 'significant dilution risk within 6-12 months' : tokenomics.unlock_risk_label === 'moderate' ? 'manageable dilution risk' : 'low dilution risk';
+      lines.push(`- Unlock risk: ${tokenomics.unlock_risk_label.toUpperCase()} — ${urlContext}`);
+    }
     if (tokenomics.inflation_rate != null) {
       const inflLabel = tokenomics.inflation_rate > 20 ? 'hyperinflationary' : tokenomics.inflation_rate > 8 ? 'high inflation' : tokenomics.inflation_rate > 3 ? 'moderate inflation' : tokenomics.inflation_rate > 0 ? 'low inflation' : 'deflationary';
       lines.push(`- Inflation rate: ${tokenomics.inflation_rate.toFixed(1)}%/yr (${inflLabel})`);
@@ -523,14 +661,40 @@ export function buildDataSummary(rawData = {}) {
     lines.push('');
   }
 
-  // CONTRACT
+  // CONTRACT — Round 363: enriched with audit and security data
   const contract = rawData.contract || {};
-  if (!contract.error && contract.verified != null) {
+  if (!contract.error && (contract.verified != null || contract.is_proxy != null || contract.audited != null)) {
     lines.push('CONTRACT:');
-    lines.push(add('Verified', contract.verified, (v) => v ? 'Yes' : 'No'));
+    if (contract.verified != null) lines.push(`- Verified: ${contract.verified ? '✅ Yes' : '❌ No'}`);
+    if (contract.is_proxy != null) lines.push(`- Proxy contract: ${contract.is_proxy ? 'Yes (upgradeable)' : 'No (immutable)'}`);
+    if (contract.audited != null) lines.push(`- Audited: ${contract.audited ? '✅ Yes' : '❌ No'}`);
+    if (contract.audit_firms?.length) lines.push(`- Audit firms: ${contract.audit_firms.join(', ')}`);
+    if (contract.honeypot != null) lines.push(`- Honeypot: ${contract.honeypot ? '⚠️ YES — avoid' : 'No'}`);
+    if (contract.buy_tax != null || contract.sell_tax != null) {
+      const buyTax = contract.buy_tax != null ? `buy ${contract.buy_tax}%` : '';
+      const sellTax = contract.sell_tax != null ? `sell ${contract.sell_tax}%` : '';
+      const taxParts = [buyTax, sellTax].filter(Boolean).join(', ');
+      if (taxParts) lines.push(`- Tax: ${taxParts}${(contract.buy_tax > 5 || contract.sell_tax > 5) ? ' ⚠️ HIGH' : ''}`);
+    }
     lines.push('');
   } else {
     gaps.push('contract (no data)');
+  }
+
+  // Round 366: 52-week price context section — gives LLM institutional-grade price range context
+  const priceVs52w = rawData?.market?.price_vs_52w;
+  if (priceVs52w && priceVs52w.tier) {
+    const tierDesc = {
+      near_high: '🟢 near 52-week HIGH — price discovery / momentum phase',
+      mid_range: '→ mid-range — neutral price positioning',
+      below_mid: '🟡 below 52-week midpoint — under pressure, possible recovery play',
+      near_low: '🔴 near 52-week LOW — structural weakness or deep value territory',
+    };
+    lines.push('\n52-WEEK PRICE CONTEXT:');
+    lines.push(`- Position: ${tierDesc[priceVs52w.tier] || priceVs52w.tier}`);
+    if (priceVs52w.pct_from_52w_high != null) lines.push(`- From 52w high: ${priceVs52w.pct_from_52w_high.toFixed(1)}%`);
+    if (priceVs52w.pct_from_52w_low != null) lines.push(`- From 52w low: +${priceVs52w.pct_from_52w_low.toFixed(1)}%`);
+    lines.push('');
   }
 
   // Round R151: Derived efficiency metrics — P/TVL ratio and Volume/MCap velocity
@@ -931,6 +1095,16 @@ function buildPrompt(projectName, rawData, scores) {
         ]
       : []),
 
+    // Round 381 (AutoResearch): ATH volatility context — tells LLM whether volatility is constructive or destructive
+    ...(rawData?.volatility?.ath_volatility_context
+      ? [
+          `## ATH VOLATILITY CONTEXT: ${rawData.volatility.ath_volatility_context.toUpperCase()}`,
+          rawData.volatility.ath_volatility_context === 'positive_discovery'
+            ? 'Elevated volatility is occurring near ATH — this is price discovery phase. Volatility may be constructive (breakout). Weight bull case more heavily.'
+            : 'Elevated volatility is occurring far below ATH — may indicate continued structural decline. Weight bear case more heavily and verify any catalyst claim carefully.',
+        ]
+      : []),
+
     // Round 235 (AutoResearch): Volume trend context
     ...(rawData?.market?.volume_trend_7d && rawData.market.volume_trend_7d !== 'stable'
       ? [
@@ -1214,8 +1388,10 @@ function clampPct(value, fallback = 50) {
  * Post-LLM validation: cross-check report claims against raw collector data.
  * Flags or sanitizes hallucinated content.
  */
-export function validateReport(report, rawData) {
+export function validateReport(report, rawData, scores = null) {
   const warnings = [];
+  // Round 365: extract overall score for verdict consistency check
+  const overallScore = scores?.overall?.score ?? rawData?._scores?.overall?.score ?? 0;
 
   // 0. Normalize + R176: auto-calibrate section confidence based on data availability
   // If LLM reports very high confidence but key data sources are missing, cap confidence
@@ -1461,6 +1637,26 @@ export function validateReport(report, rawData) {
     warnings.push(`DEX liquidity ($${dexLiquidity.toLocaleString('en-US')}) exceeds 10x market cap ($${mcap.toLocaleString('en-US')}) — likely bad data`);
   }
 
+  // 7a. Round 369: Validate github commits in analysis vs RAW_DATA — LLMs often invent commit counts
+  const realCommits = rawData?.github?.commits_90d;
+  if (realCommits != null && realCommits > 0 && report.analysis_text) {
+    // Match commit counts in various time window expressions
+    const commitPatterns = [
+      /(\d{2,})\s*commits?\s*(?:in|over|per|within|in the last|in the past)?\s*(?:the\s+)?(?:last\s+|past\s+)?(?:90\s*days?|3\s*months?)/i,
+      /(\d{2,})\s*commits?\s*(?:in|over)\s*(?:the\s+)?(?:last|past)\s*(?:quarter|90d)/i,
+    ];
+    for (const pattern of commitPatterns) {
+      const commitMatch = report.analysis_text.match(pattern);
+      if (commitMatch) {
+        const reportedCommits = parseInt(commitMatch[1]);
+        if (Math.abs(reportedCommits - realCommits) / realCommits > 0.3) {
+          warnings.push(`Commit count in analysis (${reportedCommits}) deviates >30% from RAW_DATA (${realCommits}) — possible hallucination`);
+        }
+        break; // Only check first match
+      }
+    }
+  }
+
   // 7b. Round R165: Validate bull/bear case thesis quality — must contain at least one number
   const hasNumber = (text) => /\$[\d.,]+[MBKmb]?|\b\d+[\d.,]*%|\b\d{2,}[\d.,]*\b/.test(String(text || ''));
   if (report.bull_case?.thesis && !hasNumber(report.bull_case.thesis)) {
@@ -1479,6 +1675,28 @@ export function validateReport(report, rawData) {
   }
   if (report.bear_case?.probability && !validProbs.includes(String(report.bear_case.probability).toLowerCase())) {
     report.bear_case.probability = 'medium';
+  }
+
+  // Round 376: key_findings quality — warn if findings lack specific numbers
+  if (Array.isArray(report.key_findings) && report.key_findings.length > 0) {
+    let findingsWithoutNumbers = 0;
+    for (const finding of report.key_findings) {
+      if (!hasNumber(finding)) findingsWithoutNumbers++;
+    }
+    if (findingsWithoutNumbers > 2) {
+      warnings.push(`${findingsWithoutNumbers}/${report.key_findings.length} key_findings contain no specific numbers — too generic`);
+    }
+  }
+
+  // Round 365: verdict-score consistency check
+  // If algorithmic score is very different from implied verdict, log a warning
+  const verdictScoreMap = { 'STRONG BUY': 9, 'BUY': 7.5, 'HOLD': 6, 'AVOID': 4.5, 'STRONG AVOID': 2.5 };
+  const impliedScore = verdictScoreMap[report.verdict];
+  if (impliedScore != null && overallScore > 0) {
+    const scoreDiff = Math.abs(impliedScore - overallScore);
+    if (scoreDiff > 2.5) {
+      warnings.push(`Verdict "${report.verdict}" (implied score ~${impliedScore}) diverges ${scoreDiff.toFixed(1)} pts from algorithmic score ${overallScore.toFixed(1)} — may be miscalibrated`);
+    }
   }
 
   // Round R171: analysis_text quality assessment
@@ -1651,18 +1869,18 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '## OUTPUT FORMAT',
     'Return ONLY valid JSON. Required fields:',
     '- verdict: "STRONG BUY" | "BUY" | "HOLD" | "AVOID" | "STRONG AVOID"',
-    '- project_summary: 2-3 sentences MAX. Sentence 1: what the project IS (protocol type, blockchain, use case). Sentence 2: key traction metric from RAW_DATA (e.g. "manages $XM TVL", "X GitHub contributors", "ranked #Y by MCap"). Sentence 3 (optional): who uses it and why it matters. Use only RAW_DATA and X_SOCIAL — no hype, no source tags.',
+    '- project_summary: 2-3 sentences MAX. Sentence 1: MUST name the protocol type, its primary blockchain/chain from ECOSYSTEM data, and core use case (e.g. "X is a lending protocol on Ethereum and Base"). Sentence 2: the single most important traction metric from RAW_DATA — prioritize TVL > fees > MCap rank > GitHub commits (e.g. "$XM TVL growing +Y% weekly" or "ranked #Z by MCap with $XM 24h volume"). Sentence 3 (optional): key differentiator or primary user type. Use only RAW_DATA and X_SOCIAL — no hype, no source tags, no vague claims.',
     '- project_category: the project\'s primary category (examples: "DeFi Lending", "Layer 1", "DEX", "NFT Marketplace", "AI Infrastructure", "Meme Token"). Use the most specific category you can support from RAW_DATA.',
-    '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. Each paragraph MUST cover different ground — NEVER repeat the same metric in two paragraphs. Para 1: summary thesis with the 2-3 most important metrics and verdict justification. Para 2: on-chain/fundamental evidence — DIFFERENT numbers from Para 1, focus on TVL, fees, protocol health. Para 3: market/sentiment context — price action, social, DEX pressure. Para 4: near-term outlook — what to watch for, risk/reward. FORMAT ALL NUMBERS READABLY: use $414.8M not 414828652, use -2.48% not -2.484401525322113%. NO source tags. NO snake_case field names.',
-    '- moat: competitive advantage in 1-2 sentences. MANDATORY: cite a specific, concrete advantage backed by RAW_DATA (e.g., "highest TVL in category at $XM with X% weekly growth", "X contributors and Y commits suggest deep dev community"). FORBIDDEN: generic phrases like "first mover advantage", "network effects" (without data), "strong community" (without mention count), "robust ecosystem" (without chain count). If no genuine moat is evident from data, write "No clear moat identified from available data."',
+    '- analysis_text: 3-4 clean paragraphs for HUMAN READERS. STRICT PARAGRAPH SCOPES — each paragraph covers EXCLUSIVE territory, NO metric appears in 2 paragraphs:\n  Para 1 [VERDICT + TOP METRICS]: State verdict explicitly. Use the 2-3 highest-signal metrics (usually: overall score, P/TVL or market cap rank, and the single strongest signal — TVL growth OR social spike OR dev velocity). End Para 1 with a one-sentence verdict justification.\n  Para 2 [FUNDAMENTALS DEEP-DIVE]: On-chain numbers ONLY — TVL change, fees, revenue, protocol health, supply metrics. NEVER re-state Para 1 numbers. Add context: compare fees to peers if sector data available, highlight stickiness or growth trajectory.\n  Para 3 [MARKET + SENTIMENT]: Price action (24h/7d/30d), DEX pressure, social signal, volume patterns. NEVER re-state on-chain numbers from Para 2.\n  Para 4 [OUTLOOK]: Near-term risk/reward — what specific data threshold would change the verdict? What\'s the primary catalyst to watch? What\'s the main risk trigger? Be concrete with numbers.\n  FORMAT: $414.8M not 414828652 | -2.48% not -2.484401525322113% | NO source tags | NO snake_case field names.',
+    '- moat: competitive advantage in 1-2 sentences. MANDATORY: use EXACTLY ONE of these three evidence-backed moat types: (1) SCALE MOAT — "Highest TVL/volume in category at $X, 3x larger than nearest competitor" (requires SECTOR_CONTEXT data). (2) TECH/DEV MOAT — "X active contributors and Y commits/week show a technical team larger than typical DeFi protocols; Z stars signals developer mindshare". (3) NETWORK/LIQUIDITY MOAT — "$XM DEX liquidity across Z chains creates switching costs for LPs." FORBIDDEN generics: "first mover advantage", "strong community" (without number), "network effects" (without TVL/user data), "robust ecosystem" (without chain count). If no genuine data-backed moat exists, write exactly: "No clear moat identified from available data."',
     '- risks: array of 3-5 risk strings. Format: "[Risk Type]: [Specific detail with numbers when available]. [Why this matters for price]". Examples: "Dilution risk: only 42% circulating, 58% supply unlocking over 18 months could suppress price." or "DEX sell pressure: buy/sell ratio 0.78 suggests sustained distribution." FORBIDDEN: vague risks like "regulatory uncertainty" without context, "smart contract risk" without audit/exploit data. Each risk must be actionable.',
     '- catalysts: array of 2-4 upcoming catalysts. ONLY include catalysts supported by data. Prefix unverified ones with "[Unverified]". It is OK to have fewer catalysts if data is limited.',
     '- competitor_comparison: Compare ONLY with metrics you have data for. If no competitor data available, write "Insufficient data for competitor comparison."',
     '- x_sentiment_summary: Summarize the X_SOCIAL data provided below. If X_SOCIAL is empty or has errors, write "No X/Twitter data available."',
     '- key_findings: array of 3-5 key findings. Format: "[Metric]: [value] — [what this means for investors]". Example: "TVL: $45.2M growing +8% weekly — suggests growing protocol adoption." Each MUST cite a specific data point from RAW_DATA or X_SOCIAL.',
     '- liquidity_assessment: Based on RAW_DATA volume, market cap, and DEX liquidity. Do not invent slippage estimates.',
-    '- bull_case: object with { thesis: string (2-3 sentences — the STRONGEST argument FOR investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA, e.g. "TVL of $X growing +Y% weekly", "P/TVL of Z is below sector median". Explain WHY those numbers are bullish.), catalysts: array of 2-3 specific events/metrics that could drive price up (data-backed, e.g. "fee efficiency $X/M TVL signals product-market fit"), target_conditions: string (concrete threshold conditions — e.g. "TVL crosses $XM, weekly fees above $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification based on data) }. NEVER use generic phrases like "strong fundamentals" without specific numbers.',
-    '- bear_case: object with { thesis: string (2-3 sentences — the STRONGEST argument AGAINST investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA that support the bear thesis, e.g. "TVL down Y% in 30d", "volume velocity only Z% suggests no conviction". Be brutally honest.), risks: array of 2-3 specific measurable risks (e.g. "DEX sell pressure ratio 0.82 — possible distribution"), failure_conditions: string (concrete conditions that confirm the bear case — e.g. "TVL falls below $XM, price breaks below $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification) }. Do NOT soften bear cases.',
+    '- bull_case: object with { thesis: string (2-3 sentences — the STRONGEST argument FOR investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA, e.g. "TVL of $X growing +Y% weekly", "P/TVL of Z is below sector median of W", "fee efficiency $X/M TVL vs sector avg $Y". When SECTOR_CONTEXT is available, MUST compare against it. Explain WHY those numbers are bullish vs benchmarks.), catalysts: array of 2-3 specific events/metrics that could drive price up (data-backed, e.g. "fee efficiency $X/M TVL signals product-market fit"), target_conditions: string (concrete threshold conditions — e.g. "TVL crosses $XM, weekly fees above $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification based on data) }. NEVER use generic phrases like "strong fundamentals" without specific numbers.',
+    '- bear_case: object with { thesis: string (2-3 sentences — the STRONGEST argument AGAINST investing. MANDATORY: cite at least 2 specific numbers from RAW_DATA that support the bear thesis. When SECTOR_CONTEXT is available, highlight where this project underperforms peers (e.g. "P/TVL of X is 3x above sector median Y"). Be brutally honest about relative underperformance.), risks: array of 2-3 specific measurable risks (e.g. "DEX sell pressure ratio 0.82 — possible distribution"), failure_conditions: string (concrete conditions that confirm the bear case — e.g. "TVL falls below $XM, price breaks below $Y"), probability: string ("high"/"medium"/"low" with one-sentence justification) }. Do NOT soften bear cases.',
     '- data_gaps: array of strings listing what data was missing or could not be verified. This helps the reader assess report reliability.',
     '- facts_verified: array of 4-8 strings. ONLY hard facts, each with a [source: ...] tag.',
     '- opinions: array of 2-5 strings. Analytical interpretations; if not directly proven, prefix with [Opinion].',
@@ -1721,6 +1939,21 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     userParts.push(`ALPHA_SIGNALS:\n${rawData.alpha_signals.map((s) => `- [${s.strength?.toUpperCase() || 'MODERATE'}] ${s.signal}: ${s.detail}`).join('\n')}`);
   }
 
+  // Round 370: TOKENOMICS RISK SUMMARY block — aggregates key dilution/unlock signals for Opus
+  const tok = rawData?.tokenomics;
+  if (tok && !tok.error) {
+    const tokLines = [];
+    if (tok.pct_circulating != null) tokLines.push(`- Circulating: ${tok.pct_circulating.toFixed(1)}% of total supply`);
+    if (tok.unlock_risk_label) tokLines.push(`- Unlock risk: ${tok.unlock_risk_label.toUpperCase()}${tok.unlock_risk_label === 'critical' ? ' ⚠️ price suppression likely' : ''}`);
+    if (tok.inflation_rate != null) tokLines.push(`- Annual inflation: ${tok.inflation_rate.toFixed(1)}%${tok.inflation_rate < 0 ? ' (deflationary 🔥)' : ''}`);
+    if (tok.vesting_info?.team_allocation_pct != null) tokLines.push(`- Team allocation: ${tok.vesting_info.team_allocation_pct.toFixed(1)}%${tok.vesting_info.team_allocation_pct > 25 ? ' ⚠️ HIGH' : ''}`);
+    if (tok.vesting_info?.vesting_schedule_summary) tokLines.push(`- Vesting: ${tok.vesting_info.vesting_schedule_summary}`);
+    if (tok.tokenomics_risk_score != null) tokLines.push(`- Tokenomics risk score: ${tok.tokenomics_risk_score}/100 (higher=safer)`);
+    if (tokLines.length) {
+      userParts.push(`TOKENOMICS_RISK_SUMMARY:\n${tokLines.join('\n')}`);
+    }
+  }
+
   if (scores?.overall?.circuit_breakers?.capped) {
     const cb = scores.overall.circuit_breakers;
     userParts.push([
@@ -1728,6 +1961,58 @@ export function buildOpusPrompt(projectName, rawData, scores) {
       cb.breakers.map((b) => `- [${b.severity.toUpperCase()}] Cap at ${b.cap}: ${b.reason}`).join('\n'),
       `Your verdict MUST NOT exceed ${cb.applied_cap}/10. Explain WHY the circuit breakers are justified.`,
     ].join('\n'));
+  }
+
+  // Round 374: LIQUIDITY CONTEXT block — combines DEX, holders, and market cap for position sizing guidance
+  const dexD = rawData?.dex;
+  const holdD = rawData?.holders;
+  const mktD = rawData?.market;
+  if ((dexD && !dexD.error) || (holdD && holdD.top10_holder_concentration_pct != null)) {
+    const liqLines = ['LIQUIDITY_CONTEXT (for position sizing and exit risk):'];
+    if (mktD?.total_volume != null && mktD?.market_cap != null) {
+      const velPct = (mktD.total_volume / mktD.market_cap * 100).toFixed(2);
+      liqLines.push(`- Volume velocity: ${velPct}% of MCap traded daily (above 5% = good liquidity for most position sizes)`);
+    }
+    if (dexD?.dex_liquidity_usd != null) {
+      const dexLiq = dexD.dex_liquidity_usd;
+      const maxPos = dexLiq * 0.01; // 1% of liquidity = max position without significant slippage
+      const liqLabel = dexLiq >= 5e6 ? 'can support $50K+ positions' : dexLiq >= 1e6 ? 'can support $10K-$50K positions' : dexLiq >= 100e3 ? 'limited to <$10K positions' : 'micro-cap, use limit orders only';
+      liqLines.push(`- DEX liquidity: ${formatNumber(dexD.dex_liquidity_usd)} → ${liqLabel} (1% slippage threshold)`);
+    }
+    if (holdD?.top10_holder_concentration_pct != null) {
+      const concPct = holdD.top10_holder_concentration_pct;
+      const concRisk = concPct > 80 ? 'extreme dump risk — whale-controlled' : concPct > 60 ? 'high concentration — monitor whale wallets' : concPct > 40 ? 'moderate concentration' : 'well-distributed';
+      liqLines.push(`- Top-10 concentration: ${concPct.toFixed(1)}% (${concRisk})`);
+    }
+    if (dexD?.sell_wall_risk && dexD.sell_wall_risk !== 'low') {
+      liqLines.push(`- ⚠️ Sell wall risk: ${dexD.sell_wall_risk.toUpperCase()} — potential coordinated selling detected`);
+    }
+    userParts.push(liqLines.join('\n'));
+  }
+
+  // Round 368: DEVELOPMENT CONTEXT block — surfaces key github signals for Opus orientation
+  const gh = rawData?.github;
+  if (gh && !gh.error && gh.commits_90d != null) {
+    const devLines = ['DEVELOPMENT_CONTEXT:'];
+    devLines.push(`- Commits/week: ${gh.commit_frequency != null ? gh.commit_frequency.toFixed(1) : (gh.commits_90d / 13).toFixed(1)}/wk (90d avg)`);
+    if (gh.contributors != null) devLines.push(`- Team size: ${gh.contributors} contributors`);
+    if (gh.days_since_last_commit != null) {
+      const recencyLabel = gh.days_since_last_commit <= 3 ? 'actively shipping' : gh.days_since_last_commit <= 14 ? 'recent activity' : gh.days_since_last_commit <= 60 ? 'slowing down' : '⚠️ stale repo';
+      devLines.push(`- Last commit: ${gh.days_since_last_commit}d ago (${recencyLabel})`);
+    }
+    if (gh.bus_factor_score != null) {
+      const bfLabel = gh.bus_factor_score >= 70 ? 'healthy distribution' : gh.bus_factor_score >= 40 ? 'moderate concentration' : '⚠️ key-person risk';
+      devLines.push(`- Bus factor score: ${gh.bus_factor_score}/100 (${bfLabel})`);
+    }
+    if (gh.contributor_bus_factor) devLines.push(`- Contributor concentration: ${gh.contributor_bus_factor}`);
+    if (gh.has_recent_release === true) devLines.push(`- Recent release: yes (active shipping)`);
+    if (gh.dev_quality_index != null) devLines.push(`- Dev quality index: ${gh.dev_quality_index}/100`);
+    // Round 381 (AutoResearch): velocity tier for quick LLM orientation
+    if (gh.github_velocity_tier) {
+      const velDesc = { hyperspeed: '2+ commits/day — very active shipping', active: '5-14 commits/wk — steady development', moderate: '1-5 commits/wk — moderate pace', slow: '<1 commit/wk — slow cadence', slowing: 'no commits in 3-6 months — concern', stale: 'no commits in 6+ months — potentially abandoned', inactive: 'no recent commits' };
+      devLines.push(`- Development velocity: ${gh.github_velocity_tier} (${velDesc[gh.github_velocity_tier] || gh.github_velocity_tier})`);
+    }
+    userParts.push(devLines.join('\n'));
   }
 
   // X_SOCIAL data section (collected by Grok Fast collector)
@@ -1787,16 +2072,17 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
     'You are a senior crypto alpha analyst. Produce a concise but actionable quick-scan report. No tools available — rely ENTIRELY on attached data.',
 
     '## CRITICAL: ANTI-HALLUCINATION RULES (VIOLATIONS = USELESS REPORT)',
-    '1. ZERO TOOLS. You have NO web search, NO X search, NO external data. You ONLY use RAW_DATA and SCORES below.',
-    '2. NEVER invent: facts, numbers, events, partnerships, funding rounds, KOL opinions, Twitter handles, token prices, TVL, competitor metrics.',
-    '3. EVERY claim = specific RAW_DATA field. If you cannot point to the field, delete the claim.',
+    '1. ZERO TOOLS. You have NO web search, NO X search, NO external data. You ONLY use the RAW_DATA_SUMMARY and SCORES attached below.',
+    '2. NEVER invent: facts, numbers, events, partnerships, funding rounds, KOL names/opinions, Twitter handles, token prices, TVL, fees, competitor metrics — if it\'s not in RAW_DATA_SUMMARY, it doesn\'t exist.',
+    '3. EVERY claim = specific RAW_DATA field. If you cannot point to the exact field in the attached data, DELETE the claim.',
     '4. MISSING DATA → write "Insufficient data" in that field. DO NOT fill blanks with plausible-sounding info.',
-    '5. x_sentiment_summary: ONLY use RAW_DATA.social collector data. If social.mentions=0 or social.error → OMIT x_sentiment_summary entirely. DO NOT write about X/Twitter community if you have no data — this is the #1 hallucination vector.',
-    '6. catalysts: ONLY infer from data patterns (e.g., "active dev with 120 commits → likely protocol updates"). NEVER invent specific dates, events, integrations, or listings.',
-    '7. competitor_comparison: ONLY write if RAW_DATA.sector_comparison exists. Otherwise OMIT the field entirely.',
-    '8. Shorter accurate report >> longer hallucinated report. When uncertain, omit.',
-    '9. Source tags ONLY in facts_verified. Human-facing fields = no source tags.',
-    '10. FORMAT ALL NUMBERS: $414.8M not 414828652, -2.48% not -2.484401525322113%. No snake_case field names.',
+    '5. x_sentiment_summary BANNED unless social.filtered_mentions > 0 AND no social.error in RAW_DATA. If social data is empty → OMIT this field entirely. This is the #1 hallucination vector — DO NOT write about "the community", "X/Twitter users say", or ANY social narrative without verified social data.',
+    '6. catalysts: ONLY patterns observable from numeric data (e.g., "commit_frequency 8/wk suggests active development"). NEVER invent: CEX listing dates, partnership names, upgrade version numbers, specific events not mentioned in attached data.',
+    '7. competitor_comparison: ONLY write if SECTOR_CONTEXT block exists in attached data. Otherwise write "No sector data available." — do NOT invent competitor TVL, fees, or rankings.',
+    '8. bull_case AND bear_case: each MUST cite at least 2 specific numbers from RAW_DATA_SUMMARY. Generic "strong fundamentals" = hallucination. Cite $TVL, %growth, fee efficiency, P/TVL, etc.',
+    '9. Shorter accurate report >> longer hallucinated report. When uncertain: omit, don\'t guess.',
+    '10. SOURCE TAGS: ONLY in facts_verified. Never in analysis_text, risks, catalysts, moat, key_findings.',
+    '11. FORMAT ALL NUMBERS: $414.8M not 414828652, -2.48% not -2.484401525322113%. NEVER expose snake_case field names to users.',
 
     '## SCORING CALIBRATION',
     `Algorithmic score: ${overallScore}/10. Adjust verdict based on data quality and signal strength:`,
@@ -1853,8 +2139,13 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
               defi_dex: 'DEX ANALYSIS: Focus on (1) volume/TVL ratio — Uniswap v3 benchmarks at 3-8x daily; (2) fee tier distribution; (3) impermanent loss risk for LPs; (4) real yield (fees - emissions) — negative real yield = mercenary capital risk.',
               layer_1: 'L1 ANALYSIS: Focus on (1) developer activity — commits/contributors vs Ethereum/Solana benchmarks; (2) ecosystem TVL as % of mcap; (3) transaction throughput and fee revenue; (4) validator/node decentralization if data available.',
               layer_2: 'L2 ANALYSIS: Focus on (1) L1 security vs L2 independence tradeoff; (2) sequencer decentralization; (3) TVL migration from L1; (4) fee competitiveness; (5) canonical bridge TVL if available.',
-              rwa: 'RWA ANALYSIS: Focus on (1) regulatory compliance signals; (2) real-world asset backing quality and transparency; (3) yield source legitimacy; (4) counterparty risk in off-chain assets.',
-              depin: 'DePIN ANALYSIS: Focus on (1) hardware/node deployment metrics; (2) token emission vs network utility ratio; (3) real-world service demand (bandwidth, compute, storage sold); (4) token velocity as proxy for network usage.',
+              rwa: 'RWA ANALYSIS: Focus on (1) regulatory compliance signals — is the issuer licensed/regulated? (2) asset backing quality and on-chain proof of reserves; (3) yield source — TradFi yield vs Ponzi mechanics (real yield = sustainable, token emissions = unsustainable); (4) counterparty risk — custodian reputation, audit frequency; (5) benchmark: good RWA protocols generate 4-8% real yield with sub-2% platform fees.',
+              depin: 'DePIN ANALYSIS: Focus on (1) network utility metrics — actual service demand (GB delivered, GPU-hours sold, not just token staking); (2) token emission vs network revenue ratio — above 5x emissions/revenue = Ponzi-like; (3) hardware deployment growth rate; (4) break-even node economics — at what token price is running a node profitable?; (5) key risk: DePIN tokens are often just speculation on future demand with no current product-market fit.',
+              // Round 364: new category-specific analysis registers
+              ai_infrastructure: 'AI INFRASTRUCTURE ANALYSIS: Focus on (1) real API usage vs speculative token demand — revenue/fees from actual compute usage is the key signal; (2) developer adoption rate via GitHub stars/commits; (3) integration count with other protocols; (4) token utility — is the token required for API access or just governance?; (5) benchmark: AI infra tokens with actual revenue > $1M/week signal product-market fit.',
+              web3_gaming: 'WEB3 GAMING ANALYSIS: Focus on (1) daily active users (DAU) vs token holders — genuine gameplay vs farming; (2) in-game economy health — are token sinks working to control inflation?; (3) NFT floor price trend as user engagement proxy; (4) studio credibility — prior games shipped, team size; (5) key risk: most web3 games die when token emissions exceed player-generated demand.',
+              cross_chain_bridge: 'BRIDGE ANALYSIS: Focus on (1) bridge TVL and volume — total locked value and daily bridge volume signal usage; (2) security track record — any hacks or close calls?; (3) supported chains and market share; (4) security model (optimistic vs ZK vs multisig — ZK is most secure); (5) canonical benchmark: Stargate TVL > $1B = market leader. NOTE: bridges are the highest-exploit-risk category in DeFi.',
+              derivatives: 'DERIVATIVES/PERPS ANALYSIS: Focus on (1) open interest vs liquidity — OI should not exceed 5x total liquidity; (2) funding rates — extreme positive = crowded longs, extreme negative = crowded shorts; (3) liquidation depth — how much OI could cascade?; (4) volume/OI ratio — >100% daily turnover = active market; (5) benchmark: dYdX/GMX class protocol handles $500M+ OI sustainably.',
             };
             return catMap[cat] || `Adjust your analysis for this category. Focus on the most relevant fundamentals for ${cat.replace(/_/g, ' ')} projects.`;
           })()
@@ -1896,9 +2187,31 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
       if (c30d != null) changes.push(`30d: ${Number(c30d) >= 0 ? '+' : ''}${Number(c30d).toFixed(1)}%`);
       if (changes.length) parts.push(changes.join(' / '));
       if (athDist != null) parts.push(`ATH dist: ${athDist.toFixed(1)}%`);
+      // Round 367: add price_momentum_score and unlock_risk_label to quick market snapshot
+      if (rawData?.market?.price_momentum_score != null) {
+        const pm = rawData.market.price_momentum_score;
+        const pmLabel = pm >= 70 ? '🟢 bullish' : pm >= 30 ? '→ neutral' : '🔴 bearish';
+        parts.push(`Momentum: ${pm}/100 (${pmLabel})`);
+      }
+      if (rawData?.tokenomics?.unlock_risk_label && rawData.tokenomics.unlock_risk_label !== 'low') {
+        parts.push(`Unlock risk: ⚠️ ${rawData.tokenomics.unlock_risk_label.toUpperCase()}`);
+      }
       return parts.length > 1 ? parts.join(' | ') : null;
     })(),
 
+    // Round 375: quick tokenomics risk inline for the fast model
+    (() => {
+      const tokQ = rawData?.tokenomics;
+      if (!tokQ || tokQ.error) return null;
+      const parts = ['## TOKENOMICS QUICK VIEW'];
+      if (tokQ.pct_circulating != null) parts.push(`Circulating: ${tokQ.pct_circulating.toFixed(1)}%`);
+      if (tokQ.unlock_risk_label && tokQ.unlock_risk_label !== 'low') parts.push(`Unlock risk: ${tokQ.unlock_risk_label.toUpperCase()} ⚠️`);
+      if (tokQ.inflation_rate != null) parts.push(`Inflation: ${tokQ.inflation_rate.toFixed(1)}%/yr`);
+      if (tokQ.vesting_info?.team_allocation_pct != null && tokQ.vesting_info.team_allocation_pct > 20) {
+        parts.push(`Team allocation: ${tokQ.vesting_info.team_allocation_pct.toFixed(1)}% ⚠️`);
+      }
+      return parts.length > 1 ? parts.join(' | ') : null;
+    })(),
     `PROJECT: ${projectName}`,
     buildScoreSummary(scores),
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
@@ -1922,7 +2235,7 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
       }
       console.log(`[quick-llm] Grok response length: ${text.length}`);
       const parsed = JSON.parse(text);
-      const report = validateReport(normalizeReport(parsed, projectName, rawData, scores), rawData);
+      const report = validateReport(normalizeReport(parsed, projectName, rawData, scores), rawData, scores);
       console.log(`[quick-llm] x_sentiment: ${report.x_sentiment_summary?.substring(0, 60)}`);
       return report;
     } catch (err) {
@@ -1961,7 +2274,7 @@ export async function generateReport(projectName, rawData, scores, { apiKey: exp
       console.log(`[full-llm] Opus response length: ${text.length}`);
 
       const parsed = JSON.parse(text);
-      const report = validateReport(normalizeReport(parsed, projectName, rawData, scores), rawData);
+      const report = validateReport(normalizeReport(parsed, projectName, rawData, scores), rawData, scores);
       report._model = OPUS_MODEL;
       return report;
     } catch (err) {
@@ -1988,7 +2301,7 @@ export async function generateReport(projectName, rawData, scores, { apiKey: exp
     const text = extractOutputText(payload);
     const report = normalizeReport(JSON.parse(text), projectName, rawData, scores);
     report._model = REASONING_MODEL;
-    return validateReport(report, rawData);
+    return validateReport(report, rawData, scores);
   } catch (error) {
     return fallbackReport(
       projectName,
