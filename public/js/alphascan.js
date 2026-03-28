@@ -924,7 +924,10 @@
       });
 
 
-      const xSentiment = analysis?.x_sentiment_summary && analysis.x_sentiment_summary !== 'n/a';
+      // X Sentiment: prefer new structured news_analysis.x_sentiment, fallback to old LLM x_sentiment_summary
+      const newsAnalysis = payload?.news_analysis;
+      const xSentimentData = newsAnalysis?.x_sentiment;
+      const xSentiment = xSentimentData || (analysis?.x_sentiment_summary && analysis.x_sentiment_summary !== 'n/a');
 
       let panel3 = '';
       if (llmBull || llmBear) {
@@ -945,7 +948,27 @@
           ${llmBear?.failure_conditions ? `<div class="conditions"><strong>Failure conditions:</strong> ${escapeHtml(llmBear.failure_conditions)}</div>` : ''}
         </div>`;
         // X Sentiment as full-width row under bull/bear
-        const xRow = xSentiment ? `<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);"><span style="font-size:0.78rem;font-weight:700;color:#c5c5c5;text-transform:uppercase;letter-spacing:0.08em;">𝕏 Sentiment</span><div style="margin-top:6px;font-size:0.88rem;line-height:1.65;color:var(--text);">${formatAnalysisText(analysis.x_sentiment_summary)}</div></div>` : '';
+        let xRow = '';
+        if (xSentimentData) {
+          const sentColor = xSentimentData.dominant_sentiment === 'positive' ? '#86efac' : xSentimentData.dominant_sentiment === 'negative' ? '#f87171' : '#fbbf24';
+          const bullList = (xSentimentData.bullish_signals || []).slice(0, 4).map(s => `<li style="color:#86efac;font-size:0.82rem;">${escapeHtml(s)}</li>`).join('');
+          const bearList = (xSentimentData.bearish_signals || []).slice(0, 3).map(s => `<li style="color:#f87171;font-size:0.82rem;">${escapeHtml(s)}</li>`).join('');
+          const naPhase = newsAnalysis?.narrative_phase ? ` · <span style="color:#c084fc;">Phase: ${escapeHtml(newsAnalysis.narrative_phase)}</span>` : '';
+          const naInsight = newsAnalysis?.key_insight ? `<div style="margin-top:8px;font-size:0.86rem;color:var(--text);line-height:1.5;font-style:italic;">"${escapeHtml(newsAnalysis.key_insight)}"</div>` : '';
+          const naModel = newsAnalysis?.model_used ? ` · <span style="opacity:0.5;">via ${newsAnalysis.model_used === 'openclaw' ? 'Opus' : newsAnalysis.model_used}</span>` : '';
+          xRow = `<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);">
+            <span style="font-size:0.78rem;font-weight:700;color:#c5c5c5;text-transform:uppercase;letter-spacing:0.08em;">𝕏 Real-Time Sentiment</span>
+            <span style="float:right;font-size:0.75rem;color:${sentColor};font-weight:600;">${xSentimentData.dominant_sentiment?.toUpperCase() || '?'} (${xSentimentData.sources_found || '?'} posts)${naPhase}${naModel}</span>
+            <div style="margin-top:8px;font-size:0.88rem;line-height:1.65;color:var(--text);">${escapeHtml(xSentimentData.key_narrative || '')}</div>
+            ${naInsight}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+              ${bullList ? `<div><span style="font-size:0.72rem;font-weight:700;color:#86efac;text-transform:uppercase;">Bullish</span><ul style="margin:4px 0 0;padding-left:14px;">${bullList}</ul></div>` : ''}
+              ${bearList ? `<div><span style="font-size:0.72rem;font-weight:700;color:#f87171;text-transform:uppercase;">Bearish</span><ul style="margin:4px 0 0;padding-left:14px;">${bearList}</ul></div>` : ''}
+            </div>
+          </div>`;
+        } else if (xSentiment && analysis?.x_sentiment_summary) {
+          xRow = `<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06);"><span style="font-size:0.78rem;font-weight:700;color:#c5c5c5;text-transform:uppercase;letter-spacing:0.08em;">𝕏 Sentiment</span><div style="margin-top:6px;font-size:0.88rem;line-height:1.65;color:var(--text);">${formatAnalysisText(analysis.x_sentiment_summary)}</div></div>`;
+        }
         panel3 = `<section class="panel" style="margin-top:18px;">
           <div class="section-label">📊 Bull / Bear Analysis</div>
           <div class="bull-bear-grid">${bullCol}${bearCol}</div>
