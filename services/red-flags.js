@@ -343,14 +343,29 @@ export function detectRedFlags(rawData = {}, scores = {}) {
   }
 
   // 26. Round 56: Zero revenue despite significant fees — value extraction risk
+  // FIX (28 Mar 2026): DeFiLlama "revenue" only counts fees retained by the protocol/team.
+  // Buyback/burn programs redirect fees to token holders — DeFiLlama reports this as revenue=0
+  // but it IS value capture (the most investor-friendly kind). Check for buyback signals
+  // before flagging zero revenue.
   const fees7d = safeNum(onchain.fees_7d ?? 0);
   const revenue7d = safeNum(onchain.revenue_7d ?? 0);
   if (fees7d > 500_000 && revenue7d === 0) {
-    flags.push({
-      flag: 'zero_revenue_capture',
-      severity: 'warning',
-      detail: `Protocol generates $${(fees7d / 1000).toFixed(0)}K in fees but $0 revenue — all value flows to LPs, not token holders.`,
-    });
+    // Check for buyback/burn evidence from X sentiment or news analysis
+    const xSentiment = rawData?.x_social || rawData?.x_sentiment || {};
+    const xNarratives = (xSentiment.key_narratives || []).join(' ').toLowerCase();
+    const xSummary = (xSentiment.summary || '').toLowerCase();
+    const hasBuybackEvidence = xNarratives.includes('buyback') || xNarratives.includes('burn') ||
+      xSummary.includes('buyback') || xSummary.includes('burn') ||
+      xNarratives.includes('fee.*distribution') || xNarratives.includes('revenue.*sharing');
+    
+    if (!hasBuybackEvidence) {
+      flags.push({
+        flag: 'zero_revenue_capture',
+        severity: 'warning',
+        detail: `Protocol generates $${(fees7d / 1000).toFixed(0)}K in fees but $0 revenue — all value flows to LPs, not token holders.`,
+      });
+    }
+    // If buyback evidence exists, don't flag — fees ARE going to token holders via buyback/burn
   }
 
   // 27. Round 56: Extreme age imbalance — very old project with very low TVL/volume

@@ -689,7 +689,20 @@ function scoreOnchainHealth(onchain = {}, rawData = {}) {
   else if (activeAddresses7d > 1_000) raw += 0.1;
 
   // Round 57: revenue-to-fees ratio — value capture quality
-  const revenueToFees = onchain.fees_7d > 0 ? revenue / fees : null;
+  // FIX (28 Mar 2026): DeFiLlama "revenue" only counts fees retained by protocol/team.
+  // Buyback/burn programs redirect fees to token holders — DeFiLlama reports revenue=0
+  // but it IS value capture. Detect buyback evidence from X data and treat as high capture.
+  const xSocialForRev = rawData?.x_social || {};
+  const xNarrativesForRev = (xSocialForRev.key_narratives || []).join(' ').toLowerCase();
+  const xSummaryForRev = (xSocialForRev.summary || '').toLowerCase();
+  const hasBuybackSignal = xNarrativesForRev.includes('buyback') || xNarrativesForRev.includes('burn') ||
+    xSummaryForRev.includes('buyback') || xSummaryForRev.includes('burn');
+
+  let revenueToFees = onchain.fees_7d > 0 ? revenue / fees : null;
+  // If revenue=0 but buyback evidence exists, treat as high value capture
+  if (revenueToFees === 0 && hasBuybackSignal && fees > 1_000_000) {
+    revenueToFees = 0.9; // Buyback/burn = fees flow to token holders = ~90% effective capture
+  }
   let revCapture = 0;
   if (revenueToFees !== null) {
     if (revenueToFees >= 0.5) { revCapture = 0.4; }  // protocol keeps 50%+ = very healthy
