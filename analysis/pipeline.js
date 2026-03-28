@@ -230,7 +230,7 @@ export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectN
       });
       rawData.news_analysis = newsAnalysis;
     }
-  } catch (_) { /* non-critical — fallback to keyword analysis */ }
+  } catch (err) { console.error(`[pipeline:news] ${err.message}`); }
 
   // After news analysis, re-evaluate red flags with LLM context.
   // This allows exploit/unlock flags to be downgraded from critical to info

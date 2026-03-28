@@ -84,6 +84,7 @@ export async function analyzeNews(projectName, newsItems, options = {}) {
 async function analyzeNarrative(projectName, relevantItems, allNewsItems, options = {}) {
   const anthropicKey = options.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
   const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+  console.log(`[news-analyst] narrative: gatewayToken=${!!gatewayToken} anthropicKey=${!!anthropicKey} riskItems=${relevantItems.length}`);
   if (!anthropicKey && !gatewayToken) {
     console.error('[news-analyst] No ANTHROPIC_API_KEY or OPENCLAW_GATEWAY_TOKEN — falling back to heuristic');
     return keywordFallbackAnalysis(projectName, relevantItems);
@@ -214,7 +215,7 @@ Respond in JSON only:
       model_used: model,
     };
   } catch (err) {
-    console.error(`[news-analyst] Narrative error: ${err.message}`);
+    console.error(`[news-analyst] Narrative error: ${err.message} (stack: ${err.stack?.split('\n')[1]?.trim() || 'n/a'})`);
     return keywordFallbackAnalysis(projectName, relevantItems);
   }
 }
