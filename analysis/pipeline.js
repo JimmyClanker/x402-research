@@ -168,7 +168,7 @@ export function phaseEnrich(rawData, scores) {
  * @param {string} projectName
  * @returns {Promise<object>} asyncEnrichment
  */
-export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectName, scanMode = 'quick') {
+export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectName, scanMode = 'quick', exaService = null) {
   const category = rawData?.onchain?.category || null;
   let sectorComparison = null;
 
@@ -205,6 +205,27 @@ export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectN
   // Conviction score (Round 5)
   const conviction = calculateConviction(rawData, scores, enrichment);
   rawData.conviction = conviction;
+
+  // FIX (28 Mar 2026): Exa-powered tokenomics enrichment — corrects estimated data
+  // Only runs on full scans when tokenomics data is low quality (Messari unavailable)
+  if (scanMode === 'full' && rawData?.tokenomics) {
+    try {
+      const { enrichTokenomics, applyEnrichment } = await import('../collectors/tokenomics-enrichment.js');
+      // exaService is now passed as parameter to phaseEnrichAsync
+      const enrichment = await enrichTokenomics(projectName, exaService, rawData.tokenomics);
+      if (enrichment) {
+        rawData.tokenomics = applyEnrichment(rawData.tokenomics, enrichment);
+        rawData.tokenomics_enrichment = enrichment;
+        // Re-score tokenomics and distribution with enriched data
+        const { calculateScores: recalcScores } = await import('../synthesis/scoring.js');
+        const rescored = recalcScores(rawData);
+        if (rescored?.tokenomics_health) scores.tokenomics_health = rescored.tokenomics_health;
+        if (rescored?.distribution) scores.distribution = rescored.distribution;
+        if (rescored?.overall) scores.overall = rescored.overall;
+        console.log(`[pipeline] Tokenomics re-scored after enrichment: tok=${rescored?.tokenomics_health?.score}, dist=${rescored?.distribution?.score}`);
+      }
+    } catch (err) { console.error(`[pipeline:tokenomics-enrichment] ${err.message}`); }
+  }
 
   // FIX (28 Mar 2026): LLM-powered news analysis — contextualizes red flags.
   // Instead of "6 articles mention exploit = AVOID", the LLM determines if the
@@ -393,7 +414,7 @@ export async function runPipeline({ projectName, exaService, mode, config, colle
   }
 
   try {
-    await phaseEnrichAsync(rawData, scores, enrichment, db, projectName, mode);
+    await phaseEnrichAsync(rawData, scores, enrichment, db, projectName, mode, exaService);
   } catch (error) {
     throw withPipelineStage('async-enrichment', error, { projectName, mode });
   }

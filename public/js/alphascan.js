@@ -406,6 +406,7 @@
         ['Inflation rate','inflation_rate', raw?.tokenomics?.inflation_rate != null ? raw.tokenomics.inflation_rate.toFixed(1) + '%' + (raw.tokenomics.inflation_source === 'estimated_from_supply' ? ' (est.)' : '') : null,null],
         ['Dilution risk','dilution_risk',raw?.tokenomics?.dilution_risk,null],
         ['Distribution','fair_launch', raw?.tokenomics?.total_raised_usd === 0 || (raw?.tokenomics?.total_raised_usd == null && !raw?.tokenomics?.roi_data) ? '✅ Fair launch (no VC)' : (raw?.tokenomics?.total_raised_usd > 0 ? '$' + (raw.tokenomics.total_raised_usd / 1e6).toFixed(1) + 'M raised' : null),null],
+        ['Data source','tokenomics_source', raw?.tokenomics?.inflation_source === 'exa_enrichment' || raw?.tokenomics?.inflation_source === 'exa_enrichment_staking_apy' ? '🔍 Exa verified' : raw?.tokenomics?.inflation_source === 'messari' ? '📊 Messari' : raw?.tokenomics?.inflation_source === 'estimated_from_supply' ? '⚠️ Estimated (low confidence)' : null, null],
         ['DEX liquidity','dex_liquidity_usd',raw?.dex?.dex_liquidity_usd,null],
         ['DEX buy/sell','buy_sell_ratio',raw?.dex?.buy_sell_ratio,null],
         // Round 91 (AutoResearch): liquidity concentration risk
@@ -415,6 +416,36 @@
         const cls=type==='change'?` class="${changeClass(value)}"`:''
         return `<tr><th>${escapeHtml(label)}</th><td data-label="${escapeHtml(label)}"${cls}>${escapeHtml(formatMetricValue(label,key,value))}</td></tr>`;
       }).join('');
+    }
+
+    function renderTokenAllocationCard(tokenomics) {
+      const alloc = tokenomics?.token_allocation_enriched;
+      if (!alloc) return '';
+      const items = [
+        ['Community Airdrop', alloc.community_airdrop_pct, '#86efac'],
+        ['Future Emissions', alloc.future_emissions_pct, '#fbbf24'],
+        ['Team', alloc.team_pct, '#f87171'],
+        ['Foundation', alloc.foundation_pct, '#c084fc'],
+        ['Investors/VC', alloc.investors_vc_pct, '#fb923c'],
+        ['Treasury', alloc.treasury_pct, '#67e8f9'],
+        [alloc.other_label || 'Other', alloc.other_pct, '#9ca3af'],
+      ].filter(([,v]) => v != null && v > 0);
+      if (!items.length) return '';
+      const bars = items.map(([label, pct, color]) =>
+        `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;">
+          <div style="width:${Math.max(pct * 2.5, 8)}px;height:14px;background:${color};border-radius:3px;min-width:8px;"></div>
+          <span style="font-size:0.78rem;color:var(--text);">${escapeHtml(label)}: <strong>${pct.toFixed(1)}%</strong></span>
+        </div>`
+      ).join('');
+      const enrichMeta = tokenomics._enrichment;
+      const sourceNote = enrichMeta?.data_sources?.length 
+        ? `<div style="margin-top:6px;font-size:0.65rem;color:#666;">Sources: ${enrichMeta.data_sources.slice(0,2).map(u => `<a href="${escapeHtml(u)}" target="_blank" rel="noopener" style="color:#888;">${new URL(u).hostname}</a>`).join(', ')}</div>` 
+        : '';
+      return `<div style="margin-top:12px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+        <span style="font-size:0.72rem;font-weight:700;color:#c5c5c5;text-transform:uppercase;letter-spacing:0.08em;">Token Allocation</span>
+        <div style="margin-top:8px;">${bars}</div>
+        ${sourceNote}
+      </div>`;
     }
 
     function renderGithubCard(github) {
@@ -768,6 +799,7 @@
 
       const mr = metricRows(raw);
       const gc = renderGithubCard(raw?.github);
+      const tokenAllocCard = renderTokenAllocationCard(raw?.tokenomics);
 
       // ── Panel 1: Header + Verdict + Analysis ─────────────────────
       const panel1 = `<section class="panel">
@@ -880,6 +912,7 @@
                 <table class="table"><tbody>${mr}</tbody></table>
               </div>` : ''}
               ${gc || ''}
+              ${tokenAllocCard || ''}
             </div>` : ''}
           </div>
           <aside class="report-side-stack">

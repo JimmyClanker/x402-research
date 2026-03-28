@@ -1,6 +1,6 @@
 // Clawnkers Service Worker — offline landing page cache
 // Update version to force cache refresh on deploy
-const CACHE_NAME = 'clawnkers-v5-2026-03-28c';
+const CACHE_NAME = 'clawnkers-v6-2026-03-29a';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
