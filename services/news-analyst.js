@@ -83,8 +83,9 @@ export async function analyzeNews(projectName, newsItems, options = {}) {
 
 async function analyzeNarrative(projectName, relevantItems, allNewsItems, options = {}) {
   const anthropicKey = options.anthropicApiKey || process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) {
-    console.error('[news-analyst] No ANTHROPIC_API_KEY — falling back to heuristic');
+  const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+  if (!anthropicKey && !gatewayToken) {
+    console.error('[news-analyst] No ANTHROPIC_API_KEY or OPENCLAW_GATEWAY_TOKEN — falling back to heuristic');
     return keywordFallbackAnalysis(projectName, relevantItems);
   }
 
@@ -135,38 +136,69 @@ Respond in JSON only:
 }`;
 
   try {
-    const model = 'claude-sonnet-4-20250514';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+    const model = gatewayToken ? 'openclaw' : 'claude-sonnet-4-20250514';
+    let text = '';
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        system: 'You are a crypto risk analyst. Respond with valid JSON only, no markdown code blocks.',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 600,
-      }),
-      signal: controller.signal,
-    });
+    if (gatewayToken) {
+      // Preferred path: OpenClaw gateway → OAuth Opus (zero cost)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+      const response = await fetch('http://localhost:18789/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${gatewayToken}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a crypto risk analyst. Respond with valid JSON only, no markdown code blocks.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 800,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
-    clearTimeout(timeout);
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(`Gateway Opus ${response.status}: ${errBody.slice(0, 200)}`);
+      }
 
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      console.error(`[news-analyst] Opus ${response.status}: ${errBody.slice(0, 200)}`);
-      return keywordFallbackAnalysis(projectName, relevantItems);
+      const data = await response.json();
+      text = (data.choices?.[0]?.message?.content || '').trim();
+    } else {
+      // Fallback: direct Anthropic API (costs money)
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          system: 'You are a crypto risk analyst. Respond with valid JSON only, no markdown code blocks.',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 600,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(`Anthropic ${response.status}: ${errBody.slice(0, 200)}`);
+      }
+
+      const data = await response.json();
+      text = (data.content?.[0]?.text || '').trim();
     }
-
-    const data = await response.json();
-    const text = (data.content?.[0]?.text || '').trim();
-
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error('[news-analyst] Failed to parse Opus JSON response');
