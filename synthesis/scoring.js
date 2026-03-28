@@ -1246,9 +1246,9 @@ function scoreTokenomicsRisk(tokenomics = {}, rawData = {}) {
   return {
     score: clampScore(raw),
     tokenomics_risk_score: tokenomicsRiskScore,
-    reasoning: `Circulating supply ${pctCirculating.toFixed(2)}% (CoinGecko), unlock overhang ${unlockOverhangPct != null ? `${unlockOverhangPct.toFixed(1)}%` : 'n/a'} (${dilutionRisk || 'unknown'} dilution risk), inflation ${inflation.toFixed(2)}%${tokenomics.inflation_source === 'estimated_from_supply' ? ' ⚠️ ESTIMATED (Messari unavailable — derived from supply ratio, may be inaccurate)' : ''}, distribution ${hasDistribution ? 'available' : 'missing'}${isFairLaunch ? ', fair launch (no VC/private sale — community distributed)' : ''}, tokenomics_risk_score ${tokenomicsRiskScore}/100 (higher=safer).`,
-    confidence: tokenomics._enrichment ? 55 : (tokenomics.inflation_source === 'estimated_from_supply' ? 15 : (hasDistribution ? 70 : 30)),
-    data_quality: tokenomics._enrichment ? 'moderate — Exa enriched (allocation verified, inflation may still be estimated)' : (tokenomics.inflation_source === 'estimated_from_supply' ? 'low — primary source (Messari) unavailable, using CoinGecko supply ratios + estimates' : (hasDistribution ? 'good' : 'partial')),
+    reasoning: `Circulating supply ${pctCirculating.toFixed(2)}% (CoinGecko), unlock overhang ${unlockOverhangPct != null ? `${unlockOverhangPct.toFixed(1)}%` : 'n/a'} (${dilutionRisk || 'unknown'} dilution risk), inflation ${tokenomics.inflation_rate != null ? inflation.toFixed(2) + '% (' + (tokenomics.inflation_source || 'unknown source') + ')' : 'unknown (no reliable source)'}, distribution ${hasDistribution ? 'available' : 'missing'}${isFairLaunch ? ', fair launch (no VC/private sale — community distributed)' : ''}${tokenomics._enrichment ? ', allocation verified via Exa (' + (tokenomics._enrichment.data_sources?.length || 0) + ' sources)' : ''}, tokenomics_risk_score ${tokenomicsRiskScore}/100 (higher=safer).`,
+    confidence: tokenomics._enrichment ? 65 : (tokenomics.inflation_source === 'messari' ? 70 : (hasDistribution ? 50 : 20)),
+    data_quality: tokenomics._enrichment ? 'verified — allocation data from multiple web sources' : (tokenomics.inflation_source === 'messari' ? 'good — Messari data' : 'limited — CoinGecko supply data only'),
   };
 }
 

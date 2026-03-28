@@ -403,10 +403,10 @@
         ['Commits 90d','commits_90d',raw?.github?.commits_90d,null],
         ['Pct circulating','pct_circulating',raw?.tokenomics?.pct_circulating,null],
         ['Unlock overhang','unlock_overhang_pct',raw?.tokenomics?.unlock_overhang_pct != null ? raw.tokenomics.unlock_overhang_pct.toFixed(1) + '%' : null,null],
-        ['Inflation rate','inflation_rate', raw?.tokenomics?.inflation_rate != null ? raw.tokenomics.inflation_rate.toFixed(1) + '%' + (raw.tokenomics.inflation_source === 'estimated_from_supply' ? ' (est.)' : '') : null,null],
+        ['Inflation rate','inflation_rate', raw?.tokenomics?.inflation_rate != null ? raw.tokenomics.inflation_rate.toFixed(1) + '% (' + (raw?.tokenomics?.inflation_source || 'source unknown') + ')' : null,null],
         ['Dilution risk','dilution_risk',raw?.tokenomics?.dilution_risk,null],
         ['Distribution','fair_launch', raw?.tokenomics?.total_raised_usd === 0 || (raw?.tokenomics?.total_raised_usd == null && !raw?.tokenomics?.roi_data) ? '✅ Fair launch (no VC)' : (raw?.tokenomics?.total_raised_usd > 0 ? '$' + (raw.tokenomics.total_raised_usd / 1e6).toFixed(1) + 'M raised' : null),null],
-        ['Data source','tokenomics_source', raw?.tokenomics?.inflation_source === 'exa_enrichment' || raw?.tokenomics?.inflation_source === 'exa_enrichment_staking_apy' ? '🔍 Exa verified' : raw?.tokenomics?.inflation_source === 'messari' ? '📊 Messari' : raw?.tokenomics?.inflation_source === 'estimated_from_supply' ? '⚠️ Estimated (low confidence)' : null, null],
+        ['Data source','tokenomics_source', raw?.tokenomics?._enrichment ? '🔍 Verified (' + (raw.tokenomics._enrichment.data_sources?.length || 0) + ' sources)' : raw?.tokenomics?.inflation_source === 'messari' ? '📊 Messari' : '📊 CoinGecko', null],
         ['DEX liquidity','dex_liquidity_usd',raw?.dex?.dex_liquidity_usd,null],
         ['DEX buy/sell','buy_sell_ratio',raw?.dex?.buy_sell_ratio,null],
         // Round 91 (AutoResearch): liquidity concentration risk

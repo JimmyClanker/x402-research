@@ -99,12 +99,12 @@ async function extractTokenomicsFromResults(projectName, exaResults, currentData
 
 ${context}
 
-Current data from CoinGecko/Messari (may be inaccurate):
+Current data from CoinGecko (may be incomplete):
 - Circulating supply %: ${currentData.pct_circulating?.toFixed(1) ?? 'unknown'}%
-- Inflation rate: ${currentData.inflation_rate ?? 'unknown'}%
-- Inflation source: ${currentData.inflation_source ?? 'unknown'}
+- Total supply: ${currentData.total_supply ?? 'unknown'}
+- Max supply: ${currentData.max_supply ?? 'unknown'}
 
-Return a JSON object with ONLY values you found explicitly stated in the sources. Use null for anything not found:
+Return a JSON object with ONLY values you found EXPLICITLY stated in the sources. Use null for ANYTHING not clearly stated — never estimate, never calculate, never infer:
 
 {
   "token_allocation": {
@@ -117,18 +117,20 @@ Return a JSON object with ONLY values you found explicitly stated in the sources
     "other_pct": <number or null>,
     "other_label": <string or null>
   },
-  "has_vc_funding": <true/false/null>,
+  "has_vc_funding": <true/false/null — false only if sources explicitly state no VC, or if no investor allocation exists>,
   "total_raised_usd": <number or null>,
-  "real_inflation_rate": <number or null - annual % if stated>,
-  "staking_apy": <number or null>,
-  "buyback_burn": <true/false/null>,
-  "vesting_team_months": <number or null - total vesting period in months>,
+  "real_inflation_rate": <number or null — ONLY if a source explicitly states an annual inflation rate>,
+  "staking_apy": <number or null — ONLY if a source explicitly states current staking APY>,
+  "buyback_burn": <true/false/null — true only if sources confirm buyback or burn mechanism>,
+  "revenue_to_holders": <string or null — describe how fees/revenue flow to token holders if stated>,
+  "vesting_team_months": <number or null — total vesting period in months>,
+  "vesting_team_cliff_months": <number or null — cliff period before any team tokens unlock>,
   "tge_date": <"YYYY-MM-DD" or null>,
-  "data_sources": [<list of source URLs used>],
-  "confidence_note": <brief note on data quality>
+  "data_sources": [<list of source URLs that contained useful data>],
+  "confidence_note": <brief note on data quality and any discrepancies between sources>
 }
 
-IMPORTANT: Only extract what is EXPLICITLY stated. Do not calculate or estimate.`;
+CRITICAL: null is ALWAYS better than a guess. If you're not 100% sure a value is explicitly stated in the sources, use null.`;
 
   try {
     const response = await fetch(OPENCLAW_GATEWAY_URL, {
