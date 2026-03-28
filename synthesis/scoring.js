@@ -569,12 +569,17 @@ function scoreOnchainHealth(onchain = {}, rawData = {}) {
   // Round 149 (AutoResearch): Zero fees penalty for established DeFi protocols
   // A protocol with significant TVL but zero fees = no value capture → token has no fundamental backing
   // Round 355 (AutoResearch): reuse `fees` var (already computed identically above) — remove duplicate
+  // FIX (28 Mar 2026): For very large TVL ($1B+), fees=0 almost certainly means the data source
+  // (DeFiLlama) doesn't track this protocol's fees, not that it generates zero revenue.
+  // Example: Hyperliquid generates millions/day but DeFiLlama reports $0.
+  // Only apply penalty for mid-range TVL where zero fees is a genuine signal.
   const tvlForFees = safeNumber(onchain.tvl ?? 0);
-  if (tvlForFees > 10_000_000 && fees === 0) {
+  if (tvlForFees > 10_000_000 && tvlForFees < 1_000_000_000 && fees === 0) {
     raw -= 1.5; // Significant TVL but zero fee generation = speculative/mercenary capital
-  } else if (tvlForFees > 1_000_000 && fees === 0) {
+  } else if (tvlForFees > 1_000_000 && tvlForFees < 1_000_000_000 && fees === 0) {
     raw -= 0.7; // Smaller TVL, still concerning
   }
+  // For $1B+ TVL with zero fees: no penalty (data likely missing from source)
 
   // Scale trend contribution: ±200% maps to ±2 points (25 divisor kept but capped input)
   raw += Math.max(Math.min((trend7d + trend30d) / 25, 3), -2);
@@ -888,20 +893,43 @@ function scoreSocialMomentum(social = {}) {
   };
 }
 
-function scoreDevelopment(github = {}) {
+function scoreDevelopment(github = {}, rawData = {}) {
   // Round 126 (AutoResearch): when no github data at all (error or empty), return 3.0 (unknown/slightly negative)
   // rather than 4.0 - which unfairly rewards missing data with a near-neutral score.
   // 3.0 signals "we don't know, but absence of evidence on dev activity is mildly concerning"
+  //
+  // FIX (28 Mar 2026): Many top protocols (Hyperliquid, etc.) are closed-source by design.
+  // For large-cap projects ($1B+ mcap) with real onchain activity (TVL > $100M), closed-source
+  // is a business choice, not a red flag. Return 5.0 (neutral) instead of 3.0 (negative).
+  // Check if there's any meaningful GitHub activity (not just zero-value fields)
   const hasGithubData = !github.error && (
     github.contributors != null || github.commits_90d != null ||
     github.stars != null || github.forks != null
   );
-  if (!hasGithubData) {
-    return {
-      score: 3.0,
-      dev_quality_index: 0,
-      reasoning: 'No GitHub data available — development activity unverifiable. Score defaulted to 3.0 (unknown/mildly negative).',
-    };
+  const hasActualActivity = hasGithubData && (
+    safeNumber(github.commits_90d) > 0 || safeNumber(github.stars) > 0 ||
+    safeNumber(github.contributors) > 0 || safeNumber(github.forks) > 0
+  );
+  // FIX (28 Mar 2026): Distinguish "no data at all" from "data found but all zeros" from "active dev"
+  // For large-cap closed-source projects, all-zeros is expected and should be neutral.
+  const mcapForDev = safeNumber(rawData?.coingecko?.market_cap ?? rawData?.market?.market_cap ?? 0);
+  const tvlForDev = safeNumber(rawData?.onchain?.tvl ?? 0);
+  const isLargeCapClosedSource = mcapForDev > 1_000_000_000 && tvlForDev > 100_000_000;
+  if (!hasGithubData || (!hasActualActivity && isLargeCapClosedSource)) {
+    if (isLargeCapClosedSource) {
+      return {
+        score: 5.0,
+        dev_quality_index: 0,
+        reasoning: `No verifiable GitHub activity — likely closed-source protocol ($${(mcapForDev / 1e9).toFixed(1)}B mcap, $${(tvlForDev / 1e9).toFixed(1)}B TVL). Score defaulted to 5.0 (neutral for established closed-source projects).`,
+      };
+    }
+    if (!hasGithubData) {
+      return {
+        score: 3.0,
+        dev_quality_index: 0,
+        reasoning: 'No GitHub data available — development activity unverifiable. Score defaulted to 3.0 (unknown/mildly negative).',
+      };
+    }
   }
 
   const contributors = safeNumber(github.contributors);
@@ -1072,7 +1100,7 @@ function scoreDevelopment(github = {}) {
   };
 }
 
-function scoreTokenomicsRisk(tokenomics = {}) {
+function scoreTokenomicsRisk(tokenomics = {}, rawData = {}) {
   // Round 129 (AutoResearch): No tokenomics data guard → neutral 5.0 (unknown)
   // Note: tokenomics may have an error field AND still carry partial data (fallback values).
   // We check for actual numerical fields, not the error flag, to avoid discarding valid fallbacks.
@@ -1135,7 +1163,14 @@ function scoreTokenomicsRisk(tokenomics = {}) {
   raw += hasRoiData ? 0.3 : 0;
 
   // Additional dilution risk penalty using unlock overhang
-  if (dilutionRisk === 'high') raw -= 1.0;
+  // FIX (28 Mar 2026): For protocols with very high TVL ($1B+), high dilution risk is partially
+  // offset by strong capital attraction. A protocol that attracts $4B+ TVL clearly has product-market
+  // fit, so unlock overhang is less concerning (buyers exist to absorb unlocks).
+  if (dilutionRisk === 'high') {
+    const tvlForDilution = safeNumber(rawData?.onchain?.tvl ?? 0);
+    if (tvlForDilution > 1_000_000_000) raw -= 0.4;      // Large TVL offsets some dilution risk
+    else raw -= 1.0;
+  }
   else if (dilutionRisk === 'medium') raw -= 0.4;
   // 'low' → no penalty (already captured in pctCirculating bonus)
 
@@ -1562,8 +1597,8 @@ export function calculateScores(data) {
   const market_strength   = scoreMarketStrength(safeCollector(data?.market));
   const onchain_health    = scoreOnchainHealth(safeCollector(data?.onchain), data);
   const social_momentum   = scoreSocialMomentum(safeCollector(data?.social));
-  const development       = scoreDevelopment(safeCollector(data?.github));
-  const tokenomics_health = scoreTokenomicsRisk(safeCollector(data?.tokenomics));
+  const development       = scoreDevelopment(safeCollector(data?.github), data);
+  const tokenomics_health = scoreTokenomicsRisk(safeCollector(data?.tokenomics), data);
   const distribution      = scoreDistribution(safeCollector(data?.tokenomics), safeCollector(data?.market));
 
   // Round 237 (AutoResearch nightly): DEX sell wall risk penalty for distribution score
