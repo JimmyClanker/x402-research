@@ -307,14 +307,16 @@ export async function collectSocial(projectName, exaService) {
       .map(({ title, url, date }) => ({ title, url, date }));
 
     // Round 23: detect unlock/exploit mentions as specific risk signals
-    const unlockMentions = uniqueNews.filter((item) => {
+    const unlockItems = uniqueNews.filter((item) => {
       const text = `${item.title} ${item.highlights.join(' ')}`.toLowerCase();
       return /unlock|vesting|cliff|token release/.test(text);
-    }).length;
-    const exploitMentions = uniqueNews.filter((item) => {
+    });
+    const unlockMentions = unlockItems.length;
+    const exploitItems = uniqueNews.filter((item) => {
       const text = `${item.title} ${item.highlights.join(' ')}`.toLowerCase();
       return /exploit|hack|breach|vulnerability|attack/.test(text);
-    }).length;
+    });
+    const exploitMentions = exploitItems.length;
 
     // Round 41: detect institutional/whale mentions (positive signal)
     const institutionalMentions = uniqueNews.filter((item) => {
@@ -338,10 +340,11 @@ export async function collectSocial(projectName, exaService) {
       : null;
 
     // Round 41: detect regulatory mentions (risk signal)
-    const regulatoryMentions = uniqueNews.filter((item) => {
+    const regulatoryItems = uniqueNews.filter((item) => {
       const text = `${item.title} ${item.highlights.join(' ')}`.toLowerCase();
       return /regulatory|sec|cftc|ban|comply|compliance|lawsuit|fine|sanction|seizure/.test(text);
-    }).length;
+    });
+    const regulatoryMentions = regulatoryItems.length;
 
     // Round 9 (AutoResearch batch): partnership mentions (positive catalyst)
     const partnershipMentions = uniqueNews.filter((item) => {
@@ -451,10 +454,16 @@ export async function collectSocial(projectName, exaService) {
       sentiment_counts: sentimentCounts,
       sentiment_dominance: sentimentDominance != null ? Math.round(sentimentDominance * 100) / 100 : null,
       key_narratives: extractNarratives(uniqueNews, projectName),
-      // FIX (28 Mar 2026): Store full news items for LLM news analyst (needs highlights for context)
-      _raw_news: uniqueNews.slice(0, 15).map(({ title, url, date, highlights }) => ({
-        title, url, date, highlights: (highlights || []).slice(0, 3),
-      })),
+      // FIX (28 Mar 2026): Store news items for LLM news analyst
+      // Merge risk-flagged items with top-by-date, deduplicated, for full context
+      _raw_news: (() => {
+        const riskItems = [...exploitItems, ...unlockItems, ...regulatoryItems];
+        const riskUrls = new Set(riskItems.map(i => i.url));
+        const topByDate = uniqueNews.filter(i => !riskUrls.has(i.url)).slice(0, 10);
+        return [...riskItems, ...topByDate].slice(0, 20).map(({ title, url, date, highlights }) => ({
+          title, url, date, highlights: (highlights || []).slice(0, 3),
+        }));
+      })(),
       recent_news: recentNews,
       unlock_mentions: unlockMentions,
       exploit_mentions: exploitMentions,

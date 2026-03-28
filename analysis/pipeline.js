@@ -168,7 +168,7 @@ export function phaseEnrich(rawData, scores) {
  * @param {string} projectName
  * @returns {Promise<object>} asyncEnrichment
  */
-export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectName) {
+export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectName, scanMode = 'quick') {
   const category = rawData?.onchain?.category || null;
   let sectorComparison = null;
 
@@ -224,6 +224,8 @@ export async function phaseEnrichAsync(rawData, scores, enrichment, db, projectN
       (rawData?.social?.regulatory_mentions ?? 0) > 0;
     if (newsItems.length > 0 && hasRiskMentions) {
       newsAnalysis = await analyzeNews(projectName, newsItems, {
+        mode: scanMode,  // quick = heuristic, full = Opus + Grok X
+        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
         xaiApiKey: process.env.XAI_API_KEY,
       });
       rawData.news_analysis = newsAnalysis;
@@ -344,6 +346,7 @@ export async function phaseSynthesize({
 
   if (sectorComparison) response.sector_comparison = sectorComparison;
   if (scanVersion !== null) response.scan_version = scanVersion;
+  if (enrichment?.newsAnalysis) response.news_analysis = enrichment.newsAnalysis;
 
   // Score velocity
   if (db) {
@@ -390,7 +393,7 @@ export async function runPipeline({ projectName, exaService, mode, config, colle
   }
 
   try {
-    await phaseEnrichAsync(rawData, scores, enrichment, db, projectName);
+    await phaseEnrichAsync(rawData, scores, enrichment, db, projectName, mode);
   } catch (error) {
     throw withPipelineStage('async-enrichment', error, { projectName, mode });
   }
