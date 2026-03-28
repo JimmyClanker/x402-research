@@ -1174,6 +1174,26 @@ function scoreTokenomicsRisk(tokenomics = {}, rawData = {}) {
   else if (dilutionRisk === 'medium') raw -= 0.4;
   // 'low' → no penalty (already captured in pctCirculating bonus)
 
+  // FIX (28 Mar 2026): Fee-burn yield bonus — protocols that generate significant fees
+  // relative to market cap effectively offset inflation through token burns/buybacks.
+  // Fee yield > inflation rate = de facto deflationary despite nominal inflation.
+  // This is critical for protocols like Hyperliquid (30% inflation but $774M annualized fees
+  // on $9.5B mcap = 8.1% fee yield, with 99% of fees burned → net deflationary).
+  const fees7dForBurn = safeNumber(rawData?.onchain?.fees_7d ?? 0);
+  const mcapForBurn = safeNumber(rawData?.coingecko?.market_cap ?? rawData?.market?.market_cap ?? 0);
+  if (fees7dForBurn > 0 && mcapForBurn > 0) {
+    const annualizedFees = fees7dForBurn * 52;
+    const feeYieldPct = (annualizedFees / mcapForBurn) * 100;
+    // Fee yield > 5% = strong revenue generation → significant inflation offset
+    if (feeYieldPct > 10) raw += 1.5;        // Exceptional fee generation (>10% of mcap/year)
+    else if (feeYieldPct > 5) raw += 1.0;    // Strong fee generation (5-10% of mcap/year)
+    else if (feeYieldPct > 2) raw += 0.5;    // Moderate fee generation (2-5% of mcap/year)
+    // If fee yield exceeds inflation, the token is effectively deflationary — bonus
+    if (feeYieldPct > inflation && inflation > 0) {
+      raw += 0.5; // Fee-burn exceeds inflation = net deflationary dynamics
+    }
+  }
+
   // Round 87 (AutoResearch): raised/mcap ratio penalty
   // Projects that raised heavily relative to mcap have large investor unlock overhang
   // even when pct_circulating looks OK (VC allocations count as "circulating")
@@ -1203,7 +1223,7 @@ function scoreTokenomicsRisk(tokenomics = {}, rawData = {}) {
   };
 }
 
-function scoreDistribution(tokenomics = {}, market = {}) {
+function scoreDistribution(tokenomics = {}, market = {}, rawData = {}) {
   // Round 131 (AutoResearch): No data guard → neutral 5.0
   const hasDistributionData = tokenomics && (
     tokenomics.pct_circulating != null ||
@@ -1263,6 +1283,23 @@ function scoreDistribution(tokenomics = {}, market = {}) {
 
   // Distribution data availability bonus
   if (dist) { raw += 0.3; parts.push('distribution data available'); }
+
+  // FIX (28 Mar 2026): Fee revenue as distribution quality signal.
+  // Protocols generating significant fees relative to FDV have organic demand for the token,
+  // which offsets unlock/dilution risk — buyers exist to absorb supply increases.
+  const feesForDist = safeNumber(rawData?.onchain?.fees_7d ?? 0);
+  const mcapForDist = safeNumber(market.market_cap ?? 0);
+  if (feesForDist > 0 && mcapForDist > 0) {
+    const annualizedFeesDist = feesForDist * 52;
+    const feeYieldDist = (annualizedFeesDist / mcapForDist) * 100;
+    if (feeYieldDist > 5) {
+      raw += 1.0;
+      parts.push(`TVL inflow $${(rawData?.onchain?.tvl ? rawData.onchain.tvl / 1e6 : 0).toFixed(0)}M, fee yield ${feeYieldDist.toFixed(1)}%/yr: organic demand offsets unlock risk (+1.0)`);
+    } else if (feeYieldDist > 2) {
+      raw += 0.5;
+      parts.push(`fee yield ${feeYieldDist.toFixed(1)}%/yr: moderate demand signal (+0.5)`);
+    }
+  }
 
   // Round R10 (AutoResearch nightly): vesting launch_date cliff timing
   // A protocol that launched <1 year ago has its first major cliff approaching — unlock risk is live
@@ -1599,7 +1636,7 @@ export function calculateScores(data) {
   const social_momentum   = scoreSocialMomentum(safeCollector(data?.social));
   const development       = scoreDevelopment(safeCollector(data?.github), data);
   const tokenomics_health = scoreTokenomicsRisk(safeCollector(data?.tokenomics), data);
-  const distribution      = scoreDistribution(safeCollector(data?.tokenomics), safeCollector(data?.market));
+  const distribution      = scoreDistribution(safeCollector(data?.tokenomics), safeCollector(data?.market), data);
 
   // Round 237 (AutoResearch nightly): DEX sell wall risk penalty for distribution score
   // Active distribution on DEX combined with high unlock risk = compounded negative pressure on holders
