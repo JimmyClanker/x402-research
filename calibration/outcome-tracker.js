@@ -37,6 +37,52 @@ export async function fetchCurrentPrice(coingeckoId) {
 }
 
 /**
+ * Batch fetch current prices for multiple tokens (max ~250 per request).
+ * CoinGecko simple/price accepts comma-separated IDs.
+ * @param {string[]} ids - Array of CoinGecko IDs
+ * @returns {Promise<Map<string, number>>} Map of id → price
+ */
+export async function fetchBatchPrices(ids) {
+  const results = new Map();
+  if (!ids.length) return results;
+  
+  // CoinGecko accepts up to ~250 IDs per request, split into chunks of 100
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + CHUNK_SIZE);
+    const idsParam = chunk.join(',');
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(idsParam)}&vs_currencies=usd`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        console.warn(`[outcome-tracker] Batch price fetch failed: ${res.status} (chunk ${i / CHUNK_SIZE + 1})`);
+        // Wait and retry once
+        await new Promise(r => setTimeout(r, 60000));
+        const retry = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (retry.ok) {
+          const data = await retry.json();
+          for (const [id, val] of Object.entries(data)) {
+            if (val?.usd != null) results.set(id, val.usd);
+          }
+        }
+        continue;
+      }
+      const data = await res.json();
+      for (const [id, val] of Object.entries(data)) {
+        if (val?.usd != null) results.set(id, val.usd);
+      }
+    } catch (err) {
+      console.warn(`[outcome-tracker] Batch price fetch error: ${err.message}`);
+    }
+    // Rate limit between chunks
+    if (i + CHUNK_SIZE < ids.length) {
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+  return results;
+}
+
+/**
  * Fetch current BTC price (cached 5min).
  * @returns {Promise<number|null>}
  */
@@ -156,22 +202,27 @@ export async function trackOutcomes({
 
   console.log(`[outcome-tracker] Found ${snapshots.length} snapshots, ${pendingWork.length} outcomes to calculate`);
 
-  // Batch price fetch: one fetch per unique token, not per snapshot
+  // Batch price fetch: use CoinGecko batch endpoint (much more efficient)
   const uniqueTokens = [...new Set(pendingWork.map(w => (w.coingecko_id || w.project_name).toLowerCase()))];
-  console.log(`[outcome-tracker] Fetching prices for ${uniqueTokens.length} unique tokens...`);
+  console.log(`[outcome-tracker] Fetching prices for ${uniqueTokens.length} unique tokens (batch mode)...`);
 
-  const priceCache = new Map();
-  let fetchCount = 0;
-  for (const tokenId of uniqueTokens) {
-    const price = await fetchPrice(tokenId);
-    if (price != null) priceCache.set(tokenId, price);
-    fetchCount++;
-    if (fetchCount % 5 === 0 && fetchCount < uniqueTokens.length) {
-      await new Promise(r => setTimeout(r, rateLimitMs));
+  let priceCache;
+  if (fetchPriceFn) {
+    // Custom price function provided (testing) — fall back to per-token fetch
+    priceCache = new Map();
+    for (const tokenId of uniqueTokens) {
+      const price = await fetchPriceFn(tokenId);
+      if (price != null) priceCache.set(tokenId, price);
+      if (priceCache.size % 5 === 0 && priceCache.size < uniqueTokens.length) {
+        await new Promise(r => setTimeout(r, rateLimitMs));
+      }
     }
+  } else {
+    // Use efficient batch fetch
+    priceCache = await fetchBatchPrices(uniqueTokens);
   }
 
-  const btcNow = await fetchBtc();
+  const btcNow = priceCache.get('bitcoin') ?? await fetchBtc();
   console.log(`[outcome-tracker] Got prices for ${priceCache.size}/${uniqueTokens.length} tokens, BTC=$${btcNow ?? 'n/a'}`);
 
   const insertOutcome = db.prepare(`
@@ -196,8 +247,11 @@ export async function trackOutcomes({
       try {
         const returnPct = calcReturn(work.price_then, priceNow);
         const btcReturnPct = calcReturn(work.btc_price_then, btcNow);
-        const relativeReturnPct =
-          returnPct != null && btcReturnPct != null ? returnPct - btcReturnPct : null;
+
+        // Fix: if the token IS Bitcoin, relative return is always 0 (can't outperform itself)
+        const isBtc = tokenKey === 'bitcoin' || tokenKey === 'btc';
+        const relativeReturnPct = isBtc ? 0 :
+          (returnPct != null && btcReturnPct != null ? returnPct - btcReturnPct : null);
 
         insertOutcome.run(
           work.snapshot_id,

@@ -234,6 +234,20 @@ async function fetchPriceFallback(projectName) {
 
 export async function storeScanSnapshot(projectName, rawData = {}, scores = {}) {
   const db = getCalibrationDb();
+
+  // Dedup: max 1 snapshot per token per 4-hour window (prevents spam from web UI testing)
+  const DEDUP_HOURS = 4;
+  const cutoff = new Date(Date.now() - DEDUP_HOURS * 60 * 60 * 1000).toISOString();
+  const recentSnap = db.prepare(`
+    SELECT id FROM token_snapshots 
+    WHERE LOWER(project_name) = LOWER(?) AND snapshot_at > ?
+    ORDER BY snapshot_at DESC LIMIT 1
+  `).get(projectName, cutoff);
+  if (recentSnap) {
+    console.log(`[snapshot-store] Dedup: skipping ${projectName} — snapshot #${recentSnap.id} exists within ${DEDUP_HOURS}h`);
+    return recentSnap.id;
+  }
+
   const btcPrice = await getBtcPrice();
   const universe = extractUniverseRecord(projectName, rawData);
   const snapshot = extractSnapshotRecord(projectName, rawData, btcPrice);
