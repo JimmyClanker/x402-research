@@ -3417,3 +3417,160 @@ Focus: responsive layout, spacing, typography, loading states, animations, acces
 - **Tests:** 179/179 pass
 
 ### Round 30 — Commit R21-30: 4 files, 57 insertions — pushed to main
+
+---
+
+## AutoResearch Batch: R31-60 — Scoring Accuracy & Calibration (2026-03-28 01:30)
+
+**Focus:** Scoring accuracy, edge cases, circuit breaker improvements, graceful degradation for incomplete data.
+**Tests:** 179/179 pass throughout all rounds.
+
+### Round 31 — clampScore: NaN/Infinity guard
+- **Change:** `clampScore()` now returns 5.0 (neutral) for NaN/Infinity inputs instead of propagating `NaN` into downstream calculations.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 32 — interpolateWeights: confidence=0 and NaN guard
+- **Change:** `interpolateWeights()` guards against `confidence=NaN`, `Infinity`, or negative values — falls back to pure default weights at confidence=0.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 179/179 pass
+
+### Round 33 — meme_token blending: guard mcap=0/null/NaN in log10
+- **Change:** Added explicit `Number.isFinite(mcap) && mcap >= 1_000_000_000` check before log10. Prevents `log10(0) = -Infinity` and `log10(null) = NaN` from corrupting `blendFactor`.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 179/179 pass
+
+### Round 34 — CATEGORY_MAP: add missing ecosystem slugs
+- **Change:** Added wrapped-token, LST, yield-bearing, NFT-lending, NFT-infrastructure, Move/Aptos/Sui ecosystem slug mappings.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 179/179 pass
+
+### Round 35 — Circuit breaker: zombie protocol
+- **Change:** New critical circuit breaker — project ≥4 years old with zero dev activity AND <$100K TVL → cap 4.0.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 36 — Circuit breaker: safeNum guard on whale concentration
+- **Change:** Whale concentration now read via `safeNum()` to prevent NaN/string inputs from bypassing the >70% check.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 37 — Circuit breaker: tiered TVL/MCap mercenary capital
+- **Change:** TVL/MCap ratio now tiered: >15x → cap 6.0 (unchanged), >30x → cap 5.5 (new, extreme mercenary capital).
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 38 — scoreTokenomicsRisk: floor pctCirculating at 0
+- **Change:** `Math.max(0, ...)` applied to `pctCirculating` — negative values from corrupted CoinGecko data no longer produce `raw -= 1` penalty incorrectly.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 39 — calculateConfidence: distinguish zero-value market fields from missing
+- **Change:** `marketConf === 0` fallback to 10 now only applies when there are any non-null market keys (partial response), not when market object is completely empty.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 40 — computePTVLAdjustment: explicit positive-only guard
+- **Change:** Changed `!mcap || !tvl || tvl <= 0` to `mcap <= 0 || tvl <= 0` — explicit guard against negative mcap/tvl inputs that `!mcap` would miss (e.g. `-1` is truthy).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 41 — scoreRisk: normalize volatility when only 7d data available
+- **Change:** 7d-only volatility now scaled by 0.6 before applying thresholds — weekly moves are larger than daily by nature, so using raw 7d% with 24h thresholds over-penalized risk score.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 42 — Circuit breaker: tiered DEX liquidity thin zone
+- **Change:** Added new warning tier: $50K-$200K DEX liquidity → cap 7.0. Previously nothing between $50K (cap 5.5) and no-cap.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 43 — scoreDistribution: floor pctCirculating at 0
+- **Change:** Consistent with R38 — same `Math.max(0, ...)` guard applied in `scoreDistribution()`.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 44 — Circuit breaker: circulating supply >110% data anomaly
+- **Change:** New warning cap (6.5) when CoinGecko reports circulating supply >110% of max supply (physically impossible — data corruption).
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 45 — scoreDevelopment: cap commits_90d at 10K
+- **Change:** Explicit `Math.min(safeNumber(commits_90d), 10_000)` — monorepos (Solana, Go, etc.) sometimes report 50K+ commits/90d which would max out the bonus regardless.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 46 — Circuit breaker: silent crash
+- **Change:** New critical cap (3.5) — token drops >70% in 7d with zero social mentions (price collapses silently = exploit, delisting, or stealth team exit).
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 47 — category-weights: new nft_fi category
+- **Change:** Added `nft_fi` weight set (onchain 0.28, risk 0.10, social 0.15) + CATEGORY_MAP entries for nft-lending, nft-fi, nft-collateral, etc.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 179/179 pass
+
+### Round 48 — scoreSocialMomentum: fix double-counting narrative_freshness_score
+- **Change:** Rounds 381 and 383 both applied `narrative_freshness_score` bonuses independently (max +0.5 combined). Unified into single block with cap at +0.4.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 49 — scoreOnchainHealth: NaN guard on P/TVL adjustment
+- **Change:** Added `Number.isFinite(ptvlResult.adjustment)` check before applying P/TVL adjustment to `raw`.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 50 — calculateConfidence: closed-source github → N/A (50) not error (0)
+- **Change:** `github.error = "not found"` / `"closed source"` / `"private"` → devConf=50 (N/A, neutral). Only actual API errors → devConf=0.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 51 — scoreDevelopment: clamp daysSinceCommit to [0, 3650]
+- **Change:** Future commit dates (timezone issues) now clamped to 0; very old/invalid dates capped at 3650d (10 years = max staleness).
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 52 — Circuit breaker: FDV < MCap data anomaly
+- **Change:** New warning cap (6.5) when FDV < 95% of MCap — physically impossible (circulating > max supply), signals corrupted CoinGecko tokenomics data.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 53 — scoreDevelopment: fix issuePressure denominator
+- **Change:** `issuePressure` now capped at 50. For zero-commit projects, uses `openIssues/5` (virtual commit) instead of raw `openIssues` to avoid extreme values.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 54 — category-weights: new cex_token category
+- **Change:** Added `cex_token` weight set (market 0.22, tokenomics 0.22, dev 0.08) for exchange tokens (BNB, OKB, KCS). + CATEGORY_MAP entries.
+- **Files:** `scoring/category-weights.js`
+- **Tests:** 179/179 pass
+
+### Round 55 — scoreOnchainHealth: cap tvlPerUser at $10M
+- **Change:** `Math.min(tvlForEff / activeUsersForEff, 10_000_000)` — extreme outliers (1-user protocols) no longer get unbounded tvlPerUser bonuses.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 56 — calculateScores: fix shadowed NEUTRAL const
+- **Change:** Renamed inner `NEUTRAL = 5.5` (in confidence regression block) to `REGRESSION_NEUTRAL` — was shadowing outer `const NEUTRAL = 5.0`, potentially confusing future maintainers and linters.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 57 — Circuit breaker: coordinated dump signal
+- **Change:** New critical cap (4.5) — sentiment < -0.6 + ≥15 mentions + price drop >20% in 24h = coordinated FUD/exit event.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 58 — calculateConfidence: NaN guard on weighted sum
+- **Change:** Each confidence dimension now validated with `Number.isFinite()` before weighted sum — non-finite values replaced with neutral 50 to prevent NaN propagating to `overall_confidence`.
+- **Files:** `synthesis/scoring.js`
+- **Tests:** 179/179 pass
+
+### Round 59 — Circuit breaker: sub-10% completeness critical tier
+- **Change:** New tiered completeness breaker: <10% → critical cap 4.0 (single data point = unreliable). Previously lowest tier was <20% → warning cap 5.0.
+- **Files:** `scoring/circuit-breakers.js`
+- **Tests:** 179/179 pass
+
+### Round 60 — Commit R31-40, R41-50, R51-60 — pushed to main
+- **Commits:** 3 commits pushed (b235d16, d86a616, 465703e)
+- **Total changes:** 8 files, 294 insertions, 53 deletions
+- **Tests:** 179/179 pass throughout
