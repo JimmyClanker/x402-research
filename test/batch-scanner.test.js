@@ -333,10 +333,13 @@ test('trackOutcomes: updates outcomes for snapshots at checkpoints', async () =>
     assert.ok(outcome, 'Should have outcome record');
     assert.equal(outcome.price_then, 50000);
     assert.equal(outcome.price_now, 55000);
-    assert.equal(outcome.btc_price_now, 48000);
+    // With fetchPriceFn, btcNow comes from priceCache.get('bitcoin') (55000), not fetchBtcFn
+    assert.equal(outcome.btc_price_now, 55000);
 
     // return_pct = (55000-50000)/50000 * 100 = 10
     assert.ok(Math.abs(outcome.return_pct - 10) < 0.01, `return_pct should be ~10, got ${outcome.return_pct}`);
+    // BTC relative return is always 0 (can't outperform itself)
+    assert.equal(outcome.relative_return_pct, 0, 'BTC relative return should be 0');
   } finally {
     cleanup();
   }

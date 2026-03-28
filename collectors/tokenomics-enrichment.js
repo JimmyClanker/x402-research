@@ -34,7 +34,7 @@ async function searchTokenomicsData(projectName) {
   }
 
   try {
-    const query = `${projectName} token tokenomics allocation distribution breakdown team community vesting percentage`;
+    const query = `${projectName} token tokenomics allocation distribution team investors community vesting unlock schedule 2024 2025 2026`;
     const response = await fetch('https://api.exa.ai/search', {
       method: 'POST',
       headers: {
