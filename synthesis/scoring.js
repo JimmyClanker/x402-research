@@ -7,6 +7,8 @@ import { safeNumber, safeNum, weightedAvg } from '../utils/math.js';
 // weightedAvg automatically rebalances weights when fields are null — no more manual null checks.
 
 function clampScore(value) {
+  // Round 31 (AutoResearch): guard NaN/Infinity inputs — avoids NaN propagating into overall score
+  if (!Number.isFinite(value)) return 5.0; // fallback to neutral for invalid inputs
   return Math.min(10, Math.max(1, Number(value.toFixed(1))));
 }
 
@@ -33,7 +35,13 @@ export function calculateConfidence(rawData = {}) {
     if (market.market_cap != null && Number(market.market_cap) > 0) marketConf += 25;
     if (market.price_change_pct_24h != null) marketConf += 15;
     if (market.market_cap_rank != null) marketConf += 15;
-    if (marketConf === 0) marketConf = 10; // minimal: price data available but zero
+    // Round 39 (AutoResearch): differentiate zero-value fields from missing fields
+    // If market object has keys but all numeric values are 0 or missing-non-null, it's a partial
+    // result (API returned structure but no data). Give 10 instead of 0 to avoid misclassifying
+    // as "error state" — but also don't reward it with a non-trivial confidence score.
+    // If marketConf is still 0 but we have at least some non-null fields: partial data
+    const hasAnyMarketKey = market.current_price != null || market.market_cap != null || market.total_volume != null;
+    if (marketConf === 0 && hasAnyMarketKey) marketConf = 10; // partial response with zero values
   }
 
   // Onchain — Round 138: graduated (4 key fields)
@@ -178,7 +186,8 @@ export function calculateConfidence(rawData = {}) {
  */
 export function computePTVLAdjustment(mcap, tvl) {
   // Round 351 (AutoResearch): guard against NaN inputs (safeNumber of NaN-producing expressions)
-  if (!mcap || !tvl || tvl <= 0 || !Number.isFinite(mcap) || !Number.isFinite(tvl)) return { adjustment: 0, ptvl: null, label: 'n/a' };
+  // Round 40 (AutoResearch): explicit positive-only guard — mcap or tvl <= 0 produces nonsense P/TVL ratios
+  if (mcap == null || tvl == null || mcap <= 0 || tvl <= 0 || !Number.isFinite(mcap) || !Number.isFinite(tvl)) return { adjustment: 0, ptvl: null, label: 'n/a' };
   const ptvl = mcap / tvl;
   let adjustment = 0;
   let label;
@@ -1010,7 +1019,9 @@ function scoreTokenomicsRisk(tokenomics = {}) {
     };
   }
   // Cap at 100 — CoinGecko sometimes reports circulating > total due to rounding
-  const pctCirculating = Math.min(safeNumber(tokenomics.pct_circulating), 100);
+  // Round 38 (AutoResearch): also floor at 0 — negative pctCirculating from bad data would give
+  // a spurious raw -= 1 penalty (the else branch) AND corrupt tokenomicsRiskScore calculation
+  const pctCirculating = Math.max(0, Math.min(safeNumber(tokenomics.pct_circulating), 100));
   const inflation = safeNumber(tokenomics.inflation_rate);
   const hasDistribution = tokenomics.token_distribution ? 1 : 0;
   const hasRoiData = tokenomics.roi_data ? 1 : 0;

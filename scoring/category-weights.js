@@ -299,6 +299,22 @@ export const CATEGORY_MAP = {
   'social-graph': 'consumer_crypto',
   'decentralized-social': 'consumer_crypto',
   'farcaster-ecosystem': 'consumer_crypto',
+  // Round 34 (AutoResearch): wrapped assets, LSTs, and yield-bearing variants
+  // These are derivative representations of other assets — default weights are most appropriate
+  'wrapped-tokens': 'default',
+  'wrapped-token': 'default',
+  'wrapped': 'default',
+  'liquid-staking-derivative': 'liquid_staking',
+  'lst': 'liquid_staking',
+  'yield-bearing': 'defi_lending',
+  // Round 34: NFT infrastructure — more dev-heavy than gaming, less social
+  'nft-infrastructure': 'infra_tooling',
+  'nft-marketplace': 'nft_gaming',
+  'nft-lending': 'defi_lending',
+  // Round 34: Move/Aptos/Sui ecosystem tokens
+  'move-ecosystem': 'layer_1',
+  'aptos-ecosystem': 'layer_1',
+  'sui-ecosystem': 'layer_1',
 };
 
 // ─── Boot-time validation ────────────────────────────────────────────────────
@@ -356,8 +372,10 @@ function interpolateWeights(categoryWeights, confidence) {
   if (confidence >= 0.5) return { ...categoryWeights };
   const defaultW = CATEGORY_WEIGHTS.default;
   const effective = {};
+  // Round 32 (AutoResearch): guard confidence=0 and NaN/Infinity — return pure default at 0 confidence
+  const safeConf = Number.isFinite(confidence) && confidence >= 0 ? confidence : 0;
   for (const dim of DIMS) {
-    effective[dim] = categoryWeights[dim] * confidence + defaultW[dim] * (1 - confidence);
+    effective[dim] = (categoryWeights[dim] ?? defaultW[dim]) * safeConf + defaultW[dim] * (1 - safeConf);
   }
   return effective;
 }
@@ -394,16 +412,20 @@ export function getCategoryWeights(rawData = {}) {
       let effectiveWeights = interpolateWeights(CATEGORY_WEIGHTS[resolved], confidence);
       if (resolved === 'meme_token') {
         const mcap = safeNum(market?.market_cap ?? 0);
-        if (mcap >= 1_000_000_000) {
+        // Round 33 (AutoResearch): guard against mcap=0, null, NaN, or negative values in log10
+        // log10(0) = -Infinity; log10(negative) = NaN — both produce invalid blendFactor
+        if (mcap != null && Number.isFinite(mcap) && mcap >= 1_000_000_000) {
           const blendFactor = Math.min((Math.log10(mcap / 1e9) / Math.log10(10)) * 0.3, 0.3); // 0 at $1B, 0.3 at $10B+
-          if (blendFactor > 0) {
+          if (Number.isFinite(blendFactor) && blendFactor > 0) {
             const l1W = CATEGORY_WEIGHTS.layer_1;
             for (const dim of DIMS) {
               effectiveWeights[dim] = effectiveWeights[dim] * (1 - blendFactor) + l1W[dim] * blendFactor;
             }
             // Renormalize to ensure sum = 1.0
             const total = DIMS.reduce((a, d) => a + effectiveWeights[d], 0);
-            for (const dim of DIMS) effectiveWeights[dim] = effectiveWeights[dim] / total;
+            if (total > 0) {
+              for (const dim of DIMS) effectiveWeights[dim] = effectiveWeights[dim] / total;
+            }
           }
         }
       }

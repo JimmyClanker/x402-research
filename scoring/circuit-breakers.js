@@ -20,7 +20,9 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
 
   // Whale concentration > 70%
   // Round 345 (AutoResearch): include collector field name 'top10_holder_concentration_pct' in fallback chain
-  const whaleConc = holders.top10_concentration ?? holders.concentration_pct ?? holders.top10_concentration_pct ?? holders.top10_holder_concentration_pct ?? 0;
+  // Round 36 (AutoResearch): use safeNum to guard NaN/Infinity/string inputs from holder data
+  const _rawWhaleConc = holders.top10_concentration ?? holders.concentration_pct ?? holders.top10_concentration_pct ?? holders.top10_holder_concentration_pct ?? 0;
+  const whaleConc = safeNum(_rawWhaleConc) ?? 0;
   if (whaleConc > 70) {
     breakers.push({
       cap: 4.0,
@@ -471,7 +473,15 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
   const mcapR238b = safeNum(market.market_cap ?? 0);
   if (tvlR238b > 0 && mcapR238b > 2_000_000) {
     const tvlMcapRatio = tvlR238b / mcapR238b;
-    if (tvlMcapRatio > 15) {
+    // Round 37 (AutoResearch): tiered TVL/MCap caps — extreme ratio is stronger signal
+    // 15x → warning cap 6.0 (original); 30x → stronger warning cap 5.5 (mercenary liquidity near certain)
+    if (tvlMcapRatio > 30) {
+      breakers.push({
+        cap: 5.5,
+        reason: `TVL ($${(tvlR238b / 1e6).toFixed(1)}M) is ${tvlMcapRatio.toFixed(0)}x market cap ($${(mcapR238b / 1e6).toFixed(1)}M) — extreme mercenary capital concentration, mass exit risk when incentives end`,
+        severity: 'warning',
+      });
+    } else if (tvlMcapRatio > 15) {
       breakers.push({
         cap: 6.0,
         reason: `TVL ($${(tvlR238b / 1e6).toFixed(1)}M) is ${tvlMcapRatio.toFixed(0)}x market cap ($${(mcapR238b / 1e6).toFixed(1)}M) — likely mercenary incentivized capital that will exit when rewards end`,
@@ -599,6 +609,30 @@ export function applyCircuitBreakers(overallScore, rawData, scores, redFlags) {
       reason: `$${(mcapCB / 1e6).toFixed(0)}M MCap project with zero tier-1 news coverage — information vacuum prevents high-conviction BUY rating.`,
       severity: 'warning',
     });
+  }
+
+  // Round 35 (AutoResearch): Zombie protocol circuit breaker
+  // A project with >4 years since genesis, zero dev activity, and <$100K TVL is effectively dead.
+  // Prevents false BUY signals from old, abandoned protocols with residual market cap.
+  const genesisDateCB35 = market.genesis_date;
+  const github35 = rawData?.github ?? {};
+  const tvlCB35 = safeNum(onchain.tvl ?? 0);
+  const commits90dCB35 = safeNum(github35.commits_90d ?? -1); // -1 = data not present
+  if (genesisDateCB35) {
+    const gd35 = new Date(genesisDateCB35);
+    const ageMs35 = Date.now() - gd35.getTime();
+    if (Number.isFinite(ageMs35) && ageMs35 > 0) {
+      const ageYears35 = ageMs35 / (1000 * 60 * 60 * 24 * 365.25);
+      const hasNoDevActivity = commits90dCB35 === 0 || github35.commit_trend === 'inactive';
+      const hasDeadTvl = tvlCB35 >= 0 && tvlCB35 < 100_000; // either zero or very low
+      if (ageYears35 >= 4 && hasNoDevActivity && hasDeadTvl) {
+        breakers.push({
+          cap: 4.0,
+          reason: `Zombie protocol: ${ageYears35.toFixed(1)} years old with zero dev activity and <$100K TVL — project appears abandoned.`,
+          severity: 'critical',
+        });
+      }
+    }
   }
 
   // Applica il cap più restrittivo
