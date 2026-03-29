@@ -6,8 +6,9 @@ import { safeNum } from '../utils/math.js';
 
 
 function fmtNum(value) {
-  const n = safeNum(value, 0);
-  if (n === 0) return null;
+  if (value == null) return 'N/A';
+  const n = safeNum(value);
+  if (n == null || n === 0) return n === 0 ? '$0' : 'N/A';
   if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;

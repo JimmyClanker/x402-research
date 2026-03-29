@@ -1,14 +1,46 @@
 const XAI_RESPONSES_URL = 'https://api.x.ai/v1/responses';
+const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions';
 const DEFAULT_TIMEOUT_MS = 60000;
 const FAST_MODEL = 'grok-4-1-fast-non-reasoning';
 const REASONING_MODEL = 'grok-4.20-multi-agent-0309';
+const GROK_CHAT_MODEL = 'grok-4-0709';
+
+/**
+ * Robust JSON parse — handles truncated/malformed LLM output.
+ * Tries: (1) direct parse, (2) extract first {...}, (3) repair common issues.
+ */
+function robustJsonParse(text) {
+  // Try direct parse
+  try { return JSON.parse(text); } catch (_) {}
+
+  // Extract first JSON object
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON object found in response');
+  let json = match[0];
+
+  // Try extracted
+  try { return JSON.parse(json); } catch (_) {}
+
+  // Repair: remove trailing comma before }
+  json = json.replace(/,\s*([}\]])/g, '$1');
+  try { return JSON.parse(json); } catch (_) {}
+
+  // Repair: truncated — find last complete key-value and close
+  const lastGoodBrace = json.lastIndexOf('"}');
+  if (lastGoodBrace > 0) {
+    const truncated = json.slice(0, lastGoodBrace + 2) + '}';
+    try { return JSON.parse(truncated); } catch (_) {}
+  }
+
+  throw new Error(`JSON parse failed after repair attempts (length=${text.length})`);
+}
 
 // Opus via OpenClaw gateway (OAuth, zero cost) — falls back to direct Anthropic API if gateway unavailable
 const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://localhost:18789/v1/chat/completions';
 const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const OPUS_MODEL = 'anthropic/claude-opus-4-6'; // OpenClaw gateway model ID
-const OPUS_MODEL_DIRECT = 'claude-opus-4-20250514'; // Direct Anthropic API model ID
+const OPUS_MODEL = 'anthropic/claude-sonnet-4-6'; // OpenClaw gateway model ID
+const OPUS_MODEL_DIRECT = 'claude-sonnet-4-20250514'; // Direct Anthropic API model ID
 const OPUS_TIMEOUT_MS = 90000;
 const FALLBACK_VERDICTS = [
   { min: 8.5, verdict: 'STRONG BUY' },
@@ -2594,9 +2626,51 @@ export async function generateQuickReport(projectName, rawData, scores, { apiKey
 }
 
 export async function generateReport(projectName, rawData, scores, { apiKey: explicitKey, anthropicKey: explicitAnthropicKey } = {}) {
-  // Try Opus via OpenClaw gateway (OAuth, free) or direct API
+  const xaiKey = explicitKey || process.env.XAI_API_KEY;
   const anthropicKey = explicitAnthropicKey || process.env.ANTHROPIC_API_KEY;
   const hasGateway = !!(OPENCLAW_GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN);
+
+  // PRIMARY: Grok Chat API (fast, reliable JSON output, free with xAI key)
+  if (xaiKey) {
+    try {
+      const { system, user } = buildOpusPrompt(projectName, rawData, scores);
+      const chatResp = await withTimeout(DEFAULT_TIMEOUT_MS, (signal) =>
+        fetch(XAI_CHAT_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${xaiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: GROK_CHAT_MODEL,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user + '\n\nRespond with valid JSON only. Start with {' },
+            ],
+            max_tokens: 4096,
+            temperature: 0.1,
+          }),
+          signal,
+        })
+      );
+      if (chatResp.ok) {
+        const chatData = await chatResp.json();
+        const chatText = chatData?.choices?.[0]?.message?.content || '';
+        if (chatText.length > 50) {
+          const parsed = robustJsonParse(chatText);
+          const report = validateReport(normalizeReport(parsed, projectName, rawData, scores), rawData, scores);
+          report._model = GROK_CHAT_MODEL;
+          console.log(`[full-llm] Grok Chat report OK (${chatText.length} chars)`);
+          return report;
+        }
+      }
+      console.error(`[full-llm] Grok Chat failed: HTTP ${chatResp.status}`);
+    } catch (err) {
+      console.error(`[full-llm] Grok Chat error: ${err.message}`);
+    }
+  }
+
+  // FALLBACK 1: Opus via OpenClaw gateway or direct Anthropic API
   if (hasGateway || anthropicKey) {
     try {
       const { system, user } = buildOpusPrompt(projectName, rawData, scores);
@@ -2609,43 +2683,37 @@ export async function generateReport(projectName, rawData, scores, { apiKey: exp
       });
 
       if (!text || text.length < 50) throw new Error('Empty Opus response');
-      console.log(`[full-llm] Opus response length: ${text.length}`);
+      console.log(`[full-llm] Opus response OK (${text.length} chars)`);
 
-      const parsed = JSON.parse(text);
+      const parsed = robustJsonParse(text);
       const report = validateReport(normalizeReport(parsed, projectName, rawData, scores), rawData, scores);
       report._model = OPUS_MODEL;
       return report;
     } catch (err) {
       console.error(`[full-llm] Opus failed: ${err.message}`);
-      // Fall through to Grok reasoning as backup
     }
   }
 
-  // Fallback: Grok reasoning (original behavior)
-  const xaiKey = explicitKey || process.env.XAI_API_KEY;
-  if (!xaiKey) {
-    return fallbackReport(projectName, rawData, scores, 'No LLM API key available (ANTHROPIC_API_KEY and XAI_API_KEY both missing)');
+  // FALLBACK 2: Grok Responses API (reasoning, with web+X search tools)
+  if (xaiKey) {
+    const prompt = buildPrompt(projectName, rawData, scores);
+    try {
+      const payload = await requestXai({
+        apiKey: xaiKey,
+        model: REASONING_MODEL,
+        input: prompt,
+        tools: [{ type: 'web_search' }, { type: 'x_search' }],
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const text = extractOutputText(payload);
+      const report = normalizeReport(robustJsonParse(text), projectName, rawData, scores);
+      report._model = REASONING_MODEL;
+      return validateReport(report, rawData, scores);
+    } catch (error) {
+      console.error(`[full-llm] Grok Responses error: ${error.message}`);
+    }
   }
 
-  const prompt = buildPrompt(projectName, rawData, scores);
-  try {
-    const payload = await requestXai({
-      apiKey: xaiKey,
-      model: REASONING_MODEL,
-      input: prompt,
-      tools: [{ type: 'web_search' }, { type: 'x_search' }],
-      timeoutMs: DEFAULT_TIMEOUT_MS,
-    });
-    const text = extractOutputText(payload);
-    const report = normalizeReport(JSON.parse(text), projectName, rawData, scores);
-    report._model = REASONING_MODEL;
-    return validateReport(report, rawData, scores);
-  } catch (error) {
-    return fallbackReport(
-      projectName,
-      rawData,
-      scores,
-      error.name === 'AbortError' ? 'xAI timeout' : error.message
-    );
-  }
+  // FALLBACK 3: algorithmic-only report
+  return fallbackReport(projectName, rawData, scores, 'All LLM providers failed');
 }

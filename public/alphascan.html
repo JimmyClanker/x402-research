@@ -114,25 +114,7 @@
     }
 
     /* Round 28 (UX batch): light mode fallback (minimal — site is designed dark-first) */
-    @media (prefers-color-scheme: light) {
-      :root {
-        /* Override only the most critical contrast values for light mode users who don't have dark mode */
-        --bg: #f4f4f4;
-        --surface: #ffffff;
-        --surface2: #f8f8f8;
-        --text: #111111;
-        --muted: #555555;
-        --muted2: #444444;
-        --border: rgba(0,0,0,0.12);
-        --border-hover: rgba(0,0,0,0.22);
-        --shadow: 0 4px 24px rgba(0,0,0,0.15);
-        --shadow-lg: 0 8px 48px rgba(0,0,0,0.18);
-      }
-      body { background: var(--bg); color: var(--text); }
-      /* Keep dark header for brand consistency */
-      header { background: #111 !important; border-color: rgba(255,255,255,0.08) !important; }
-      header * { color: #e8e8e8; }
-    }
+    /* Light mode override removed — always dark theme */
 
     /* Round 7 (UX batch): forced-colors / Windows High Contrast Mode */
     @media (forced-colors: active) {
