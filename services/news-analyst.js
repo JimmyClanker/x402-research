@@ -12,6 +12,8 @@
 
 const ANALYSIS_TIMEOUT_MS = 20_000;
 const X_SEARCH_TIMEOUT_MS = 15_000;
+const XAI_CHAT_URL = 'https://api.x.ai/v1/chat/completions';
+const GROK_CHAT_MODEL = 'grok-4-0709';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main entry point
@@ -136,12 +138,59 @@ Respond in JSON only:
   "narrative_phase": "accumulation" | "markup" | "distribution" | "markdown" | "unclear"
 }`;
 
-  try {
-    const model = gatewayToken ? 'openclaw' : 'claude-sonnet-4-20250514';
-    let text = '';
+  // PRIMARY: Grok Chat API (fast, reliable JSON, zero gateway dependency)
+  const xaiKey = process.env.XAI_API_KEY;
+  if (xaiKey) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+      const response = await fetch(XAI_CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${xaiKey}`,
+        },
+        body: JSON.stringify({
+          model: GROK_CHAT_MODEL,
+          messages: [
+            { role: 'system', content: 'You are a crypto risk analyst. Respond with valid JSON only, no markdown code blocks.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 800,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
 
+      if (response.ok) {
+        const data = await response.json();
+        const text = (data.choices?.[0]?.message?.content || '').trim();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const analysis = JSON.parse(jsonMatch[0]);
+          console.log(`[news-analyst] Grok Chat OK (${text.length} chars)`);
+          return {
+            ...createEmptyAnalysis(),
+            ...analysis,
+            analyzed: true,
+            items_analyzed: relevantItems.length,
+            model_used: GROK_CHAT_MODEL,
+          };
+        }
+      } else {
+        const errBody = await response.text().catch(() => '');
+        console.error(`[news-analyst] Grok Chat ${response.status}: ${errBody.slice(0, 200)}`);
+      }
+    } catch (err) {
+      console.error(`[news-analyst] Grok Chat error: ${err.message}`);
+    }
+  }
+
+  // FALLBACK 1: OpenClaw gateway → OAuth Opus (zero cost)
+  try {
+    let text = '';
     if (gatewayToken) {
-      // Preferred path: OpenClaw gateway → OAuth Opus (zero cost)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
       const response = await fetch('http://localhost:18789/v1/chat/completions', {
@@ -151,7 +200,7 @@ Respond in JSON only:
           'Authorization': `Bearer ${gatewayToken}`,
         },
         body: JSON.stringify({
-          model,
+          model: 'openclaw',
           messages: [
             { role: 'system', content: 'You are a crypto risk analyst. Respond with valid JSON only, no markdown code blocks.' },
             { role: 'user', content: prompt },
@@ -165,13 +214,13 @@ Respond in JSON only:
 
       if (!response.ok) {
         const errBody = await response.text().catch(() => '');
-        throw new Error(`Gateway Opus ${response.status}: ${errBody.slice(0, 200)}`);
+        throw new Error(`Gateway ${response.status}: ${errBody.slice(0, 200)}`);
       }
 
       const data = await response.json();
       text = (data.choices?.[0]?.message?.content || '').trim();
-    } else {
-      // Fallback: direct Anthropic API (costs money)
+    } else if (anthropicKey) {
+      // FALLBACK 2: direct Anthropic API (costs money)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -182,7 +231,7 @@ Respond in JSON only:
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model,
+          model: 'claude-sonnet-4-20250514',
           system: 'You are a crypto risk analyst. Respond with valid JSON only, no markdown code blocks.',
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.1,
@@ -199,10 +248,13 @@ Respond in JSON only:
 
       const data = await response.json();
       text = (data.content?.[0]?.text || '').trim();
+    } else {
+      throw new Error('No gateway token and no ANTHROPIC_API_KEY');
     }
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('[news-analyst] Failed to parse Opus JSON response');
+      console.error('[news-analyst] Failed to parse fallback JSON response');
       return keywordFallbackAnalysis(projectName, relevantItems);
     }
 
@@ -212,7 +264,7 @@ Respond in JSON only:
       ...analysis,
       analyzed: true,
       items_analyzed: relevantItems.length,
-      model_used: model,
+      model_used: gatewayToken ? 'openclaw' : 'claude-sonnet-4-20250514',
     };
   } catch (err) {
     console.error(`[news-analyst] Narrative error: ${err.message} (stack: ${err.stack?.split('\n')[1]?.trim() || 'n/a'})`);

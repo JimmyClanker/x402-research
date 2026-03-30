@@ -29,6 +29,9 @@ export function createApp({
   const config = providedConfig || loadConfig(env);
   const app = express();
 
+  // Trust Cloudflare Tunnel proxy (X-Forwarded-For) so rate limiting counts real IPs
+  app.set('trust proxy', 1);
+
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
