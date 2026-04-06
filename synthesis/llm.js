@@ -967,9 +967,49 @@ export function buildDataSummary(rawData = {}) {
     lines.push('');
   }
 
-  // Data gaps summary
+  // Round 15: Fear & Greed index context for sentiment calibration
+  const fgi = rawData?.fear_greed;
+  if (fgi && !fgi.error && fgi.value != null) {
+    lines.push(`\nMARKET SENTIMENT (Fear & Greed Index: ${fgi.value}/100 — ${fgi.value_classification || 'unknown'}):`);
+    lines.push(`Context: ${fgi.value >= 75 ? 'Extreme greed — broad market may be overbought, price targets may be optimistic' : fgi.value >= 55 ? 'Greed — positive sentiment but not extreme' : fgi.value >= 45 ? 'Neutral — no strong sentiment bias' : fgi.value >= 25 ? 'Fear — negative sentiment, potential contrarian opportunity' : 'Extreme fear — panic selling, potential bottom-fishing zone'}`);
+    lines.push('→ Factor this into your verdict: in extreme fear, HOLD/AVOID may be premature. In extreme greed, BUY calls need stronger fundamentals.');
+  }
+
+  // Round 17: Exchange listing context
+  const exchCount = rawData?.market?.exchange_count;
+  if (exchCount != null) {
+    lines.push(`\nEXCHANGE LISTINGS: ${exchCount} active exchanges`);
+    if (exchCount === 0) {
+      lines.push('⚠️ ZERO exchange listings — only DEX trading available. This limits liquidity and accessibility for larger investors.');
+    } else if (exchCount < 5) {
+      lines.push('Limited exchange access — token may have lower liquidity and higher slippage on CEX.');
+    } else if (exchCount >= 10) {
+      lines.push('Wide exchange availability — strong liquidity and accessibility signal.');
+    }
+  }
+
+  // Round 13: Enhanced data gaps with explicit LLM warnings
   if (gaps.length) {
     lines.push(`DATA GAPS: ${gaps.join(', ')}`);
+    // Explicit warnings for critical missing data
+    const criticalGaps = gaps.filter(g =>
+      g.includes('market') || g.includes('onchain') || g.includes('github')
+    );
+    if (criticalGaps.length >= 2) {
+      lines.push('⚠️ CRITICAL DATA GAPS: Multiple core collectors failed. Your analysis should note these limitations explicitly. Do not fabricate data for missing collectors — say "data not available" instead.');
+    }
+    if (gaps.includes('market: data not available')) {
+      lines.push('⚠️ NO MARKET DATA: You cannot cite price, market cap, volume, or price changes. Write "No market data available" in relevant sections.');
+    }
+    if (gaps.includes('onchain: data not available')) {
+      lines.push('⚠️ NO ONCHAIN DATA: You cannot cite TVL, fees, revenue, or protocol metrics. Do not invent these numbers.');
+    }
+    if (gaps.includes('github: data not available')) {
+      lines.push('⚠️ NO GITHUB DATA: You cannot cite commits, contributors, or development activity. Do not claim the project is "active" or "well-developed" without evidence.');
+    }
+    if (gaps.includes('tokenomics: data not available')) {
+      lines.push('⚠️ NO TOKENOMICS DATA: You cannot cite circulating supply %, inflation rate, or vesting. Do not make supply-related claims.');
+    }
   }
 
   return lines.join('\n');
@@ -1321,6 +1361,8 @@ function buildPrompt(projectName, rawData, scores) {
     '3. If you wrote something you cannot trace to data or search results, DELETE IT.',
     '4. "I don\'t have data for this" is ALWAYS better than making something up.',
     '5. Shorter and accurate > longer and fabricated.',
+    '6. When RAW_DATA_SUMMARY says a collector has NO data or shows an error, you MUST NOT fabricate that data. Write "No [market/onchain/social/GitHub/tokenomics] data available for this scan." in the relevant section.',
+    '7. Do NOT copy numbers between sections. Each paragraph must use DIFFERENT metrics. If you already cited TVL in paragraph 1, do NOT cite it again in paragraph 2 or 3.',
 
     `PROJECT: ${projectName}`,
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
@@ -1874,7 +1916,73 @@ export function validateReport(report, rawData, scores = null) {
     }
   }
 
-  // 7b. Round R165: Validate bull/bear case thesis quality — must contain at least one number
+  // Round 18: Detect sentiment fabrication — bullish/bearish claims when no social data
+  if (report.analysis_text && !hasSocialData) {
+    const fabricatedSentimentPatterns = [
+      /strong\s+(?:bullish|positive)\s+(?:sentiment|narrative|momentum)/i,
+      /widely\s+(?:discussed|mentioned|covered)/i,
+      /growing\s+(?:community|interest|enthusiasm)/i,
+      /twitter.*?(?:bullish|excited|optimistic)/i,
+      /x\s*\/\s*twitter.*?(?:positive|negative|bearish|bullish)/i,
+      /social\s+(?:media|sentiment).{0,30}(?:positive|negative|strong|weak)/i,
+    ];
+    for (const pattern of fabricatedSentimentPatterns) {
+      const match = report.analysis_text.match(pattern);
+      if (match) {
+        warnings.push(`analysis_text makes sentiment claim ("${match[0].substring(0, 60)}") but NO social collector data available — likely fabricated`);
+        break; // one warning is enough
+      }
+    }
+  }
+
+  // Round 11: Validate price change percentages in analysis_text vs RAW_DATA
+  if (report.analysis_text && rawData?.market) {
+    const priceChanges = {
+      '24h': rawData.market.price_change_percentage_24h || rawData.market.pct_24h,
+      '7d': rawData.market.price_change_percentage_7d_in_currency,
+      '30d': rawData.market.price_change_percentage_30d_in_currency,
+    };
+    const timeframePatterns = [
+      { label: '24h', regex: /(-?\d+(?:\.\d+)?)\s*%\s*(?:in\s+)?24h|24h\s*(?:change|drop|gain|gain|pump|dump|correction)?\s*(?:of\s+)?(-?\d+(?:\.\d+)?)\s*%/i, fallbackRegex: /(-?\d+(?:\.\d+)?)\s*%\s*(?:over|in)\s+(?:the\s+)?(?:last\s+)?24\s*hours/i },
+      { label: '7d', regex: /(-?\d+(?:\.\d+)?)\s*%\s*(?:in\s+)?7d|7d\s*(?:change|drop|gain|pump|dump|correction)?\s*(?:of\s+)?(-?\d+(?:\.\d+)?)\s*%/i },
+      { label: '30d', regex: /(-?\d+(?:\.\d+)?)\s*%\s*(?:in\s+)?30d|30d\s*(?:change|drop|gain|pump|dump|correction)?\s*(?:of\s+)?(-?\d+(?:\.\d+)?)\s*%/i },
+    ];
+    for (const tf of timeframePatterns) {
+      const realPct = priceChanges[tf.label];
+      if (realPct == null) continue;
+      for (const regex of [tf.regex, tf.fallbackRegex].filter(Boolean)) {
+        const match = report.analysis_text.match(regex);
+        if (match) {
+          const reportedPct = parseFloat(match[1] ?? match[2]);
+          if (!isNaN(reportedPct) && Math.abs(reportedPct - realPct) > 10) {
+            warnings.push(`Price change (${tf.label}) in analysis (${reportedPct}%) deviates >10pp from RAW_DATA (${realPct.toFixed(1)}%) — possible hallucination`);
+          }
+          break; // only check first match per timeframe
+        }
+      }
+    }
+  }
+
+  // Round 14: Validate FDV/MCap ratio claims in analysis_text
+  if (report.analysis_text && rawData?.tokenomics?.fdv_to_mcap_ratio != null) {
+    const fdvMcapMatch = report.analysis_text.match(/(\d+(?:\.\d+)?)\s*x\s*(?:FDV|fdv)\s*\/\s*(?:MCap|mcap)|FDV\s*\/\s*MCap\s*(?:of|is|=|:)\s*(\d+(?:\.\d+)?)/i);
+    if (fdvMcapMatch) {
+      const reported = parseFloat(fdvMcapMatch[1] ?? fdvMcapMatch[2]);
+      const real = rawData.tokenomics.fdv_to_mcap_ratio;
+      if (!isNaN(reported) && real > 0 && Math.abs(reported - real) / real > 0.3) {
+        warnings.push(`FDV/MCap ratio in analysis (${reported}x) deviates >30% from RAW_DATA (${real.toFixed(2)}x)`);
+      }
+    }
+  }
+  // Also catch FDV/MCap claims when no FDV data exists (pure fabrication)
+  if (report.analysis_text && rawData?.tokenomics?.fdv_to_mcap_ratio == null) {
+    const fabricatedFdv = report.analysis_text.match(/\d+(?:\.\d+)?\s*x\s*(?:FDV|fdv)\s*\/\s*(?:MCap|mcap)/i);
+    if (fabricatedFdv) {
+      warnings.push(`FDV/MCap ratio (${fabricatedFdv[0]}) mentioned but RAW_DATA has no FDV data — likely hallucinated`);
+    }
+  }
+
+  // 7a. Round R165: Validate bull/bear case thesis quality — must contain at least one number
   const hasNumber = (text) => /\$[\d.,]+[MBKmb]?|\b\d+[\d.,]*%|\b\d{2,}[\d.,]*\b/.test(String(text || ''));
   if (report.bull_case?.thesis && !hasNumber(report.bull_case.thesis)) {
     warnings.push('bull_case.thesis contains no specific numbers — may be too generic');
@@ -1904,6 +2012,24 @@ export function validateReport(report, rawData, scores = null) {
       warnings.push(`${findingsWithoutNumbers}/${report.key_findings.length} key_findings contain no specific numbers — too generic`);
     }
 
+    // Round 16: Detect key_findings vs analysis_text overlap — same fact in both
+    if (report.analysis_text && Array.isArray(report.key_findings) && report.key_findings.length > 0) {
+      const analysisNorm = report.analysis_text.toLowerCase().replace(/[\d$%,]/g, '').replace(/\s+/g, ' ').trim();
+      let overlappingFindings = 0;
+      for (const finding of report.key_findings) {
+        const findingNorm = finding.toLowerCase().replace(/[\d$%,]/g, '').replace(/\s+/g, ' ').trim();
+        // Extract the core metric phrase (first 30 chars after removing the value)
+        const corePhrase = findingNorm.replace(/^[^:]+:\s*/, '').substring(0, 40);
+        if (corePhrase.length < 15) continue;
+        if (analysisNorm.includes(corePhrase)) {
+          overlappingFindings++;
+        }
+      }
+      if (overlappingFindings > 2) {
+        warnings.push(`${overlappingFindings} key_findings overlap with analysis_text — findings should add NEW information not already stated in analysis`);
+      }
+    }
+
     // Round 389: Detect duplicate/overlapping key_findings (same metric type mentioned twice)
     const metricKeywords = ['tvl', 'market cap', 'volume', 'commits', 'contributors', 'sentiment', 'fees', 'revenue', 'liquidity'];
     const foundMetrics = new Map();
@@ -1920,6 +2046,44 @@ export function validateReport(report, rawData, scores = null) {
       }
     }
   }
+
+  // Round 12: Cross-reference bull/bear case TVL/fee/price numbers against RAW_DATA
+  const validateThesisNumbers = (thesis, label) => {
+    if (!thesis || typeof thesis !== 'string') return;
+    // Check TVL claims
+    const tvlMatch = thesis.match(/\$([0-9,.]+)\s*(billion|million|B|M)/i);
+    if (tvlMatch && onchain?.tvl) {
+      const val = parseFloat(tvlMatch[1].replace(/,/g, ''));
+      const unit = tvlMatch[2].toLowerCase();
+      const reported = val * (unit === 'b' || unit === 'billion' ? 1e9 : 1e6);
+      if (Math.abs(reported - onchain.tvl) / onchain.tvl > 0.3) {
+        warnings.push(`${label} cites TVL $${val}${unit} but RAW_DATA shows $${(onchain.tvl/1e6).toFixed(1)}M — >30% deviation`);
+      }
+    }
+    // Check fee claims
+    const feeMatch = thesis.match(/\$([0-9,.]+)\s*(billion|million|B|M|K|k)?\s*(?:fees?|revenue)\s*(?:per\s+)?(?:week|7d)/i);
+    if (feeMatch && onchain?.fees_7d) {
+      const val = parseFloat(feeMatch[1].replace(/,/g, ''));
+      const unit = (feeMatch[2] || 'K').toLowerCase();
+      const mult = unit === 'b' || unit === 'billion' ? 1e9 : unit === 'm' || unit === 'million' ? 1e6 : 1e3;
+      const reported = val * mult;
+      if (Math.abs(reported - onchain.fees_7d) / Math.max(onchain.fees_7d, 1) > 0.3) {
+        warnings.push(`${label} cites fees $${val}${feeMatch[2]}/week but RAW_DATA shows $${(onchain.fees_7d/1e3).toFixed(0)}K — >30% deviation`);
+      }
+    }
+    // Check MCap claims
+    const mcapMatch = thesis.match(/\$([0-9,.]+)\s*(billion|million|B|M)\s*(?:market\s*cap|MCap|mcap)/i);
+    if (mcapMatch && market?.market_cap) {
+      const val = parseFloat(mcapMatch[1].replace(/,/g, ''));
+      const unit = mcapMatch[2].toLowerCase();
+      const reported = val * (unit === 'b' || unit === 'billion' ? 1e9 : 1e6);
+      if (Math.abs(reported - market.market_cap) / market.market_cap > 0.3) {
+        warnings.push(`${label} cites MCap $${val}${unit} but RAW_DATA shows $${(market.market_cap/1e6).toFixed(1)}M — >30% deviation`);
+      }
+    }
+  };
+  validateThesisNumbers(report.bull_case?.thesis, 'bull_case.thesis');
+  validateThesisNumbers(report.bear_case?.thesis, 'bear_case.thesis');
 
   // Round 365: verdict-score consistency check
   // If algorithmic score is very different from implied verdict, log a warning
@@ -2143,6 +2307,8 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     '10. INFLATION AWARENESS: if annual inflation rate > 30%, explicitly address dilution timeline in the bear case. High-yield protocols with high inflation require yield > inflation to be net positive for holders.',
     '11. TOP-TIER COVERAGE AWARENESS: if top_tier_source_count >= 3 (in FACT_REGISTRY), mention the institutional-grade media attention in your analysis as a legitimacy signal. If top_tier_source_count = 0 despite >$50M MCap, flag the information vacuum risk.',
     '12. AIRDROP NOISE FILTER: if airdrop_mentions >= 5 (in FACT_REGISTRY), treat social sentiment with heightened skepticism — much of the community engagement may be farming activity rather than long-term conviction.',
+    '13. NO-DATA INTEGRITY: When RAW_DATA_SUMMARY says a collector has NO data or shows an error, you MUST NOT fabricate that data. Write "No [collector_name] data available" instead. This is non-negotiable.',
+    '14. CROSS-SECTION UNIQUENESS: key_findings must NOT repeat information already stated in analysis_text. Findings should add NEW investor-relevant insights not covered elsewhere in the report.',
     '## 2026 NARRATIVE CONTEXT (Round 700 — updated)',
     'These are the dominant 2026 crypto investment themes. When project data aligns with these themes, mention the thesis alignment:',
     '- Bitcoin treasury strategy (corporate BTC reserves): bullish for BTC and broader crypto market sentiment',
@@ -2176,10 +2342,35 @@ export function buildOpusPrompt(projectName, rawData, scores) {
     return parts.length ? `COMPOSITE INDEXES:\n${parts.map(p => `- ${p}`).join('\n')}` : null;
   })();
 
+  // Round 10 (PE batch 2026-03-28): SCORE INTERPRETATION GUIDE — help LLM calibrate
+  const scoreInterpretation = (() => {
+    const dims = scores ? Object.entries(scores).filter(([,v]) => v && typeof v === 'object' && v.score != null) : [];
+    if (!dims.length) return null;
+    const lines = ['SCORE_INTERPRETATION_GUIDE (what each dimension means for investors):'];
+    const interpretations = {
+      market_strength: { low: '<4: illiquid, weak momentum, poor listing quality', mid: '4-7: moderate liquidity and trend', high: '>7: deep liquidity, strong trend, premium listing quality' },
+      onchain_health: { low: '<4: no/minimal TVL, no fees, or declining usage', mid: '4-7: moderate TVL and some revenue', high: '>7: strong TVL growth, high fee efficiency, sticky capital' },
+      development: { low: '<4: inactive repo, small/no team, stale codebase', mid: '4-7: active but not exceptional dev pace', high: '>7: very active team, recent releases, high code quality' },
+      social_momentum: { low: '<4: no coverage, negative sentiment, or declining mentions', mid: '4-7: moderate coverage with mixed sentiment', high: '>7: viral coverage, strong bullish sentiment, tier-1 media' },
+      tokenomics_risk: { low: '<4: high inflation, massive unlock overhang, concentrated supply', mid: '4-7: moderate supply dynamics', high: '>7: deflationary or well-distributed, low dilution risk' },
+      risk: { low: '<4: extreme volatility, high concentration, thin liquidity', mid: '4-7: moderate risk profile', high: '>7: stable, well-distributed, deep liquidity' },
+      distribution: { low: '<4: extreme holder concentration, high FDV/MCap', mid: '4-7: moderate distribution', high: '>7: well-distributed supply, low dilution' },
+    };
+    for (const [key, val] of dims) {
+      const interp = interpretations[key];
+      if (!interp) continue;
+      const s = val.score;
+      const range = s < 4 ? interp.low : s > 7 ? interp.high : interp.mid;
+      lines.push(`- ${key} (${s}/10): ${range}`);
+    }
+    return lines.length > 1 ? lines.join('\n') : null;
+  })();
+
   const userParts = [
     `PROJECT: ${projectName}`,
     buildScoreSummary(scores),
     compositeIndexes,
+    scoreInterpretation,
     `ALGORITHMIC_SCORES: ${JSON.stringify(scores, null, 2)}`,
     `FACT_REGISTRY: ${JSON.stringify(factRegistry, null, 2)}`,
     `RAW_DATA_SUMMARY:\n${buildDataSummary(rawData)}`,

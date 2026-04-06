@@ -1,6 +1,6 @@
-# Feature Usefulness — 2026-03-30T08:48:51.595Z
+# Feature Usefulness — 2026-03-30T08:05:29.412Z
 
-Window analizzata: **7 giorni forward**
+Window analizzata: **30 giorni forward**
 Samples totali disponibili: **0**
 
 | Dimension | Samples | Corr. vs return rel. BTC | Low half avg | High half avg | Delta high-low |

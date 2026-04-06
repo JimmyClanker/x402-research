@@ -128,6 +128,66 @@
 - **Tests:** 179/179 pass
 - **Result:** kept
 
+### Round 10 — Score interpretation context guide in Opus prompt
+- **Change:** Added SCORE_INTERPRETATION_GUIDE block to buildOpusPrompt user message. For each scoring dimension with data, provides a human-readable interpretation of what the score range means for investors (low/mid/high bands). Helps LLM write analysis that correctly interprets algorithmic scores instead of fabricating meaning.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 11 — validateReport: price change hallucination detection
+- **Change:** Added post-processing validation in validateReport that checks price change percentages (24h, 7d, 30d) cited in analysis_text against RAW_DATA. Flags deviations >10 percentage points as possible hallucinations. Catches LLM inventing price moves that don't match reality.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 12 — validateReport: cross-reference bull/bear case numbers against RAW_DATA
+- **Change:** Added validateThesisNumbers() helper that checks TVL, fees, and MCap claims in bull_case.thesis and bear_case.thesis against actual RAW_DATA. Flags >30% deviations as potential hallucinations. Catches LLM inventing on-chain metrics to support fabricated thesis arguments.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 13 — buildDataSummary: enhanced data gap warnings for LLM
+- **Change:** Enhanced the DATA GAPS section in buildDataSummary with explicit per-collector warnings. When 2+ critical collectors fail, adds a CRITICAL DATA GAPS warning. Individual warnings for market, onchain, github, and tokenomics tell LLM explicitly what it CANNOT cite, preventing fabrication of missing data.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 14 — validateReport: FDV/MCap hallucination detection
+- **Change:** Added validation for FDV/MCap ratio claims in analysis_text. Two checks: (1) if RAW_DATA has FDV/MCap, validates cited ratio is within 30% of reality; (2) if RAW_DATA has NO FDV data, flags any cited FDV/MCap ratio as hallucinated. Catches a common fabrication vector where LLMs invent dilution metrics.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 15 — buildDataSummary: fear & greed index context
+- **Change:** Added MARKET SENTIMENT section to buildDataSummary using Fear & Greed Index data. Provides contextual interpretation of the index value (extreme greed/fear/neutral) and explicit guidance on how to factor broad market sentiment into verdict calibration. Prevents overly bullish calls in extreme greed and overly bearish calls in extreme fear.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 16 — validateReport: key_findings vs analysis_text overlap detection
+- **Change:** Added detection for key_findings that simply repeat information already in analysis_text. Extracts core phrases from each finding and checks if they appear in the analysis paragraph. Warns when >2 findings overlap. Encourages LLM to make findings additive rather than redundant.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 17 — buildDataSummary: exchange listing context
+- **Change:** Added EXCHANGE LISTINGS section to buildDataSummary showing exchange count with contextual labels. Zero exchanges flagged as DEX-only with liquidity warning. <5 = limited access. ≥10 = wide availability. Helps LLM factor accessibility/liquidity into analysis.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 18 — validateReport: sentiment fabrication when social data absent
+- **Change:** Added detection for fabricated sentiment claims in analysis_text when no social collector data exists. Catches phrases like "strong bullish sentiment", "widely discussed", "growing community interest" when the social collector returned errors or empty data. One of the top hallucination vectors.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 19 — buildOpusPrompt: explicit no-data integrity + cross-section uniqueness rules
+- **Change:** Added two new rules to Opus FINAL REMINDER: (13) NO-DATA INTEGRITY — explicit instruction to never fabricate data for missing collectors, always write "No data available" instead; (14) CROSS-SECTION UNIQUENESS — key_findings must not repeat analysis_text. Also added rules 6+7 to quick report FINAL REMINDER for the same purpose.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
 ## Experiment 1 — Social scoring confidence weighting
 - **Hypothesis:** social score was too sensitive to small mention counts and thin sentiment samples.
 - **Change:** replaced linear mention growth with log scaling; sentiment spread now gets confidence weighting from total signals; reasoning includes confidence.

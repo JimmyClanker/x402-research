@@ -12,6 +12,7 @@ import { createMcpRouter } from './routes/mcp.js';
 import { createAlphaRouter } from './routes/alpha.js';
 import { createCalibrationRouter } from './routes/calibration.js';
 import { createOracleRouter } from './routes/oracle.js';
+import { createLearnRouter } from './routes/learn.js';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
@@ -167,6 +168,11 @@ export function createApp({
     res.redirect(302, '/alphascan' + qs);
   });
 
+  // Route /learn → serve learn index.html
+  app.get('/learn', (req, res) => {
+    res.sendFile(join(__dirname, 'public', 'learn', 'index.html'));
+  });
+
   app.use(express.static(join(__dirname, 'public'), { maxAge: '5m', setHeaders: (res, path) => { if (path.endsWith('.js') || path.endsWith('.html')) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'); } }));
 
   if (!config.nvmApiKey) {
@@ -213,6 +219,7 @@ export function createApp({
   app.use(createCalibrationRouter({ config }));
   app.use(createOracleRouter({ config }));
   app.use(createMcpRouter({ config, exaService: exa, signalsService: signals }));
+  app.use(createLearnRouter());
 
   return { app, config, services: { exa, signals, payments } };
 }
