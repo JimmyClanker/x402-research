@@ -188,6 +188,66 @@
 - **Tests:** 179/179 pass
 - **Result:** kept
 
+### Round 21 — validateReport: TVL rank hallucination detection
+- **Change:** Added validation for TVL rank claims in analysis_text. Two checks: (1) if no TVL rank data exists, flags any cited rank as fabricated; (2) if rank data exists, validates cited rank is within ±5 positions of reality. Catches LLM inventing DeFi ranking positions.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 22 — buildDataSummary: protocol description from CoinGecko
+- **Change:** Added PROJECT DESCRIPTION section at the top of buildDataSummary using CoinGecko's description field (max 300 chars). Gives LLM project context before all the raw data, helping it write more accurate project summaries instead of inferring from metrics alone.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 23 — validateReport: competitor name + number hallucination in bull/bear cases
+- **Change:** Added detection for competitor protocol names (Uniswap, Aave, etc.) cited with specific dollar amounts in bull/bear case theses when no sector_comparison data exists. Flags the citation as potentially fabricated since the LLM has no data to ground competitor metrics against.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 24 — validateReport: bull/bear case data reference validation
+- **Change:** Added checkThesisDataRefs() that validates bull_case and bear_case theses reference only metrics that exist in RAW_DATA. Catches fabricated TVL claims when no onchain data, fee claims when no fees, commit claims when no GitHub data, and holder claims when no holders data. Catches LLMs inventing data points to support their arguments.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 25 — buildDataSummary: data freshness context for LLM
+- **Change:** Added DATA FRESHNESS section to buildDataSummary that checks collector cache metadata and flags any collector with data >1 hour old as "stale". Tells LLM to note data age limitations in price-sensitive analysis. Prevents LLM from treating cached data as real-time.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 26 — validateReport: analysis_text verbosity cap at 800 words
+- **Change:** Added post-processing cap that truncates analysis_text to max 800 words. Beyond this threshold, LLMs typically pad with repetition rather than add value. Truncates at the last complete paragraph boundary before the word limit. Prevents bloated, repetitive analysis output.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 27 — validateReport: risks vs catalysts overlap detection
+- **Change:** Added detection for overlapping content between risks and catalysts arrays. Same topic appearing in both sections is contradictory and confusing for investors. Checks normalized core phrases (first 45 chars, numbers stripped) for overlap. Warns to merge or differentiate.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 28 — validateReport: moat content leaking into project_summary
+- **Change:** Added detection for moat-specific phrases (first mover, network effect, deflationary, etc.) appearing in both project_summary and moat sections. When 2+ moat phrases leak into project_summary, warns that project_summary should describe WHAT the project IS, not its competitive advantages.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 29 — validateReport: circulating supply hallucination in bull/bear cases
+- **Change:** Added validation for circulating supply % claims in bull/bear case theses. Three checks: (1) if RAW_DATA has pct_circulating, corrects >15pp deviations; (2) applies same correction to both bull and bear cases; (3) if no tokenomics data exists, flags any cited circulating supply % as fabricated.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
+### Round 30 — validateReport: verdict-wording consistency with score direction
+- **Change:** Added post-processing check that validates STRONG BUY/BUY verdicts don't contain ≥3 bearish terms in analysis_text (overvalued, bearish, avoid, dump, etc.), and STRONG AVOID verdicts don't contain ≥3 bullish terms (undervalued, bullish, breakout, etc.). Catches verdict-text inconsistencies where the LLM assigns one verdict but writes in the opposite direction.
+- **Files:** synthesis/llm.js
+- **Tests:** 179/179 pass
+- **Result:** kept
+
 ## Experiment 1 — Social scoring confidence weighting
 - **Hypothesis:** social score was too sensitive to small mention counts and thin sentiment samples.
 - **Change:** replaced linear mention growth with log scaling; sentiment spread now gets confidence weighting from total signals; reasoning includes confidence.

@@ -312,6 +312,12 @@ export function buildDataSummary(rawData = {}) {
     return null;
   };
 
+  // Round 22: Protocol description from CoinGecko (for project context)
+  const mktDesc = rawData?.market?.description;
+  if (mktDesc && mktDesc.length > 30) {
+    lines.push(`PROJECT DESCRIPTION: ${mktDesc.substring(0, 300)}${mktDesc.length > 300 ? '...' : ''}`);
+  }
+
   // MARKET [CoinGecko]
   const market = rawData.market || {};
   if (!market.error && rawData.market) {
@@ -985,6 +991,26 @@ export function buildDataSummary(rawData = {}) {
       lines.push('Limited exchange access — token may have lower liquidity and higher slippage on CEX.');
     } else if (exchCount >= 10) {
       lines.push('Wide exchange availability — strong liquidity and accessibility signal.');
+    }
+  }
+
+  // Round 25: Data freshness context — help LLM understand data age
+  const metadata = rawData?._metadata;
+  if (metadata) {
+    const staleCollectors = [];
+    const freshCollectors = [];
+    const collectors = ['market', 'onchain', 'social', 'github', 'tokenomics', 'dex', 'reddit'];
+    for (const col of collectors) {
+      const info = metadata.collectors?.[col];
+      if (!info || info.error) continue;
+      if (info.cache_hit) {
+        if (info.age_ms > 3600000) staleCollectors.push(col); // >1h old
+      } else {
+        freshCollectors.push(col);
+      }
+    }
+    if (staleCollectors.length > 0) {
+      lines.push(`\nDATA FRESHNESS: ${staleCollectors.map(c => `${c} (stale)`).join(', ')} — these may be >1h old. Price-sensitive analysis should note this limitation.`);
     }
   }
 
@@ -1804,6 +1830,45 @@ export function validateReport(report, rawData, scores = null) {
     });
   }
 
+  // Round 30: Check verdict-wording alignment — avoid conflicting signals
+  if (report.analysis_text && report.verdict) {
+    const verdictIs = report.verdict.toUpperCase();
+    const text = report.analysis_text.toLowerCase();
+    // STRONG BUY/BUY analysis should not contain primarily bearish language
+    if (verdictIs.includes('BUY') && verdictIs.includes('STRONG')) {
+      const bearishWords = ['overvalued', 'bearish', 'avoid', 'sell-off', 'dump', 'overbought', 'bubble', 'unsustainable'];
+      const bearishCount = bearishWords.filter(w => text.includes(w)).length;
+      if (bearishCount >= 3) {
+        warnings.push(`STRONG BUY verdict but analysis contains ${bearishCount} bearish terms — may indicate verdict-text inconsistency`);
+      }
+    }
+    // STRONG AVOID/AVOID analysis should not contain primarily bullish language
+    if (verdictIs.includes('AVOID') && verdictIs.includes('STRONG')) {
+      const bullishWords = ['undervalued', 'bullish', 'buy', 'rally', 'breakout', 'accumulating', 'strong fundamentals', 'oversold'];
+      const bullishCount = bullishWords.filter(w => text.includes(w)).length;
+      if (bullishCount >= 3) {
+        warnings.push(`STRONG AVOID verdict but analysis contains ${bullishCount} bullish terms — may indicate verdict-text inconsistency`);
+      }
+    }
+  }
+
+  // Round 28: Detect moat content leaking into project_summary
+  if (report.moat && report.project_summary) {
+    const moatNorm = report.moat.toLowerCase().replace(/[\d$%,]/g, '').replace(/\s+/g, ' ').trim();
+    const summaryNorm = report.project_summary.toLowerCase().replace(/[\d$%,]/g, '').replace(/\s+/g, ' ').trim();
+    // Check if significant moat phrases appear in project_summary (should be separate sections)
+    const moatPhrases = ['first mover', 'network effect', 'deflationary', 'governance token', 'revenue sharing', 'liquidity mining', 'staking yield', 'token utility'];
+    let moatLeaks = 0;
+    for (const phrase of moatPhrases) {
+      if (moatNorm.includes(phrase) && summaryNorm.includes(phrase)) {
+        moatLeaks++;
+      }
+    }
+    if (moatLeaks >= 2) {
+      warnings.push(`project_summary contains ${moatLeaks} moat-specific phrases — project_summary should describe WHAT the project IS, not its competitive advantages (that's what moat is for)`);
+    }
+  }
+
   // 5. Ensure data_gaps field exists
   if (!report.data_gaps) {
     report.data_gaps = [];
@@ -1889,6 +1954,24 @@ export function validateReport(report, rawData, scores = null) {
   report.catalysts = (report.catalysts || []).map((c) => cleanReportText(c));
   report.key_findings = (report.key_findings || []).map((k) => cleanReportText(k));
 
+  // Round 27: Detect overlapping content between risks and catalysts
+  if (Array.isArray(report.risks) && Array.isArray(report.catalysts) && report.risks.length > 0 && report.catalysts.length > 0) {
+    for (const risk of report.risks) {
+      const riskNorm = risk.toLowerCase().replace(/[\d$%,.]/g, '').replace(/\s+/g, ' ').trim();
+      if (riskNorm.length < 20) continue;
+      for (const catalyst of report.catalysts) {
+        const catNorm = catalyst.toLowerCase().replace(/[\d$%,.]/g, '').replace(/\s+/g, ' ').trim();
+        if (catNorm.length < 20) continue;
+        // Check if the core phrase (first 40 chars) of risk appears in catalyst
+        const riskCore = riskNorm.substring(0, 45);
+        if (catNorm.includes(riskCore) || riskNorm.includes(catNorm.substring(0, 45))) {
+          warnings.push(`Risk and catalyst may overlap: risk="${risk.substring(0, 50)}..." vs catalyst="${catalyst.substring(0, 50)}..." — same topic should not appear in both`);
+          break;
+        }
+      }
+    }
+  }
+
   // 7. Data sanity: DEX liquidity should not be implausibly above market cap.
   const mcap = Number(rawData?.market?.market_cap || 0);
   const dexLiquidity = Number(rawData?.dex?.dex_liquidity_usd || 0);
@@ -1959,6 +2042,90 @@ export function validateReport(report, rawData, scores = null) {
           }
           break; // only check first match per timeframe
         }
+      }
+    }
+  }
+
+  // Round 29: Detect circulating supply claims in bull/bear cases against RAW_DATA
+  const realCirc = rawData?.tokenomics?.pct_circulating;
+  if (report.bull_case?.thesis && report.bull_case.thesis.match(/(\d+(?:\.\d+)?)\s*%\s*circulating/i)) {
+    const match = report.bull_case.thesis.match(/(\d+(?:\.\d+)?)\s*%\s*circulating/i);
+    if (match && realCirc != null && realCirc > 0 && Math.abs(parseFloat(match[1]) - realCirc) > 15) {
+      warnings.push(`bull_case cites ${match[1]}% circulating but RAW_DATA shows ${realCirc.toFixed(1)}% — correcting`);
+      report.bull_case.thesis = report.bull_case.thesis.replace(
+        new RegExp(`${match[1]}\\s*%\\s*circulating`, 'gi'),
+        `${realCirc.toFixed(1)}% circulating`
+      );
+    }
+  }
+  if (report.bear_case?.thesis && report.bear_case.thesis.match(/(\d+(?:\.\d+)?)\s*%\s*circulating/i)) {
+    const match = report.bear_case.thesis.match(/(\d+(?:\.\d+)?)\s*%\s*circulating/i);
+    if (match && realCirc != null && realCirc > 0 && Math.abs(parseFloat(match[1]) - realCirc) > 15) {
+      warnings.push(`bear_case cites ${match[1]}% circulating but RAW_DATA shows ${realCirc.toFixed(1)}% — correcting`);
+      report.bear_case.thesis = report.bear_case.thesis.replace(
+        new RegExp(`${match[1]}\\s*%\\s*circulating`, 'gi'),
+        `${realCirc.toFixed(1)}% circulating`
+      );
+    }
+  }
+  // Also flag circulating supply claims when no tokenomics data exists
+  if (!realCirc) {
+    for (const field of ['bull_case.thesis', 'bear_case.thesis']) {
+      const text = report?.[field.split('.')[0]]?.[field.split('.')[1]];
+      if (text && /\d+\s*%\s*circulating/i.test(text)) {
+        warnings.push(`${field} cites circulating supply % but no tokenomics data available — likely fabricated`);
+      }
+    }
+  }
+
+  // Round 24: Validate bull/bear case data references exist in RAW_DATA
+  // If bull_case references a metric that doesn't exist in rawData, flag it
+  const checkThesisDataRefs = (thesis, label) => {
+    if (!thesis || typeof thesis !== 'string' || thesis.length < 50) return;
+    // Check for TVL claims when no TVL data
+    if (/\$[\d.,]+[MBK]?.*TVL|TVL.*\$[\d.,]+[MBK]?/i.test(thesis) && (!onchain?.tvl || onchain.error)) {
+      warnings.push(`${label} references TVL but onchain collector has no TVL data — likely fabricated`);
+    }
+    // Check for fee claims when no fee data
+    if (/\$[\d.,]+[MBK]?.*fees?\b|fees?.*\$[\d.,]+[MBK]?/i.test(thesis) && (!onchain?.fees_7d && onchain?.fees_7d !== 0)) {
+      warnings.push(`${label} references fees but onchain collector has no fee data — likely fabricated`);
+    }
+    // Check for commit/dev claims when no github data
+    if (/(?:\d+)\s*(?:commits?|contributors?|pull\s*requests?)/i.test(thesis) && (!rawData?.github || rawData.github.error)) {
+      warnings.push(`${label} references development activity but github collector has no data — likely fabricated`);
+    }
+    // Check for holder claims when no holders data
+    if (/(?:\d+|\d+%)\s*(?:holders?|whales?|wallets?)/i.test(thesis) && (!rawData?.holders || rawData.holders.error)) {
+      warnings.push(`${label} references holder data but holders collector has no data — likely fabricated`);
+    }
+  };
+  checkThesisDataRefs(report.bull_case?.thesis, 'bull_case.thesis');
+  checkThesisDataRefs(report.bear_case?.thesis, 'bear_case.thesis');
+
+  // Round 23: Detect competitor name mentions in bull/bear cases when no sector data
+  if (!rawData?.sector_comparison) {
+    const competitorNames = ['uniswap', 'aave', 'compound', 'curve', 'maker', 'sushi', 'balancer', 'gmx', 'dydx', 'jupiter', 'raydium', 'pendle', 'lido', 'rocket pool', 'pancake', 'convex', 'yearn'];
+    for (const field of ['bull_case.thesis', 'bear_case.thesis']) {
+      const text = report?.[field.split('.')[0]]?.[field.split('.')[1]];
+      if (!text) continue;
+      for (const name of competitorNames) {
+        if (text.toLowerCase().includes(name) && /\$[\d.,]+[MBK]?/.test(text)) {
+          warnings.push(`${field} cites competitor "${name}" with specific numbers but no sector_comparison data — competitor metrics may be fabricated`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Round 21: Detect TVL rank claims when no rank data exists
+  if (report.analysis_text) {
+    const tvlRankMatch = report.analysis_text.match(/(?:ranked?|rank)\s*(?:#|no\.?\s*)?(\d+)(?:st|nd|rd|th)?\s*(?:by|in|for)?\s*(?:TVL|tvl)/i);
+    if (tvlRankMatch && !rawData?.onchain?.tvl_rank) {
+      warnings.push(`analysis_text claims TVL rank #${tvlRankMatch[1]} but no TVL rank data in RAW_DATA — likely fabricated`);
+    } else if (tvlRankMatch && rawData?.onchain?.tvl_rank) {
+      const reportedRank = parseInt(tvlRankMatch[1]);
+      if (Math.abs(reportedRank - rawData.onchain.tvl_rank) > 5) {
+        warnings.push(`TVL rank in analysis (#${reportedRank}) deviates from RAW_DATA (#${rawData.onchain.tvl_rank}) — possible hallucination`);
       }
     }
   }
@@ -2103,6 +2270,25 @@ export function validateReport(report, rawData, scores = null) {
       warnings.push(`analysis_text appears to be a single block (${paragraphs.length} paragraphs detected) — expected 3-4 paragraphs with clear scopes`);
     } else if (paragraphs.length > 6) {
       warnings.push(`analysis_text has ${paragraphs.length} paragraphs — may be fragmented, expect 3-4 focused paragraphs`);
+    }
+  }
+
+  // Round 26: Cap analysis_text at 800 words — beyond this the LLM is padding, not adding value
+  if (report.analysis_text && typeof report.analysis_text === 'string') {
+    const words = report.analysis_text.split(/\s+/).filter(Boolean);
+    if (words.length > 800) {
+      warnings.push(`analysis_text is ${words.length} words (max 800) — truncating to last complete paragraph before 800 words`);
+      // Find the paragraph break closest to 800 words
+      let charCount = 0;
+      let cutAt = report.analysis_text.length;
+      for (const para of report.analysis_text.split(/\n\s*\n/)) {
+        charCount += para.length;
+        if (charCount > 4500) { // ~800 words in chars
+          cutAt = report.analysis_text.indexOf(para) - 1;
+          break;
+        }
+      }
+      report.analysis_text = report.analysis_text.substring(0, Math.max(0, cutAt)).trim();
     }
   }
 
